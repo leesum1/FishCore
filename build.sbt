@@ -11,6 +11,7 @@ lazy val root = (project in file("."))
     name := "chisel-fish",
     libraryDependencies ++= Seq(
       "edu.berkeley.cs" %% "chisel3" % chiselVersion,
+      "edu.berkeley.cs" %% "chiseltest" % "0.5.4" % "test",
       "net.fornwall" % "jelf" % "0.7.0"
     ),
     scalacOptions ++= Seq(
