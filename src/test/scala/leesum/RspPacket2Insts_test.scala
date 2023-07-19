@@ -3,8 +3,8 @@ package leesum
 import chisel3._
 import chiseltest._
 import org.scalatest.freespec.AnyFreeSpec
-import net.fornwall.jelf
 import chiseltest.simulator.WriteVcdAnnotation
+import net.fornwall.jelf
 
 import java.nio.file.{Files, Paths}
 import java.math.BigInteger
@@ -116,9 +116,10 @@ class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
               // poke pc
               dut.input.bits.pc.poke((entry_point + foreach_idx * 8).U)
 
+              
               // check dut outputs
               for (i <- 0 until dut.input.bits.max_inst_packet) {
-                if (dut.output.insts_mask(i).peek().litToBoolean) {
+                if (dut.output.insts_valid_mask(i).peek().litToBoolean) {
 
                   println(
                     "dut: pc:%x, inst:%08x".format(

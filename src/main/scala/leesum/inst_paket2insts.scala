@@ -36,40 +36,53 @@ class RspPacket extends Bundle {
   }
 }
 
+class InstsItem extends Bundle {
+  val insts = Output(Vec(4, UInt(32.W)))
+  val insts_valid_mask = Output(Vec(4, Bool()))
+  val insts_rvc_mask = Output(Vec(4, Bool()))
+  val insts_pc = Output(Vec(4, UInt(32.W)))
+}
+
 class RspPacket2Insts extends Module {
   val input = IO(Flipped(Decoupled(new RspPacket)))
 
   val output = IO(
-    new Bundle {
-      val insts = Output(Vec(4, UInt(32.W)))
-      val insts_mask = Output(Vec(4, Bool()))
-      val insts_rvc_mask = Output(Vec(4, Bool()))
-      val insts_pc = Output(Vec(4, UInt(32.W)))
-    }
+    new InstsItem
   )
 
   val last_half_inst = RegInit(0.U(16.W));
   val last_half_valid = RegInit(false.B)
 
-  def ocuppyed(idx: Int): Bool = {
+  def is_occupyied(idx: Int): Bool = {
     val ret = idx match {
       case -1 => !last_half_valid;
-      case 0 =>
-        ((!ocuppyed(idx - 1)) & (!RiscvTools.is_rvc(
-          Cat(
-            input.bits.inst_packet(idx)(15, 0),
-            last_half_inst
-          )
-        ))) || ((ocuppyed(idx - 1)) & RiscvTools.is_rvc(
+      case 0 => {
+        val pre_inst_is_32bits =
+          ((!is_occupyied(idx - 1)) & (!RiscvTools.is_rvc(
+            Cat(
+              input.bits.inst_packet(idx)(15, 0),
+              last_half_inst
+            )
+          )));
+        val current_is_rvc = ((is_occupyied(idx - 1)) & RiscvTools.is_rvc(
           input.bits.inst_packet(idx)
         ));
-      case _ =>
-        ((!ocuppyed(idx - 1)) & (!RiscvTools.is_rvc(
-          input.bits.inst_packet(idx - 1)
-        ))) || ((ocuppyed(idx - 1)) & RiscvTools.is_rvc(
+
+        pre_inst_is_32bits || current_is_rvc
+      };
+      case _ => {
+        val pre_inst_is_32bits =
+          ((!is_occupyied(idx - 1)) & (!RiscvTools.is_rvc(
+            input.bits.inst_packet(idx - 1)
+          )));
+        val current_is_rvc = ((is_occupyied(idx - 1)) & RiscvTools.is_rvc(
           input.bits.inst_packet(idx)
         ));
+
+        pre_inst_is_32bits || current_is_rvc
+      }
     }
+
     if (idx < 0) {
       ret.suggestName(s"ocuppyed_neg_${idx.abs}")
     } else {
@@ -81,7 +94,7 @@ class RspPacket2Insts extends Module {
   // buffer last half inst
   when(input.fire) {
     last_half_inst := input.bits.inst_packet(3)
-    when(ocuppyed(3)) {
+    when(is_occupyied(3)) {
       last_half_valid := false.B
     }.otherwise {
       last_half_valid := true.B
@@ -90,13 +103,13 @@ class RspPacket2Insts extends Module {
 
   when(input.fire) {
     for (i <- 0 until (input.bits.max_inst_packet)) {
-      when(ocuppyed(i)) {
+      when(is_occupyied(i)) {
         if (i == 0) { // 16 位
-          when(ocuppyed(i - 1)) {
+          when(is_occupyied(i - 1)) {
             output.insts(i) := RiscvTools.expand_rvc(
               input.bits.inst_packet(i)
             )
-            output.insts_mask(i) := true.B
+            output.insts_valid_mask(i) := true.B
             output.insts_rvc_mask(i) := true.B
             output.insts_pc(i) := input.bits.pc
           }.otherwise { // 32 位
@@ -104,16 +117,16 @@ class RspPacket2Insts extends Module {
               input.bits.inst_packet(i)(15, 0),
               last_half_inst
             )
-            output.insts_mask(i) := true.B
+            output.insts_valid_mask(i) := true.B
             output.insts_rvc_mask(i) := false.B
             output.insts_pc(i) := input.bits.pc - 2.U
           }
         } else if (i == 3) {
-          when(ocuppyed(i - 1)) { // 16 位
+          when(is_occupyied(i - 1)) { // 16 位
             output.insts(i) := RiscvTools.expand_rvc(
               input.bits.inst_packet(i)
             )
-            output.insts_mask(i) := true.B
+            output.insts_valid_mask(i) := true.B
             output.insts_rvc_mask(i) := true.B
             output.insts_pc(i) := input.bits.pc + (i * 2).U
           }.otherwise { // 32 位
@@ -121,16 +134,16 @@ class RspPacket2Insts extends Module {
               input.bits.inst_packet(i)(15, 0),
               input.bits.inst_packet(i - 1)(15, 0)
             )
-            output.insts_mask(i) := true.B
+            output.insts_valid_mask(i) := true.B
             output.insts_rvc_mask(i) := false.B
             output.insts_pc(i) := input.bits.pc + ((i - 1) * 2).U
           }
         } else {
-          when(ocuppyed(i - 1)) { // 16 位
+          when(is_occupyied(i - 1)) { // 16 位
             output.insts(i) := RiscvTools.expand_rvc(
               input.bits.inst_packet(i)
             )
-            output.insts_mask(i) := true.B
+            output.insts_valid_mask(i) := true.B
             output.insts_rvc_mask(i) := true.B
             output.insts_pc(i) := input.bits.pc + (i * 2).U
 
@@ -139,20 +152,20 @@ class RspPacket2Insts extends Module {
               input.bits.inst_packet(i)(15, 0),
               input.bits.inst_packet(i - 1)(15, 0)
             )
-            output.insts_mask(i) := true.B
+            output.insts_valid_mask(i) := true.B
             output.insts_rvc_mask(i) := false.B
             output.insts_pc(i) := input.bits.pc + ((i - 1) * 2).U
           }
         }
       }
     }.otherwise {
-      output.insts_mask(i) := false.B
+      output.insts_valid_mask(i) := false.B
       output.insts_rvc_mask(i) := false.B
       output.insts(i) := 2222.U(32.W)
       output.insts_pc(i) := 4.U
     }
   }.otherwise {
-    output.insts_mask := VecInit(Seq.fill(4)(false.B))
+    output.insts_valid_mask := VecInit(Seq.fill(4)(false.B))
     output.insts_rvc_mask := VecInit(Seq.fill(4)(false.B))
     output.insts := VecInit(Seq.fill(4)(1111.U(32.W)))
     output.insts_pc := VecInit(Seq.fill(4)(0.U(32.W)))
