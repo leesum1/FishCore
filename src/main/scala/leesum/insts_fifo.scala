@@ -23,7 +23,22 @@ class InstsFifo extends Module {
   val fifo: Queue[INSTEmtry] = Module(new Queue(new INSTEmtry, 16))
 
   val in_reg = RegInit(0.U.asTypeOf(new InstsItem))
-  // val in_reg_empty = RegInit(true.B)
+
+  val sIdle :: sFirst :: sPush :: Nil = Enum(3)
+
+  val state = RegInit(sIdle)
+
+  val inst_idx = RegInit(0.U(4.W))
+
+  val tmp_inst = RegInit(0.U.asTypeOf(new INSTEmtry))
+  val tmp_valid = RegInit(false.B)
+
+  val my_idx = find_first_valid_from(inst_idx)
+  val is_idle = (state === sIdle)
+
+  fifo.io.enq.valid := tmp_valid
+  fifo.io.enq.bits := tmp_inst
+  fifo.io.deq <> io.out
 
   def is_inst_valid(idx: UInt): Bool = {
     // require(idx >= 0 && idx < 4)s
@@ -38,6 +53,10 @@ class InstsFifo extends Module {
   def get_inst(idx: UInt): UInt = {
     // require(idx >= 0 && idx < 4)s
     in_reg.insts(idx)
+  }
+  def get_inst_pc(idx: UInt): UInt = {
+    // require(idx >= 0 && idx < 4)
+    in_reg.insts_pc(idx)
   }
 
   def find_first_valid_from(idx: UInt): UInt = {
@@ -54,17 +73,24 @@ class InstsFifo extends Module {
     ret
   }
 
-  val sIdle :: sFirst :: sPush :: Nil = Enum(3)
+  def insts_fifo_enq(idx: UInt) = {
+    tmp_valid := true.B
+    inst_idx := my_idx + 1.U
+    // data
+    tmp_inst.pc := get_inst_pc(idx)
+    tmp_inst.inst := get_inst(idx)
+    tmp_inst.rvc := is_inst_rvc(idx)
+    tmp_inst.valid := is_inst_valid(idx)
+  }
+  def insts_fifo_enq_clear() = {
+    tmp_valid := false.B
+    inst_idx := 0.U
 
-  val state = RegInit(sIdle)
-  val inst_idx = RegInit(0.U(4.W))
-
-  val tmp_inst = RegInit(0.U.asTypeOf(new INSTEmtry))
-  val tmp_valid = RegInit(false.B)
-
-  fifo.io.enq.valid := tmp_valid
-  fifo.io.enq.bits := tmp_inst
-  fifo.io.deq <> io.out
+    tmp_inst.valid := false.B
+    tmp_inst.rvc := false.B
+    tmp_inst.inst := 0.U
+    tmp_inst.pc := 0.U
+  }
 
   switch(state) {
     is(sIdle) {
@@ -75,78 +101,42 @@ class InstsFifo extends Module {
       }
     }
     is(sFirst) {
-      val my_idx = find_first_valid_from(inst_idx)
 
       when(my_idx < 4.U) {
-        tmp_valid := true.B
-        // data
-        tmp_inst.pc := in_reg.insts_pc(my_idx)
-        tmp_inst.inst := in_reg.insts(my_idx)
-        tmp_inst.rvc := in_reg.insts_rvc_mask(my_idx)
-        tmp_inst.valid := in_reg.insts_valid_mask(my_idx)
 
-        inst_idx := my_idx + 1.U
+        insts_fifo_enq(my_idx)
+
         state := sPush
 
       }.otherwise {
-        // in_reg_empty := true.B
 
-        tmp_valid := false.B
-        tmp_inst.valid := false.B
-        tmp_inst.rvc := 0.U
-        tmp_inst.inst := 0.U
-        tmp_inst.pc := 0.U
+        insts_fifo_enq_clear()
 
-        inst_idx := 0.U
         when(io.in.fire) {
           state := sFirst
         }.otherwise { state := sIdle }
-        // state := sIdle
       }
     }
     is(sPush) {
-
-      when(fifo.io.enq.valid && fifo.io.enq.ready) {
-        val my_idx = find_first_valid_from(inst_idx)
+      when(fifo.io.enq.fire) {
         when(my_idx < 4.U) {
-          tmp_valid := true.B
-          // data
-          tmp_inst.pc := in_reg.insts_pc(my_idx)
-          tmp_inst.inst := in_reg.insts(my_idx)
-          tmp_inst.rvc := in_reg.insts_rvc_mask(my_idx)
-          tmp_inst.valid := in_reg.insts_valid_mask(my_idx)
-
-          inst_idx := my_idx + 1.U
+          insts_fifo_enq(my_idx)
         }.otherwise {
-          // in_reg_empty := true.B
-
-          tmp_valid := false.B
-          tmp_inst.valid := false.B
-          tmp_inst.rvc := false.B
-          tmp_inst.inst := 0.U
-          tmp_inst.pc := 0.U
+          insts_fifo_enq_clear()
           when(io.in.fire) {
             state := sFirst
           }.otherwise { state := sIdle }
-
-          inst_idx := 0.U
         }
       }
-
     }
   }
 
   // handshake
   when(io.in.fire) {
     in_reg := io.in.bits
-    // in_reg_empty := false.B
   }
 
-  val my_idx = find_first_valid_from(inst_idx)
-  val is_idle = (state === sIdle)
-
   val empty_logic = is_idle || (my_idx >= 4.U)
-
   io.in.ready := empty_logic
 
 }
