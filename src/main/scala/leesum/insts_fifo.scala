@@ -20,19 +20,19 @@ class InstsFifoIO extends Bundle {
 class InstsFifo extends Module {
   val io = IO(new InstsFifoIO)
 
-  val fifo: Queue[INSTEmtry] = Module(new Queue(new INSTEmtry, 8))
+  val fifo: Queue[INSTEmtry] = Module(new Queue(new INSTEmtry, 16))
 
   val in_reg = RegInit(0.U.asTypeOf(new InstsItem))
-  val in_reg_empty = RegInit(true.B)
+  // val in_reg_empty = RegInit(true.B)
 
   def is_inst_valid(idx: UInt): Bool = {
     // require(idx >= 0 && idx < 4)s
-    in_reg.insts_valid_mask(idx) & !in_reg_empty
+    in_reg.insts_valid_mask(idx)
   }
 
   def is_inst_rvc(idx: UInt): Bool = {
     // require(idx >= 0 && idx < 4)
-    in_reg.insts_rvc_mask(idx) & !in_reg_empty
+    in_reg.insts_rvc_mask(idx)
   }
 
   def get_inst(idx: UInt): UInt = {
@@ -69,7 +69,7 @@ class InstsFifo extends Module {
   switch(state) {
     is(sIdle) {
       inst_idx := 0.U
-      fifo.io.enq.valid := false.B
+      tmp_valid := false.B
       when(io.in.fire) {
         state := sFirst
       }
@@ -89,7 +89,7 @@ class InstsFifo extends Module {
         state := sPush
 
       }.otherwise {
-        in_reg_empty := true.B
+        // in_reg_empty := true.B
 
         tmp_valid := false.B
         tmp_inst.valid := false.B
@@ -98,7 +98,10 @@ class InstsFifo extends Module {
         tmp_inst.pc := 0.U
 
         inst_idx := 0.U
-        state := sIdle
+        when(io.in.fire) {
+          state := sFirst
+        }.otherwise { state := sIdle }
+        // state := sIdle
       }
     }
     is(sPush) {
@@ -115,15 +118,17 @@ class InstsFifo extends Module {
 
           inst_idx := my_idx + 1.U
         }.otherwise {
-          in_reg_empty := true.B
+          // in_reg_empty := true.B
 
           tmp_valid := false.B
           tmp_inst.valid := false.B
           tmp_inst.rvc := false.B
           tmp_inst.inst := 0.U
           tmp_inst.pc := 0.U
+          when(io.in.fire) {
+            state := sFirst
+          }.otherwise { state := sIdle }
 
-          state := sIdle
           inst_idx := 0.U
         }
       }
@@ -134,10 +139,15 @@ class InstsFifo extends Module {
   // handshake
   when(io.in.fire) {
     in_reg := io.in.bits
-    in_reg_empty := false.B
+    // in_reg_empty := false.B
   }
 
-  io.in.ready := in_reg_empty
+  val my_idx = find_first_valid_from(inst_idx)
+  val is_idle = (state === sIdle)
+
+  val empty_logic = is_idle || (my_idx >= 4.U)
+
+  io.in.ready := empty_logic
 
 }
 

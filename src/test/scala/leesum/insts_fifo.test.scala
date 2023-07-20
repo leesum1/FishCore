@@ -133,14 +133,20 @@ class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
 
         dut.clock.step(5)
 
-        dut.io.in.enqueue(input_data_Lit)
-        dut.io.in.enqueue(input_data_Lit1)
-        dut.io.in.enqueue(input_data_Lit2)
-        dut.io.in.enqueue(input_data_Lit3)
-        dut.io.in.enqueue(input_data_Lit2)
-        dut.io.in.enqueue(input_data_Lit3)
+        dut.io.in.enqueue(input_data_Lit) // 4
+        dut.io.in.enqueue(input_data_Lit1) // 2
+        dut.io.in.enqueue(input_data_Lit2) // 1
+        dut.io.in.enqueue(input_data_Lit3) // 0
+        dut.io.in.enqueue(input_data_Lit2) // 1
+        dut.io.in.enqueue(input_data_Lit3) // 0
+        dut.clock.step(5)
 
-        dut.clock.step(20)
+        dut.io.in.enqueue(input_data_Lit) // 4
+        dut.io.in.enqueue(input_data_Lit1) // 2
+        dut.io.in.enqueue(input_data_Lit2) // 1
+        dut.io.in.enqueue(input_data_Lit3) // 0
+        dut.io.in.enqueue(input_data_Lit2) // 1
+        dut.io.in.enqueue(input_data_Lit3) // 0
 
       }
     }
