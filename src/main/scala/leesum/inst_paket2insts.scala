@@ -8,8 +8,8 @@ import chisel3.stage.ChiselStage
 // TODO: make RspPacket configurable
 class RspPacket extends Bundle {
   // config
-  val pc_width = 32
-  val payload_width = 64
+  private val pc_width = 32
+  private val payload_width = 64
 
   // inst_packet are aligned to 16 bits in memory
   private val inst_boundary = 16
@@ -37,12 +37,34 @@ class RspPacket extends Bundle {
 }
 
 class InstsItem extends Bundle {
-  val insts = Output(Vec(4, UInt(32.W)))
-  val insts_valid_mask = Output(Vec(4, Bool()))
-  val insts_rvc_mask = Output(Vec(4, Bool()))
-  val insts_pc = Output(Vec(4, UInt(32.W)))
+  val insts_vec = Output(Vec(4, new INSTEntry))
+
+  def insts(idx: UInt): UInt = {
+    insts_vec(idx).inst
+  }
+  def insts_pc(idx: UInt): UInt = {
+    insts_vec(idx).pc
+  }
+  def insts_valid_mask(idx: UInt): Bool = {
+    insts_vec(idx).valid
+  }
+  def insts_rvc_mask(idx: UInt): Bool = {
+
+    insts_vec(idx).rvc
+  }
+  def clear(): Unit = {
+    for (i <- 0 until 4) {
+      val tmp = Wire(new INSTEntry)
+      tmp.clear()
+      insts_vec(i) := tmp
+    }
+  }
 }
 
+/** This module convert a RspPacket(8 byte size) to InstsItem. The InstsItem may
+  * contain 1 to 4 insts, and the insts may be 16 bits or 32 bits. This module
+  * is combination logic,Return the InstsItem at the same cycle when input fire.
+  */
 class RspPacket2Insts extends Module {
   val input = IO(Flipped(Decoupled(new RspPacket)))
 
@@ -106,69 +128,66 @@ class RspPacket2Insts extends Module {
       when(is_occupyied(i)) {
         if (i == 0) { // 16 位
           when(is_occupyied(i - 1)) {
-            output.insts(i) := RiscvTools.expand_rvc(
+            output.insts_vec(i).inst := RiscvTools.expand_rvc(
               input.bits.inst_packet(i)
             )
-            output.insts_valid_mask(i) := true.B
-            output.insts_rvc_mask(i) := true.B
-            output.insts_pc(i) := input.bits.pc
+            output.insts_valid_mask(i.U) := true.B
+            output.insts_rvc_mask(i.U) := true.B
+            output.insts_pc(i.U) := input.bits.pc
           }.otherwise { // 32 位
-            output.insts(i) := Cat(
+            output.insts(i.U) := Cat(
               input.bits.inst_packet(i)(15, 0),
               last_half_inst
             )
-            output.insts_valid_mask(i) := true.B
-            output.insts_rvc_mask(i) := false.B
-            output.insts_pc(i) := input.bits.pc - 2.U
+            output.insts_valid_mask(i.U) := true.B
+            output.insts_rvc_mask(i.U) := false.B
+            output.insts_pc(i.U) := input.bits.pc - 2.U
           }
         } else if (i == 3) {
           when(is_occupyied(i - 1)) { // 16 位
-            output.insts(i) := RiscvTools.expand_rvc(
+            output.insts(i.U) := RiscvTools.expand_rvc(
               input.bits.inst_packet(i)
             )
-            output.insts_valid_mask(i) := true.B
-            output.insts_rvc_mask(i) := true.B
-            output.insts_pc(i) := input.bits.pc + (i * 2).U
+            output.insts_valid_mask(i.U) := true.B
+            output.insts_rvc_mask(i.U) := true.B
+            output.insts_pc(i.U) := input.bits.pc + (i * 2).U
           }.otherwise { // 32 位
-            output.insts(i) := Cat(
+            output.insts(i.U) := Cat(
               input.bits.inst_packet(i)(15, 0),
               input.bits.inst_packet(i - 1)(15, 0)
             )
-            output.insts_valid_mask(i) := true.B
-            output.insts_rvc_mask(i) := false.B
-            output.insts_pc(i) := input.bits.pc + ((i - 1) * 2).U
+            output.insts_valid_mask(i.U) := true.B
+            output.insts_rvc_mask(i.U) := false.B
+            output.insts_pc(i.U) := input.bits.pc + ((i - 1) * 2).U
           }
         } else {
           when(is_occupyied(i - 1)) { // 16 位
-            output.insts(i) := RiscvTools.expand_rvc(
+            output.insts(i.U) := RiscvTools.expand_rvc(
               input.bits.inst_packet(i)
             )
-            output.insts_valid_mask(i) := true.B
-            output.insts_rvc_mask(i) := true.B
-            output.insts_pc(i) := input.bits.pc + (i * 2).U
+            output.insts_valid_mask(i.U) := true.B
+            output.insts_rvc_mask(i.U) := true.B
+            output.insts_pc(i.U) := input.bits.pc + (i * 2).U
 
           }.otherwise { // 32 位
-            output.insts(i) := Cat(
+            output.insts(i.U) := Cat(
               input.bits.inst_packet(i)(15, 0),
               input.bits.inst_packet(i - 1)(15, 0)
             )
-            output.insts_valid_mask(i) := true.B
-            output.insts_rvc_mask(i) := false.B
-            output.insts_pc(i) := input.bits.pc + ((i - 1) * 2).U
+            output.insts_valid_mask(i.U) := true.B
+            output.insts_rvc_mask(i.U) := false.B
+            output.insts_pc(i.U) := input.bits.pc + ((i - 1) * 2).U
           }
         }
       }
     }.otherwise {
-      output.insts_valid_mask(i) := false.B
-      output.insts_rvc_mask(i) := false.B
-      output.insts(i) := 2222.U(32.W)
-      output.insts_pc(i) := 4.U
+      output.insts_valid_mask(i.U) := false.B
+      output.insts_rvc_mask(i.U) := false.B
+      output.insts(i.U) := 2222.U(32.W)
+      output.insts_pc(i.U) := 4.U
     }
   }.otherwise {
-    output.insts_valid_mask := VecInit(Seq.fill(4)(false.B))
-    output.insts_rvc_mask := VecInit(Seq.fill(4)(false.B))
-    output.insts := VecInit(Seq.fill(4)(1111.U(32.W)))
-    output.insts_pc := VecInit(Seq.fill(4)(0.U(32.W)))
+    output.clear()
   }
 
   input.ready := true.B

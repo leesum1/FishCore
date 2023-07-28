@@ -105,6 +105,7 @@ class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
           .zipWithIndex
           .foreach {
             case (hex_string, foreach_idx) => {
+              // the 8 byte data is ready, poke it to dut
               println("---%s---".format(hex_string))
 
               dut.input.valid.poke(true.B)
@@ -116,15 +117,15 @@ class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
               // poke pc
               dut.input.bits.pc.poke((entry_point + foreach_idx * 8).U)
 
-              
               // check dut outputs
               for (i <- 0 until dut.input.bits.max_inst_packet) {
-                if (dut.output.insts_valid_mask(i).peek().litToBoolean) {
+                val out = dut.output.insts_vec(i).peek();
+                if (out.valid.litToBoolean) {
 
                   println(
                     "dut: pc:%x, inst:%08x".format(
-                      dut.output.insts_pc(i).peek().litValue.toLong,
-                      dut.output.insts(i).peek().litValue.toLong
+                      out.pc.litValue.toLong,
+                      out.inst.litValue.toLong
                     )
                   )
                   println(
@@ -133,8 +134,8 @@ class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
                       ref_inst_list.head.litValue.toLong
                     )
                   )
-                  dut.output.insts(i).expect(ref_inst_list.head)
-                  dut.output.insts_pc(i).expect(ref_pc_list.head)
+                  dut.output.insts_vec(i).inst.expect(ref_inst_list.head)
+                  dut.output.insts_vec(i).pc.expect(ref_pc_list.head)
                   ref_inst_list = ref_inst_list.drop(1)
                   ref_pc_list = ref_pc_list.drop(1)
                 }

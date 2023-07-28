@@ -1,9 +1,14 @@
 package leesum
 
+import Chisel.Cat
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
-import chisel3.experimental.VecLiterals.AddVecLiteralConstructor
+import chisel3.experimental.VecLiterals.{
+  AddObjectLiteralConstructor,
+  AddVecLiteralConstructor
+}
 import chiseltest._
+import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 import chiseltest.simulator.WriteVcdAnnotation
 
@@ -19,134 +24,73 @@ class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
         dut.io.out.initSink()
         dut.io.out.setSinkClock(dut.clock)
 
-        val input_data = (new InstsItem)
-        val input_data_Lit = input_data.Lit(
-          _.insts -> Vec(4, UInt(32.W)).Lit(
-            0 -> 0x00000013.U,
-            1 -> 0x00000014.U,
-            2 -> 0x00000015.U,
-            3 -> 0x00000016.U
-          ),
-          _.insts_pc -> Vec(4, UInt(32.W)).Lit(
-            0 -> 0x00000000.U,
-            1 -> 0x00000004.U,
-            2 -> 0x00000008.U,
-            3 -> 0x0000000c.U
-          ),
-          _.insts_valid_mask -> Vec(4, Bool()).Lit(
-            0 -> true.B,
-            1 -> true.B,
-            2 -> true.B,
-            3 -> true.B
-          ),
-          _.insts_rvc_mask -> Vec(4, Bool()).Lit(
-            0 -> false.B,
-            1 -> false.B,
-            2 -> false.B,
-            3 -> false.B
-          )
-        )
+        // Generate a random hex string with 8 characters and prefix it with "x"
+        // such as "x12345678", "xabcdef12", etc.
+        // and than convert it to UInt(32.W)
+        val inst_string_gen =
+          Gen.listOfN(8, Gen.hexChar).map("x" + _.mkString).map(_.U(32.W))
 
-        val input_data1 = (new InstsItem)
-        val input_data_Lit1 = input_data1.Lit(
-          _.insts -> Vec(4, UInt(32.W)).Lit(
-            0 -> 0x00000013.U,
-            1 -> 0x00000014.U,
-            2 -> 0x00000015.U,
-            3 -> 0x00000016.U
-          ),
-          _.insts_pc -> Vec(4, UInt(32.W)).Lit(
-            0 -> 0x00000000.U,
-            1 -> 0x00000004.U,
-            2 -> 0x00000008.U,
-            3 -> 0x0000000c.U
-          ),
-          _.insts_valid_mask -> Vec(4, Bool()).Lit(
-            0 -> false.B,
-            1 -> true.B,
-            2 -> false.B,
-            3 -> true.B
-          ),
-          _.insts_rvc_mask -> Vec(4, Bool()).Lit(
-            0 -> false.B,
-            1 -> false.B,
-            2 -> false.B,
-            3 -> false.B
-          )
-        )
+        // Generate a random hex string with 8 characters and prefix it with "x8"
+        // such as "x81234567", "x8abcdef1", etc.
+        // and than convert it to UInt(32.W)
+        val pc_string_gen =
+          Gen
+            .listOfN(7, Gen.hexChar)
+            .map("x8" + _.mkString)
+            .map(_.U(32.W))
 
-        val input_data2 = (new InstsItem)
-        val input_data_Lit2 = input_data2.Lit(
-          _.insts -> Vec(4, UInt(32.W)).Lit(
-            0 -> 0x00000013.U,
-            1 -> 0x00000014.U,
-            2 -> 0x00000015.U,
-            3 -> 0x00000016.U
-          ),
-          _.insts_pc -> Vec(4, UInt(32.W)).Lit(
-            0 -> 0x00000000.U,
-            1 -> 0x00000004.U,
-            2 -> 0x00000008.U,
-            3 -> 0x0000000c.U
-          ),
-          _.insts_valid_mask -> Vec(4, Bool()).Lit(
-            0 -> false.B,
-            1 -> true.B,
-            2 -> false.B,
-            3 -> false.B
-          ),
-          _.insts_rvc_mask -> Vec(4, Bool()).Lit(
-            0 -> false.B,
-            1 -> false.B,
-            2 -> false.B,
-            3 -> false.B
-          )
-        )
+        val bool_gen = Gen.oneOf(true.B, false.B)
 
-        val input_data3 = (new InstsItem)
-        val input_data_Lit3 = input_data3.Lit(
-          _.insts -> Vec(4, UInt(32.W)).Lit(
-            0 -> 0x00000013.U,
-            1 -> 0x00000014.U,
-            2 -> 0x00000015.U,
-            3 -> 0x00000016.U
-          ),
-          _.insts_pc -> Vec(4, UInt(32.W)).Lit(
-            0 -> 0x00000000.U,
-            1 -> 0x00000004.U,
-            2 -> 0x00000008.U,
-            3 -> 0x0000000c.U
-          ),
-          _.insts_valid_mask -> Vec(4, Bool()).Lit(
-            0 -> false.B,
-            1 -> false.B,
-            2 -> false.B,
-            3 -> false.B
-          ),
-          _.insts_rvc_mask -> Vec(4, Bool()).Lit(
-            0 -> false.B,
-            1 -> false.B,
-            2 -> false.B,
-            3 -> false.B
+        val inst_entry_gen = for {
+          inst <- inst_string_gen
+          inst_valid <- bool_gen
+          inst_rvc <- bool_gen
+          inst_pc <- pc_string_gen
+        } yield {
+          val item = (new INSTEntry).Lit(
+            _.inst -> inst,
+            _.valid -> inst_valid,
+            _.rvc -> inst_rvc,
+            _.pc -> inst_pc
           )
-        )
+          item
+        }
+
+        val insts_item_gen = for {
+          insts <- Gen.listOfN(4, inst_entry_gen)
+        } yield {
+          val item = (new InstsItem).Lit(
+            _.insts_vec -> Vec.Lit(insts: _*)
+          )
+          item
+        }
+
+        // prepare test data
+
+        // use Gen.listOfN to generate a list of 100 items as input data
+        val input_data_seq = Gen
+          .listOfN(100, insts_item_gen)
+          .sample
+          .get
+
+        // reference data,only valid insts will be pushed into the fifo
+        val ref_data_seq =
+          input_data_seq.flatten(_.insts_vec).filter(_.valid.litToBoolean)
 
         dut.clock.step(5)
-
-        dut.io.in.enqueue(input_data_Lit) // 4
-        dut.io.in.enqueue(input_data_Lit1) // 2
-        dut.io.in.enqueue(input_data_Lit2) // 1
-        dut.io.in.enqueue(input_data_Lit3) // 0
-        dut.io.in.enqueue(input_data_Lit2) // 1
-        dut.io.in.enqueue(input_data_Lit3) // 0
-        dut.clock.step(5)
-
-        dut.io.in.enqueue(input_data_Lit) // 4
-        dut.io.in.enqueue(input_data_Lit1) // 2
-        dut.io.in.enqueue(input_data_Lit2) // 1
-        dut.io.in.enqueue(input_data_Lit3) // 0
-        dut.io.in.enqueue(input_data_Lit2) // 1
-        dut.io.in.enqueue(input_data_Lit3) // 0
+        fork {
+          // push inputs into the calculator, stall for 11 cycles one third of the way
+          val (seq1, seq2) = input_data_seq.splitAt(input_data_seq.length / 3)
+          dut.io.in.enqueueSeq(seq1)
+          dut.clock.step(11)
+          dut.io.in.enqueueSeq(seq2)
+        }.fork {
+          // retrieve computations from the calculator, stall for 10 cycles one half of the way
+          val (seq1, seq2) = ref_data_seq.splitAt(ref_data_seq.length / 4)
+          dut.io.out.expectDequeueSeq(seq1)
+          dut.clock.step(200)
+          dut.io.out.expectDequeueSeq(seq2)
+        }.join()
 
       }
     }

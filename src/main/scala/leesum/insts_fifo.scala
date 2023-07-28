@@ -5,62 +5,77 @@ import chisel3._
 import chisel3.util.{Decoupled, Enum, Queue, is}
 import chisel3.stage.ChiselStage
 
-class INSTEmtry extends Bundle {
+class INSTEntry extends Bundle {
   val pc = UInt(32.W)
   val inst = UInt(32.W)
   val rvc = Bool()
   val valid = Bool()
+
+  def clear() = {
+    pc := 0.U
+    inst := 0.U
+    rvc := false.B
+    valid := false.B
+  }
 }
 
 class InstsFifoIO extends Bundle {
   val in = Flipped(Decoupled(new InstsItem))
-  val out = Decoupled(new INSTEmtry)
+  val out = Decoupled(new INSTEntry)
 }
 
+/** This module is used to convert a InstsItem to a stream of INSTEntry, Inside
+  * this module, it will sequentially push valid INSTEntry from InstsItem to a
+  * fifo. A InstsItem is a bundle of 4 INSTEntry. This module is a sequential
+  * logic
+  */
 class InstsFifo extends Module {
   val io = IO(new InstsFifoIO)
 
-  val fifo: Queue[INSTEmtry] = Module(new Queue(new INSTEmtry, 16))
+  val inst_fifo: Queue[INSTEntry] = Module(new Queue(new INSTEntry, 16))
 
-  val in_reg = RegInit(0.U.asTypeOf(new InstsItem))
+  val insts_buffer = RegInit(0.U.asTypeOf(new InstsItem))
 
+  // fsm
   val sIdle :: sFirst :: sPush :: Nil = Enum(3)
-
   val state = RegInit(sIdle)
-
-  val inst_idx = RegInit(0.U(4.W))
-
-  val tmp_inst = RegInit(0.U.asTypeOf(new INSTEmtry))
-  val tmp_valid = RegInit(false.B)
-
-  val my_idx = find_first_valid_from(inst_idx)
   val is_idle = (state === sIdle)
 
-  fifo.io.enq.valid := tmp_valid
-  fifo.io.enq.bits := tmp_inst
-  fifo.io.deq <> io.out
+  // find first valid inst from inst_idx
+  val current_idx = RegInit(0.U(4.W))
+  val valid_inst_idx = find_first_valid_from(current_idx)
+  // TODO make it configurable
+  val idx_in_range = valid_inst_idx =/= 4.U
+
+  val tmp_inst = RegInit(0.U.asTypeOf(new INSTEntry))
+  val tmp_valid = RegInit(false.B)
+
+  inst_fifo.io.enq.valid := tmp_valid
+  inst_fifo.io.enq.bits := tmp_inst
+  inst_fifo.io.deq <> io.out
 
   def is_inst_valid(idx: UInt): Bool = {
     // require(idx >= 0 && idx < 4)s
-    in_reg.insts_valid_mask(idx)
+    insts_buffer.insts_valid_mask(idx)
   }
 
   def is_inst_rvc(idx: UInt): Bool = {
     // require(idx >= 0 && idx < 4)
-    in_reg.insts_rvc_mask(idx)
+    insts_buffer.insts_rvc_mask(idx)
   }
 
   def get_inst(idx: UInt): UInt = {
     // require(idx >= 0 && idx < 4)s
-    in_reg.insts(idx)
+    insts_buffer.insts(idx)
   }
   def get_inst_pc(idx: UInt): UInt = {
     // require(idx >= 0 && idx < 4)
-    in_reg.insts_pc(idx)
+    insts_buffer.insts_pc(idx)
   }
 
   def find_first_valid_from(idx: UInt): UInt = {
 
+    // TODO make it configurable
     val valid_vec = VecInit(Seq.tabulate(4)(i => is_inst_valid(i.U)))
 
     // when indexWhere can't find a valid inst, it will return O.U
@@ -75,7 +90,7 @@ class InstsFifo extends Module {
 
   def insts_fifo_enq(idx: UInt) = {
     tmp_valid := true.B
-    inst_idx := my_idx + 1.U
+    current_idx := valid_inst_idx + 1.U
     // data
     tmp_inst.pc := get_inst_pc(idx)
     tmp_inst.inst := get_inst(idx)
@@ -84,7 +99,7 @@ class InstsFifo extends Module {
   }
   def insts_fifo_enq_clear() = {
     tmp_valid := false.B
-    inst_idx := 0.U
+    current_idx := 0.U
 
     tmp_inst.valid := false.B
     tmp_inst.rvc := false.B
@@ -94,7 +109,7 @@ class InstsFifo extends Module {
 
   switch(state) {
     is(sIdle) {
-      inst_idx := 0.U
+      current_idx := 0.U
       tmp_valid := false.B
       when(io.in.fire) {
         state := sFirst
@@ -102,9 +117,9 @@ class InstsFifo extends Module {
     }
     is(sFirst) {
 
-      when(my_idx < 4.U) {
+      when(idx_in_range) {
 
-        insts_fifo_enq(my_idx)
+        insts_fifo_enq(valid_inst_idx)
 
         state := sPush
 
@@ -118,9 +133,9 @@ class InstsFifo extends Module {
       }
     }
     is(sPush) {
-      when(fifo.io.enq.fire) {
-        when(my_idx < 4.U) {
-          insts_fifo_enq(my_idx)
+      when(inst_fifo.io.enq.fire) {
+        when(idx_in_range) {
+          insts_fifo_enq(valid_inst_idx)
         }.otherwise {
           insts_fifo_enq_clear()
           when(io.in.fire) {
@@ -133,12 +148,11 @@ class InstsFifo extends Module {
 
   // handshake
   when(io.in.fire) {
-    in_reg := io.in.bits
+    insts_buffer := io.in.bits
   }
 
-  val empty_logic = is_idle || (my_idx >= 4.U)
-  io.in.ready := empty_logic
-
+  val empty_logic = is_idle || (!idx_in_range)
+  io.in.ready := empty_logic & inst_fifo.io.enq.ready
 }
 
 object gen_fifo_verilog extends App {
