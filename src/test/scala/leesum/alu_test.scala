@@ -3,9 +3,85 @@ package leesum
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
+import chiseltest.simulator.WriteVcdAnnotation
+import leesum.test_utils.{int2UInt64, long2UInt64, long2Ulong}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
-import chiseltest.simulator.WriteVcdAnnotation
+
+class AluAdderTest extends AnyFreeSpec with ChiselScalatestTester {
+  def adder_input_gen() = {
+    val adder_op_gen =
+      Gen.listOfN(16, Gen.hexChar).map("x" + _.mkString).map(_.U(64.W))
+    val input_gen = for {
+      adder_op1 <- adder_op_gen
+      adder_op2 <- adder_op_gen
+    } yield {
+      (adder_op1, adder_op2)
+    }
+    input_gen
+  }
+  def adder_calculate_ref(op_a: UInt, op_b: UInt) = {
+    require((op_a.getWidth == 64) && (op_b.getWidth == 64), "width error")
+
+    val op_a_lit = op_a.litValue.toLong
+    val op_b_lit = op_b.litValue.toLong
+
+    val add_res = op_a_lit + op_b_lit
+    val sub_res = op_a_lit - op_b_lit
+    val slt_res = op_a_lit < op_b_lit
+    val sltu_res = long2Ulong(op_a_lit) < long2Ulong(op_b_lit)
+
+    (add_res, sub_res, slt_res, sltu_res)
+  }
+
+  "ADDER SUB TEST" in {
+    test(new AluAdder).withAnnotations(
+      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+    ) { dut =>
+      val input_gen = adder_input_gen()
+      val input_seq = Gen
+        .listOfN(20000, input_gen)
+        .sample
+        .get
+
+      val ref_seq = input_seq
+        .map({ case (op_a, op_b) =>
+          val ref =
+            adder_calculate_ref(op_a, op_b)
+          ref
+        })
+      dut.clock.step(5)
+
+      input_seq.zipWithIndex.foreach({ case ((op_a, op_b), idx) =>
+        val (add_res, sub_res, slt_res, sltu_res) = ref_seq(idx)
+
+        dut.io.adder_in1.poke(op_a)
+        dut.io.adder_in2.poke(op_b)
+        dut.io.sub_req.poke(true.B)
+
+//        println(
+//          "sub: op_a:%x, op_b:%x, dut_out:%x,ref_out:%x,dut_slt:%b,ref_slt:%b,dut_sltu:%b,ref_sltu:%b"
+//            .format(
+//              op_a.litValue.toLong,
+//              op_b.litValue.toLong,
+//              dut.io.adder_out.peek().litValue,
+//              sub_res,
+//              dut.io.slt.peek().litToBoolean,
+//              slt_res,
+//              dut.io.sltu.peek().litToBoolean,
+//              sltu_res
+//            )
+//        )
+
+        dut.io.adder_out.expect(long2UInt64(sub_res))
+//        dut.io.slt.expect(slt_res)
+//        dut.io.sltu.expect(sltu_res)
+
+        dut.clock.step(1)
+      })
+    }
+  }
+}
 
 class AluTest extends AnyFreeSpec with ChiselScalatestTester {
   def alu_input_gen() = {
@@ -42,18 +118,17 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
     input_gen
   }
 
-  // scala 没有无符号数比较，所以需要自己实现
-  def longParseUnsigned(value: Long): BigDecimal = {
-    if (value >= 0) {
-      return BigDecimal(value)
-    }
-    val lowValue = value & Long.MaxValue
-
-    BigDecimal
-      .valueOf(lowValue) + BigDecimal.valueOf(Long.MaxValue) + BigDecimal
-      .valueOf(1)
-  }
-
+  /** calculate the reference result of alu
+    * @param op_a
+    *   alu input a 64bit
+    * @param op_b
+    *   alu input b 64bit
+    * @param op_type
+    *   operation type
+    * @param op_width
+    *   input width 32bit or 64bit
+    * @return
+    */
   def alu_calculate_ref(
       op_a: UInt,
       op_b: UInt,
@@ -71,8 +146,8 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
     val add_res = op_a_lit + op_b_lit
     val sub_res = op_a_lit - op_b_lit
 
-    val slt_res = BigInt(op_a_lit) < BigInt(op_b_lit)
-    val sltu_res = longParseUnsigned(op_a_lit) < longParseUnsigned(op_b_lit)
+    val slt_res = op_a_lit < op_b_lit
+    val sltu_res = long2Ulong(op_a_lit) < long2Ulong(op_b_lit)
 
     val res = (op_type, op_width) match {
       case (AluOP.Add, OPWidth.W64) => add_res
@@ -115,16 +190,15 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
       val alu_gen = alu_input_gen()
 
       val input_seq = Gen
-        .listOfN(2000, alu_gen)
+        .listOfN(20000, alu_gen)
         .sample
         .get
 
       val ref_seq = input_seq
         .map({ case (op_a, op_b, op_type, op_width) =>
           val res = alu_calculate_ref(op_a, op_b, op_type, op_width)
-          "x" + res.toHexString
+          long2UInt64(res)
         })
-        .map(_.U(64.W))
         .map({ case (res) =>
           (new AluOut).Lit(
             _.res -> res
@@ -137,7 +211,9 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
 
       dut.clock.step(5)
       fork {
-        // push inputs into the calculator, stall for 11 cycles one third of the way
+
+        // 随机生成的输入数据不能带 input 属性，不然在 match 的时候会出错
+        // 以后带有 input 模块，需要使用的时候再生成，例如 AluIn
         val (seq1, seq2) =
           input_seq
             .map({ case (op_a, op_b, op_type, op_width) =>
@@ -193,7 +269,8 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
         .get
       val expect_sll64_seq =
         input_sll64_seq.map({ case (shift_op1, shift_op2) =>
-          "x" + (shift_op1.litValue.toLong << shift_op2.litValue.toInt).toHexString
+          val res = (shift_op1.litValue.toLong << shift_op2.litValue.toInt)
+          long2UInt64(res)
         })
 
       input_sll64_seq.zipWithIndex.foreach({
@@ -204,13 +281,13 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
           dut.io.shift32_req.poke(false.B)
           dut.io.shift_in.poke(shift_op1)
           dut.io.shift_count.poke(shift_op2)
-          dut.io.shift_out.expect(expect_sll64_seq(idx).U)
+          dut.io.shift_out.expect(expect_sll64_seq(idx))
           println(
-            "sll64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%s".format(
+            "sll64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%x".format(
               shift_op1.litValue.toLong,
               shift_op2.litValue.toLong,
               dut.io.shift_out.peek().litValue.toLong,
-              expect_sll64_seq(idx)
+              expect_sll64_seq(idx).litValue
             )
           )
           dut.clock.step(1)
@@ -231,7 +308,9 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
         .get
       val expect_seq = input_seq.map({
         case (shift_op1, shift_op2) => {
-          "x" + (shift_op1.litValue.toInt << (shift_op2.litValue.toInt & 0x1f)).toHexString
+          val res =
+            (shift_op1.litValue.toInt << (shift_op2.litValue.toInt & 0x1f))
+          int2UInt64(res)
         }
       })
 //      expect_sll64_seq.foreach(println)
@@ -244,13 +323,13 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
           dut.io.shift32_req.poke(true.B)
           dut.io.shift_in.poke(shift_op1)
           dut.io.shift_count.poke(shift_op2)
-          dut.io.shift_out.expect(expect_seq(idx).U)
+          dut.io.shift_out.expect(expect_seq(idx))
           println(
-            "sll64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%s".format(
+            "sll64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%x".format(
               shift_op1.litValue.toLong,
               shift_op2.litValue.toLong,
               dut.io.shift_out.peek().litValue.toLong,
-              expect_seq(idx)
+              expect_seq(idx).litValue
             )
           )
           dut.clock.step(1)
