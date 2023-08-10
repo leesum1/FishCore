@@ -183,8 +183,8 @@ class RspPacket2Insts extends Module {
     }.otherwise {
       output.insts_valid_mask(i.U) := false.B
       output.insts_rvc_mask(i.U) := false.B
-      output.insts(i.U) := 2222.U(32.W)
-      output.insts_pc(i.U) := 4.U
+      output.insts(i.U) := 0.U(32.W)
+      output.insts_pc(i.U) := 0.U
     }
   }.otherwise {
     output.clear()
