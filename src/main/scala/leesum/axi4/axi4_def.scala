@@ -1,8 +1,7 @@
 package leesum.axi4
 
 import chisel3._
-import chisel3.stage.ChiselStage
-import chisel3.util.{Decoupled, Mux1H, PopCount, Reverse, is, switch}
+import chisel3.util.{Decoupled, Mux1H}
 
 object AXIDef {
   def BURST_FIXED = 0.U(2.W)
@@ -70,6 +69,7 @@ class AXIWriteResponseChannel extends Bundle {
 
 class AXIReadDataChannel(val dataWidth: Int) extends Bundle {
   val data = UInt(dataWidth.W)
+  val id = UInt(4.W)
   val resp = UInt(2.W)
   val last = Bool()
   val user = UInt(4.W)

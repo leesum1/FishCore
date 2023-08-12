@@ -26,6 +26,17 @@ class BasicMemory(ADDR_WIDTH: Int, DATA_WIDTH: Int, BASE_ADDR: Int)
     Vec(DATA_WIDTH / 8, UInt(8.W))
   )
 
+  val prevRdataReg = RegInit(
+    0.U(32.W)
+  ) // Register to hold previous output value
+
+  val read_data = mem.read(mem_addr(io.i_raddr), io.i_rd).asUInt
+
+  // Register to hold previous output value
+  when(io.i_rd) {
+    prevRdataReg := read_data
+  }
+
   when(io.i_we) {
     mem.write(
       mem_addr(io.i_waddr),
@@ -33,7 +44,8 @@ class BasicMemory(ADDR_WIDTH: Int, DATA_WIDTH: Int, BASE_ADDR: Int)
       io.i_wstrb.asTypeOf(Vec(DATA_WIDTH / 8, Bool()))
     )
   }
-  io.o_rdata := mem.read(mem_addr(io.i_raddr), io.i_rd).asUInt
+
+  io.o_rdata := Mux(io.i_rd, read_data, prevRdataReg)
 }
 
 object gen_axi_addr_verilog extends App {

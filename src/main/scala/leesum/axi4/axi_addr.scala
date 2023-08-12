@@ -1,27 +1,8 @@
 package leesum.axi4
 import chisel3._
-import chisel3.experimental.IO
 import chisel3.stage.ChiselStage
-import chisel3.util.{
-  Decoupled,
-  Enum,
-  HasBlackBoxResource,
-  MuxLookup,
-  PopCount,
-  Reverse,
-  is
-}
-import leesum.axi4.AXIDef.{
-  BURST_FIXED,
-  SIZE_1,
-  SIZE_128,
-  SIZE_16,
-  SIZE_2,
-  SIZE_32,
-  SIZE_4,
-  SIZE_64,
-  SIZE_8
-}
+import chisel3.util.{HasBlackBoxResource, MuxLookup}
+import leesum.axi4.AXIDef._
 
 class axi_addr(ADDR_WIDTH: Int, DATA_WIDTH: Int)
     extends BlackBox(Map("AW" -> ADDR_WIDTH, "DW" -> DATA_WIDTH))
@@ -35,6 +16,24 @@ class axi_addr(ADDR_WIDTH: Int, DATA_WIDTH: Int)
   })
   addResource("/axi_addr.v")
 }
+
+class back_box_test(ADDR_WIDTH: Int, DATA_WIDTH: Int) extends Module {
+  val io = IO(new Bundle {
+    val addr = Input(UInt(ADDR_WIDTH.W))
+    val len = Input(UInt(8.W))
+    val size = Input(UInt(3.W))
+    val burst = Input(UInt(2.W))
+    val next_addr = Output(UInt(ADDR_WIDTH.W))
+  })
+
+  val ref = Module(new axi_addr(ADDR_WIDTH, DATA_WIDTH))
+  ref.io.i_last_addr := io.addr
+  ref.io.i_len := io.len
+  ref.io.i_size := io.size
+  ref.io.i_burst := io.burst
+  io.next_addr := ref.io.o_next_addr
+}
+
 // TODO: implement wrap burst
 // TODO: alignmentMask should depend on data width,which could reduce area
 class AXIAddr(ADDR_WIDTH: Int, DATA_WIDTH: Int) extends Module {
@@ -44,6 +43,13 @@ class AXIAddr(ADDR_WIDTH: Int, DATA_WIDTH: Int) extends Module {
     val size = Input(UInt(3.W))
     val burst = Input(UInt(2.W))
     val next_addr = Output(UInt(ADDR_WIDTH.W))
+
+    def clear(): Unit = {
+      addr := 0.U
+      len := 0.U
+      size := 0.U
+      burst := 0.U
+    }
   })
 
   val addr_width = ADDR_WIDTH
@@ -75,14 +81,14 @@ class AXIAddr(ADDR_WIDTH: Int, DATA_WIDTH: Int) extends Module {
   io.next_addr := aligned_next_addr
 }
 
-object gen_verilog extends App {
+object gen_verilog1 extends App {
   val projectDir = System.getProperty("user.dir")
 
   val verilogDir = s"$projectDir/gen_verilog"
   println(s"verilogDir: $verilogDir")
   val stage = new ChiselStage()
     .emitVerilog(
-      new AXIAddr(12, 64),
+      new back_box_test(12, 64),
       Array(
         "--target-dir",
         verilogDir
