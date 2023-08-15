@@ -12,15 +12,41 @@ import leesum.axi4.{
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
-import scala.util.Random
-
+// TODO: test list
+//  1. back to back read
+//  2. loopback test
+//  3. read write the same address
+//  4. narrow transfer
+//  5. unaligned transfer
 class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
 
-  def addr_channel_gen(ADDR_WIDTH: Int): Unit = {
-    val addr_gen = Gen.choose(0, (1 << ADDR_WIDTH) - 1)
+  def addr_channel_gen(ADDR_WIDTH: Int, BURST_EN: Boolean) = {
+    require(ADDR_WIDTH % 4 == 0, "ADDR_WIDTH must be a multiple of 4")
+
+    val addr_gen = Gen
+      .listOfN(ADDR_WIDTH / 4, Gen.hexChar)
+      .map("x" + _.mkString)
+      .map(_.U(ADDR_WIDTH.W))
+
     val len_gen = Gen.choose(0, 7)
+    val id_gen = Gen.choose(0, 15)
     val size_gen = Gen.oneOf(SIZE_4, SIZE_8)
     val burst = BURST_INCR
+
+    val addr = new AXIAddressChannel(ADDR_WIDTH).Lit(
+      _.id -> id_gen.sample.get.U,
+      _.addr -> addr_gen.sample.get,
+      _.len -> { if (BURST_EN) len_gen.sample.get.U else 0.U },
+      _.size -> size_gen.sample.get,
+      _.burst -> burst,
+      _.lock -> 0.U,
+      _.cache -> 0.U,
+      _.prot -> 0.U,
+      _.qos -> 0.U,
+      _.region -> 0.U,
+      _.user -> 0.U
+    )
+    addr
   }
   def w_channel_gen(DATA_WIDTH: Int, LEN: Int): Seq[AXIWriteDataChannel] = {
     val data_gen = Gen.choose(0L, 0xffffffffL).map(_.U(DATA_WIDTH.W))
@@ -53,7 +79,8 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
     ))
   }
 
-  "axi_mem_test" in {
+  // TODO
+  "loopback_test" in {
     test(new AXI4Memory())
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
@@ -69,96 +96,81 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
         dut.io.b.initSink()
         dut.io.b.setSinkClock(dut.clock)
 
-        val ar_burst8 = (new AXIAddressChannel(32)).Lit(
-          _.id -> 0.U,
-          _.addr -> 4.U,
-          _.len -> 7.U,
-          _.size -> SIZE_4,
-          _.burst -> BURST_INCR,
-          _.lock -> 0.U,
-          _.cache -> 0.U,
-          _.prot -> 0.U,
-          _.qos -> 0.U,
-          _.region -> 0.U,
-          _.user -> 0.U
-        )
-        val ar_signal = (new AXIAddressChannel(32)).Lit(
-          _.id -> 0.U,
-          _.addr -> 8.U,
-          _.len -> 0.U,
-          _.size -> SIZE_8,
-          _.burst -> BURST_INCR,
-          _.lock -> 0.U,
-          _.cache -> 0.U,
-          _.prot -> 0.U,
-          _.qos -> 0.U,
-          _.region -> 0.U,
-          _.user -> 0.U
-        )
-        val aw_burst8 = (new AXIAddressChannel(32)).Lit(
-          _.id -> 2.U,
-          _.addr -> 4.U,
-          _.len -> 7.U,
-          _.size -> SIZE_4,
-          _.burst -> BURST_INCR,
-          _.lock -> 0.U,
-          _.cache -> 0.U,
-          _.prot -> 0.U,
-          _.qos -> 0.U,
-          _.region -> 0.U,
-          _.user -> 0.U
-        )
-        val aw_signal = (new AXIAddressChannel(32)).Lit(
-          _.id -> 2.U,
-          _.addr -> 16.U,
-          _.len -> 0.U,
-          _.size -> SIZE_8,
-          _.burst -> BURST_INCR,
-          _.lock -> 0.U,
-          _.cache -> 0.U,
-          _.prot -> 0.U,
-          _.qos -> 0.U,
-          _.region -> 0.U,
-          _.user -> 0.U
-        )
+        dut.clock.step(5)
+      }
+  }
+
+  "back_to_back" in {
+    test(new AXI4Memory())
+      .withAnnotations(
+        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+      ) { dut =>
+        dut.io.ar.initSource()
+        dut.io.ar.setSourceClock(dut.clock)
+        dut.io.r.initSink()
+        dut.io.r.setSinkClock(dut.clock)
+        dut.io.aw.initSource()
+        dut.io.aw.setSourceClock(dut.clock)
+        dut.io.w.initSource()
+        dut.io.w.setSourceClock(dut.clock)
+        dut.io.b.initSink()
+        dut.io.b.setSinkClock(dut.clock)
 
         dut.clock.step(5)
-        fork
-          .withRegion(Monitor) {
-            // r
-            dut.io.ar.enqueueSeq(Seq.fill(10)(ar_burst8))
-            dut.clock.step(10)
-            dut.io.ar.enqueueSeq(Seq.fill(5)(ar_signal))
-//            dut.clock.step(10)
-            dut.io.ar.enqueueSeq(Seq.fill(5)(ar_burst8))
-            // w
-            dut.io.aw.enqueue(aw_burst8)
 
-            fork
-              .withRegion(Monitor) {
-                dut.io.w.enqueueSeq(w_channel_gen(64, 7))
-              }
-              .fork {
-                dut.io.aw.enqueue(aw_burst8)
-              }
-              .joinAndStep(dut.clock)
-            dut.io.b.expectDequeue(b_channel_gen(2))
-//            // w
-//            dut.clock.step(1)
-//            dut.io.aw.enqueue(aw_burst8)
-//            dut.io.w.enqueueSeq(w_channel_gen(64, 7))
-//            dut.io.b.expectDequeue(b_channel_gen(2))
+        // read test data
+        val ar_burst_seq =
+          0.until(10).map(_ => addr_channel_gen(32, BURST_EN = true))
+        val ar_single_seq =
+          0.until(10).map(_ => addr_channel_gen(32, BURST_EN = false))
+        // write test data
+        val aw_burst_seq =
+          0.until(10).map(_ => addr_channel_gen(32, BURST_EN = true))
+        val w_burst_seq = aw_burst_seq.map(aw => {
+          w_channel_gen(64, aw.len.litValue.toInt)
+        })
+        val b_burst_seq = aw_burst_seq.map(aw => {
+          b_channel_gen(aw.id.litValue.toInt)
+        })
 
-          }
-          .fork {
-            var count = 2000
-            while (count > 0) {
-              count = count - 1
-              dut.io.r.ready.poke(Random.nextBoolean())
-              dut.clock.step(1)
-            }
-          }
-          .joinAndStep(dut.clock)
+        val aw_signal_seq =
+          0.until(10).map(_ => addr_channel_gen(32, BURST_EN = false))
+        val w_signal_seq = aw_signal_seq.map(aw => {
+          w_channel_gen(64, aw.len.litValue.toInt)
+        })
+        val b_signal_seq = aw_signal_seq.map(aw => {
+          b_channel_gen(aw.id.litValue.toInt)
+        })
+
+        // read back to back without bubble
+        // always ready to accept read response
+        dut.io.r.ready.poke(true)
+        dut.io.ar.enqueueSeq(ar_burst_seq)
+        dut.io.ar.enqueueSeq(ar_single_seq)
+
+        // write back to back without bubble
+        // aw, w, b channel are independent
+        fork {
+          // aw channel
+          dut.io.aw.enqueueSeq(aw_burst_seq)
+          dut.io.aw.enqueueSeq(aw_signal_seq)
+        }.fork {
+          // w channel
+          w_burst_seq.foreach(w => {
+            dut.io.w.enqueueSeq(w)
+          })
+          w_signal_seq.foreach(w => {
+            dut.io.w.enqueueSeq(w)
+          })
+        }.fork {
+          // b channel
+          b_burst_seq.foreach(b => {
+            dut.io.b.expectDequeue(b)
+          })
+          b_signal_seq.foreach(b => {
+            dut.io.b.expectDequeue(b)
+          })
+        }.join()
       }
   }
 }

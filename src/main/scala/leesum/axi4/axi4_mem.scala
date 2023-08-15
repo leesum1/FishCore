@@ -6,6 +6,47 @@ import chisel3.util.{Decoupled, Enum, is}
 class AXI4Memory extends Module {
   val io = IO(new AXISlaveIO(32, 64))
   io.clear()
+  ///////////////////////////////
+  /// register all output signals
+  ///////////////////////////////
+
+  val axi_ar = Wire(Decoupled(new AXIAddressChannel(32)))
+  skid_buffer(
+    io.ar,
+    axi_ar,
+    CUT_VALID = false,
+    CUT_READY = true
+  )
+  val axi_aw = Wire(Decoupled(new AXIAddressChannel(32)))
+
+  skid_buffer(
+    io.aw,
+    axi_aw,
+    CUT_VALID = false,
+    CUT_READY = true
+  )
+  val axi_w = Wire(Decoupled(new AXIWriteDataChannel(64)))
+  skid_buffer(
+    io.w,
+    axi_w,
+    CUT_VALID = false,
+    CUT_READY = true
+  )
+
+  val axi_b = Wire(Decoupled(new AXIWriteResponseChannel))
+  skid_buffer(
+    axi_b,
+    io.b,
+    CUT_VALID = true,
+    CUT_READY = false
+  )
+  val axi_r = Wire(Decoupled(new AXIReadDataChannel(64)))
+  skid_buffer(
+    axi_r,
+    io.r,
+    CUT_VALID = true,
+    CUT_READY = false
+  )
 
   val ADDR_WIDTH = 12
   val DATA_WIDTH = 64
@@ -49,15 +90,11 @@ class AXI4Memory extends Module {
   val r_state = RegInit(sRIdle)
   val rburst_count = RegInit(0.U(8.W))
 
-  val wire_r = Wire(Decoupled((new AXIReadDataChannel(DATA_WIDTH))))
-  // TODO: maybe use skid buffer
-  io.r <> wire_r
-
   // ar_buf is used to store the ar channel
   val ar_buf = RegInit(0.U.asTypeOf(new AXIAddressChannel(32)))
 
-  when(io.ar.fire) {
-    ar_buf := io.ar.bits
+  when(axi_ar.fire) {
+    ar_buf := axi_ar.bits
   }
 
   // used to store the next address, used in burst modes
@@ -83,21 +120,21 @@ class AXI4Memory extends Module {
   i_raddr := 0.U
 
   // initial value of ar channel
-  io.ar.ready := false.B
+  axi_ar.ready := false.B
 
   // initial value of r channel
-  wire_r.valid := false.B
-  wire_r.bits := DontCare
+  axi_r.valid := false.B
+  axi_r.bits := DontCare
 
   private def accept_ar_req(): Unit = {
     val burst_en: Bool =
-      (io.ar.bits.burst === AXIDef.BURST_INCR) && (io.ar.bits.len =/= 0.U)
-    io.ar.ready := true.B
-    when(io.ar.fire) {
-      send_internal_read_req(io.ar.bits.addr)
+      (axi_ar.bits.burst === AXIDef.BURST_INCR) && (axi_ar.bits.len =/= 0.U)
+    axi_ar.ready := true.B
+    when(axi_ar.fire) {
+      send_internal_read_req(axi_ar.bits.addr)
       when(burst_en) {
         r_state := sRBurst
-        rburst_count := io.ar.bits.len
+        rburst_count := axi_ar.bits.len
       }.otherwise({
         r_state := sRlast
         rburst_count := 0.U
@@ -108,26 +145,26 @@ class AXI4Memory extends Module {
   }
 
   private def send_r_resp(last: Bool): Unit = {
-    wire_r.valid := true.B
-    wire_r.bits.last := last
-    wire_r.bits.resp := 0.U
-    wire_r.bits.data := o_rdata
-    wire_r.bits.id := ar_buf.id
+    axi_r.valid := true.B
+    axi_r.bits.last := last
+    axi_r.bits.resp := 0.U
+    axi_r.bits.data := o_rdata
+    axi_r.bits.id := ar_buf.id
   }
 
   switch(r_state) {
     is(sRIdle) {
       accept_ar_req()
       next_raddr := get_next_raddr(
-        io.ar.bits.addr,
-        io.ar.bits.len,
-        io.ar.bits.size,
-        io.ar.bits.burst
+        axi_ar.bits.addr,
+        axi_ar.bits.len,
+        axi_ar.bits.size,
+        axi_ar.bits.burst
       )
     }
     is(sRBurst) {
       send_r_resp(last = false.B)
-      when(wire_r.fire) {
+      when(axi_r.fire) {
         when(rburst_count === 1.U) {
           r_state := sRlast
         }.otherwise {
@@ -146,13 +183,13 @@ class AXI4Memory extends Module {
     }
     is(sRlast) {
       send_r_resp(last = true.B)
-      when(wire_r.fire) {
+      when(axi_r.fire) {
         accept_ar_req()
         next_raddr := get_next_raddr(
-          io.ar.bits.addr,
-          io.ar.bits.len,
-          io.ar.bits.size,
-          io.ar.bits.burst
+          axi_ar.bits.addr,
+          axi_ar.bits.len,
+          axi_ar.bits.size,
+          axi_ar.bits.burst
         )
       }
     }
@@ -165,17 +202,13 @@ class AXI4Memory extends Module {
   val w_state = RegInit(sWIdle)
   val wburst_count = RegInit(0.U(8.W))
 
-  val wire_w = Wire(Flipped(Decoupled((new AXIWriteDataChannel(DATA_WIDTH)))))
-
-  io.w <> wire_w
-
   val aw_buf = RegInit(0.U.asTypeOf(new AXIAddressChannel(32)))
   // used to store the next address, used in burst modes
   // TODO: 有问题吗？
   val next_waddr = RegInit(0.U(32.W))
-  when(io.aw.fire) {
-    aw_buf := io.aw.bits
-    next_waddr := io.aw.bits.addr
+  when(axi_aw.fire) {
+    aw_buf := axi_aw.bits
+    next_waddr := axi_aw.bits.addr
   }
 
   val axi_waddr_gen = Module(new AXIAddr(ADDR_WIDTH, DATA_WIDTH))
@@ -189,24 +222,15 @@ class AXI4Memory extends Module {
     axi_waddr_gen.io.next_addr
   }
 
-  val b_skid_buffer = Module(
-    new skid_buffer(
-      new AXIWriteResponseChannel,
-      CUT_VALID = true,
-      CUT_READY = false
-    )
-  )
-  b_skid_buffer.io.out <> io.b
-
   def accept_aw_req(): Unit = {
     // accept write address req
-    io.aw.ready := true.B
-    when(io.aw.fire) {
+    axi_aw.ready := true.B
+    when(axi_aw.fire) {
       val wburst_en: Bool =
-        (io.aw.bits.burst === AXIDef.BURST_INCR) && (io.aw.bits.len =/= 0.U)
+        (axi_aw.bits.burst === AXIDef.BURST_INCR) && (axi_aw.bits.len =/= 0.U)
       when(wburst_en) {
         w_state := sWBurst
-        wburst_count := io.aw.bits.len
+        wburst_count := axi_aw.bits.len
       }.otherwise({
         w_state := sWlast
         wburst_count := 0.U
@@ -216,24 +240,24 @@ class AXI4Memory extends Module {
     }
   }
 
-  io.aw.ready := false.B
-  b_skid_buffer.io.in.valid := false.B
-  b_skid_buffer.io.in.bits := DontCare
-  wire_w.ready := false.B
+  axi_aw.ready := false.B
+  axi_b.valid := false.B
+  axi_b.bits := DontCare
+  axi_w.ready := false.B
 
   switch(w_state) {
     is(sWIdle) {
       accept_aw_req()
     }
     is(sWBurst) {
-      wire_w.ready := true.B
-      when(wire_w.fire) {
+      axi_w.ready := true.B
+      when(axi_w.fire) {
         when(wburst_count === 1.U) {
           w_state := sWlast
         }.otherwise {
           w_state := sWBurst
         }
-        send_internal_write_req(next_waddr, wire_w.bits.data, wire_w.bits.strb)
+        send_internal_write_req(next_waddr, axi_w.bits.data, axi_w.bits.strb)
         next_waddr := get_next_waddr(
           next_waddr,
           aw_buf.len,
@@ -244,18 +268,18 @@ class AXI4Memory extends Module {
       }
     }
     is(sWlast) {
-      wire_w.ready := b_skid_buffer.io.in.ready
-      // wire_w.ready === true.B && b_skid_buffer.io.in.ready === true.B && wire_w.valid === true.B
-      // when entry this when block, wire_w.fire === true.B, and b_skid_buffer.io.in.fire === true.B
-      when(wire_w.fire) {
-        b_skid_buffer.io.in.valid := true.B
-        b_skid_buffer.io.in.bits.id := aw_buf.id
-        b_skid_buffer.io.in.bits.resp := 0.U
-        b_skid_buffer.io.in.bits.user := 0.U
+      axi_w.ready := axi_b.ready
+      // axi_w.ready === true.B && b_skid_buffer.io.in.ready === true.B && axi_w.valid === true.B
+      // when entry this when block, axi_w.fire === true.B, and b_skid_buffer.io.in.fire === true.B
+      when(axi_w.fire) {
+        axi_b.valid := true.B
+        axi_b.bits.id := aw_buf.id
+        axi_b.bits.resp := 0.U
+        axi_b.bits.user := 0.U
 
         accept_aw_req()
         // 在写最后一个数据时，可以接受 aw 请求吗？
-        send_internal_write_req(next_waddr, wire_w.bits.data, wire_w.bits.strb)
+        send_internal_write_req(next_waddr, axi_w.bits.data, axi_w.bits.strb)
       }
     }
   }

@@ -2,7 +2,7 @@ package leesum.axi4
 import Chisel.switch
 import chisel3._
 import chisel3.stage.ChiselStage
-import chisel3.util.{Decoupled, Enum, is}
+import chisel3.util.{Decoupled, DecoupledIO, Enum, is}
 
 class skid_buffer[T <: Data](gen: T, CUT_VALID: Boolean, CUT_READY: Boolean)
     extends Module {
@@ -124,6 +124,21 @@ private class skid_buffer_cut_ready[T <: Data](gen: T) extends Module {
         state := sEmpty
       }
     }
+  }
+}
+
+object skid_buffer {
+  def apply[T <: Data](
+      in: DecoupledIO[T],
+      out: DecoupledIO[T],
+      CUT_VALID: Boolean,
+      CUT_READY: Boolean
+  ) = {
+    val buffer = Module(
+      new skid_buffer(in.bits.cloneType, CUT_VALID, CUT_READY)
+    )
+    buffer.io.in <> in
+    buffer.io.out <> out
   }
 }
 
