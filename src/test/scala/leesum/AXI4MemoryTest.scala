@@ -6,6 +6,7 @@ import leesum.axi4.AXIDef.{BURST_INCR, SIZE_4, SIZE_8}
 import leesum.axi4.{
   AXI4Memory,
   AXIAddressChannel,
+  AXIReadDataChannel,
   AXIWriteDataChannel,
   AXIWriteResponseChannel
 }
@@ -79,7 +80,8 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
     ))
   }
 
-  // TODO
+  // basic loopback test
+  // 1. address aligned, burst transfer
   "loopback_test" in {
     test(new AXI4Memory())
       .withAnnotations(
@@ -96,7 +98,55 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
         dut.io.b.initSink()
         dut.io.b.setSinkClock(dut.clock)
 
+        val aw_addr = new AXIAddressChannel(32).Lit(
+          _.id -> 2.U,
+          _.addr -> 8.U,
+          _.len -> 31.U,
+          _.size -> SIZE_8,
+          _.burst -> BURST_INCR,
+          _.lock -> 0.U,
+          _.cache -> 0.U,
+          _.prot -> 0.U,
+          _.qos -> 0.U,
+          _.region -> 0.U,
+          _.user -> 0.U
+        )
+
+        val w_seq = 0
+          .to(aw_addr.len.litValue.toInt)
+          .map(idx =>
+            new AXIWriteDataChannel(64).Lit(
+              _.data -> (idx * 1024).U,
+              _.strb -> 0xff.U,
+              _.last -> (idx == (aw_addr.len.litValue.toInt)).B, // Set last to true for the last element
+              _.user -> 0.U
+            )
+          )
+        assert(w_seq.last.last.litValue == 1)
+
+        val r_seq = w_seq.map(w => {
+          new AXIReadDataChannel(64).Lit(
+            _.data -> w.data,
+            _.resp -> 0.U,
+            _.last -> w.last,
+            _.user -> 0.U,
+            _.id -> aw_addr.id
+          )
+        })
+
         dut.clock.step(5)
+
+        /** start to test */
+        // write data
+        dut.io.aw.enqueue(aw_addr)
+        dut.io.w.enqueueSeq(w_seq)
+        dut.io.b.expectDequeue(b_channel_gen(aw_addr.id.litValue.toInt))
+        // read data
+        dut.io.ar.enqueue(aw_addr)
+        dut.io.r.expectDequeueSeq(r_seq)
+//        dut.io.r.ready.poke(true.B)
+
+        dut.clock.step(100)
       }
   }
 

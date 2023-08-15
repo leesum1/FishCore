@@ -32,11 +32,6 @@ class BasicMemory(ADDR_WIDTH: Int, DATA_WIDTH: Int, BASE_ADDR: Int)
 
   val read_data = mem.read(mem_addr(io.i_raddr), io.i_rd).asUInt
 
-  // Register to hold previous output value
-  when(io.i_rd) {
-    prevRdataReg := read_data
-  }
-
   when(io.i_we) {
     mem.write(
       mem_addr(io.i_waddr),
@@ -45,7 +40,12 @@ class BasicMemory(ADDR_WIDTH: Int, DATA_WIDTH: Int, BASE_ADDR: Int)
     )
   }
 
-  io.o_rdata := Mux(io.i_rd, read_data, prevRdataReg)
+  // Register to hold previous output value
+  when(RegNext(io.i_rd)) {
+    prevRdataReg := read_data
+  }
+
+  io.o_rdata := Mux(RegNext(io.i_rd), read_data, prevRdataReg)
 }
 
 object gen_axi_addr_verilog extends App {
