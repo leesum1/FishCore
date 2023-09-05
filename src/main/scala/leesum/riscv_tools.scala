@@ -1214,679 +1214,486 @@ object CSRs {
   }
 }
 
+object FuType extends ChiselEnum {
+  val None, Alu, Lsu, Csr, Br, Mul, Div = Value
+}
+
+object FuOP extends ChiselEnum {
+  val None, AluAdd, AluSub, AluXor, AluOr, AluAnd, AluSrl, AluSra, AluSll,
+      AluSlt, AluSltu, LsuLb, LsuLh, LsuLw, LsuLd, LsuSb, LsuSh, LsuSw, LsuSd,
+      BrBeq, BrBne, BrBlt, BrBge, BrBltu, BrBgeu, BrJal, BrJalr, MulMul,
+      MulMulh, MulMulhsu, MulMulhu, CsrRead, CsrWrite, CsrSet, CsrClear, DivDiv,
+      DivRem = Value
+}
 object AluOP extends ChiselEnum {
-  val None, Add, Sub, Xor, Or, And, Srl, Sra, Sll, Slt, Sltu = Value
+  val Add, Sub, Xor, Or, And, Srl, Sra, Sll, Slt, Sltu = Value
 }
-object LsuOP extends ChiselEnum {
-  val None, Lb, Lh, Lw, Ld, Sb, Sh, Sw, Sd = Value
-}
-object BranchOP extends ChiselEnum {
-  val None, Beq, Bne, Blt, Bge, Bltu, Bgeu, Jal, Jalr = Value
-}
-object MulOP extends ChiselEnum {
-  val None, Mul, Mulh, Mulhsu, Mulhu = Value
-}
-object CsrOP extends ChiselEnum {
-  val None, Read, Write, Set, Clear = Value
-}
-object DivOP extends ChiselEnum {
-  val None, Div, Rem = Value
-}
+
 object OPWidth extends ChiselEnum {
   val W32, W64 = Value
 }
 object SignExt extends ChiselEnum {
   val Signed, Unsigned = Value
 }
+object InstType extends ChiselEnum {
+  val R, I, S, B, U, J = Value
+}
 
-class RVInst(val inst: UInt) extends Module {
+class DecoderSignals extends Bundle {
+  val inst_valid = Output(Bool())
+  val inst = Output(UInt(32.W))
+  val inst_pc = Output(UInt(64.W))
+  val inst_rvc = Output(Bool())
+  val fu_type = Output(FuType())
+  val fu_op = Output(FuOP())
+  val need_rs1 = Output(Bool())
+  val need_rs2 = Output(Bool())
+  val need_rd = Output(Bool())
+  val need_imm = Output(Bool())
+  val need_immz = Output(Bool())
+  val need_pc = Output(Bool())
+  val sign_ext = Output(SignExt())
+  val op_width = Output(OPWidth())
+  val inst_type = Output(InstType())
+}
 
-  val rs1 = inst(19, 15)
-  val rs2 = inst(24, 20)
-  val rd = inst(11, 7)
-  val opcode = inst(6, 0)
-  val funct3 = inst(14, 12)
-  val funct7 = inst(31, 25)
-  val imm_i = inst(31, 20)
-  val imm_s = Cat(inst(31, 25), inst(11, 7))
-  val imm_b = Cat(inst(31), inst(7), inst(30, 25), inst(11, 8))
-  val imm_u = inst(31, 12)
-  val imm_j = Cat(inst(31), inst(19, 12), inst(20), inst(30, 21))
-
-  // inst type
-  val r_type :: i_type :: s_type :: b_type :: u_type :: j_type :: Nil = Enum(6)
-  // if the result should be signed
-  val sign_ext :: zero_ext :: Nil = Enum(2)
-  // opration width
-  val rv32w :: rv64w :: Nil = Enum(2)
-  // data type
-  val none_val :: rs1_val :: rs2_val :: rd_val :: imm_val :: pc_val :: inst_size :: Nil =
-    Enum(7)
-  // function unit
-  val fu_alu :: fu_lsu :: fu_csr :: fu_branch :: fu_mul :: fu_div :: Nil = Enum(
-    6
-  )
-
-  val lsu_op_none :: lsu_op_lb :: lsu_op_lh :: lsu_op_lw :: lsu_op_ld :: lsu_op_sb :: lsu_op_sh :: lsu_op_sw :: lsu_op_sd :: Nil =
-    Enum(
-      9
-    )
-  val csr_op_none :: csr_op_read :: csr_op_write :: csr_op_set :: csr_op_clear :: Nil =
-    Enum(5)
-
-  val branch_op_none :: branch_op_beq :: branch_op_bne :: branch_op_blt :: branch_op_bge :: branch_op_bltu :: branch_op_bgeu :: branch_op_jal :: branch_op_jalr :: Nil =
-    Enum(
-      9
-    )
-
-  val mul_op_none :: mul_op_mul :: mul_op_mulh :: mul_op_mulhsu :: mul_op_mulhu :: Nil =
-    Enum(
-      5
-    )
-
-  val div_op_none :: div_op_div :: div_op_rem :: Nil =
-    Enum(
-      3
-    )
-
-  val inst_default =
+object RVinst {
+  SignExt.Unsigned
+  OPWidth.W64
+  val inst_default = {
     List(
       false.B, // 0-> valid
-      fu_alu, // 1-> function unit
-      AluOP.None, // 2-> alu operation
-      lsu_op_none, // 3-> lsu operation
-      branch_op_none, // 4-> branch operation
-      mul_op_none, // 5-> mul operation
-      div_op_none, // 6-> div operation
-      csr_op_none, // 7-> csr operation
-      none_val, // 8-> op1 data type
-      none_val, // 9-> op2 data type
-      none_val, // 10-> rd data type
-      zero_ext, // 11-> sign extension
-      rv64w, // 12-> operation width
-      r_type // 13-> inst type
+      FuType.None, // 1-> function unit
+      FuOP.None, // 2-> alu operation
+      SignExt.Unsigned, // 3-> sign extension
+      OPWidth.W64, // 4-> operation width
+      InstType.R, // 5-> inst type
+      false.B, // 6-> need rs1
+      false.B, // 7-> need rs2
+      false.B, // 8-> need rd
+      false.B, // 9-> need imm
+      false.B, // 10-> need pc
+      false.B // 11-> need immz
     )
+  }
+  // 0-> need rs1, use rs1 as op_a
+  // 1-> need rs2, use rs2 as op_b
+  // 2-> need rd, use rd
+  // 3-> need imm, use imm as op_b
+  // 4-> need pc, use pc as op_a
+  // 5-> need immz
+  val reg_reg_op = List(true.B, true.B, true.B, false.B, false.B, false.B)
+  val reg_imm_op = List(true.B, false.B, true.B, true.B, false.B, false.B)
+  val pc_imm_op = List(false.B, false.B, true.B, true.B, true.B, false.B)
+  val branch_op = List(true.B, true.B, false.B, true.B, false.B, false.B)
+  val jal_op = List(false.B, false.B, true.B, true.B, false.B, false.B)
+  val jalr_op = List(true.B, false.B, true.B, true.B, false.B, false.B)
+  val load_op = List(true.B, false.B, true.B, true.B, false.B, false.B)
+  val store_op = List(true.B, true.B, false.B, true.B, false.B, false.B)
 
-  val inst_map = Array(
+  val inst_map: Array[(BitPat, List[Element])] = Array(
     // x[rd] = x[rs1] + x[rs2]
-    Instructions.IType("ADD") -> List(
+    Instructions.IType("ADD") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Add,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluAdd,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_reg_op),
     // x[rd] = x[rs1] + sext(immediate)
-    Instructions.IType("ADDI") -> List(
+    Instructions.IType("ADDI") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Add,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluAdd,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_imm_op),
     // x[rd] = x[rs1] & x[rs2]
-    Instructions.IType("AND") -> List(
+    Instructions.IType("AND") -> (List(
       true.B,
-      fu_alu,
-      AluOP.And,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluAdd,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_reg_op),
     // x[rd] = x[rs1] & sext(immediate)
-    Instructions.IType("ANDI") -> List(
+    Instructions.IType("ANDI") -> (List(
       true.B,
-      fu_alu,
-      AluOP.And,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluAdd,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_imm_op),
     // x[rd] = pc + sext(immediate[31:12] << 12)
-    Instructions.IType("AUIPC") -> List(
+    Instructions.IType("AUIPC") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Add,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      pc_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      u_type
-    ),
+      FuType.Alu,
+      FuOP.AluAdd,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.U
+    ) ::: pc_imm_op),
     // if (rs1 == rs2) pc += sext(offset)
-    Instructions.IType("BEQ") -> List(
+    Instructions.IType("BEQ") -> (List(
       true.B,
-      fu_branch,
-      AluOP.None,
-      lsu_op_none,
-      branch_op_beq,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      none_val,
-      zero_ext,
-      rv64w,
-      b_type
-    ),
+      FuType.Br,
+      FuOP.BrBeq,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.B
+    ) ::: branch_op),
     // if (rs1 ≥s rs2) pc += sext(offset)
-    Instructions.IType("BGE") -> List(
+    Instructions.IType("BGE") -> (List(
       true.B,
-      fu_branch,
-      AluOP.None,
-      lsu_op_none,
-      branch_op_bge,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      none_val,
-      zero_ext,
-      rv64w,
-      b_type
-    ),
+      FuType.Br,
+      FuOP.BrBge,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.B
+    ) ::: branch_op),
     // if (rs1 ≥u rs2) pc += sext(offset)
-    Instructions.IType("BGEU") -> List(
+    Instructions.IType("BGEU") -> (List(
       true.B,
-      fu_branch,
-      AluOP.None,
-      lsu_op_none,
-      branch_op_bgeu,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      none_val,
-      zero_ext,
-      rv64w,
-      b_type
-    ),
+      FuType.Br,
+      FuOP.BrBgeu,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.B
+    ) ::: branch_op),
     // if (rs1 <s rs2) pc += sext(offset)
-    Instructions.IType("BLT") -> List(
+    Instructions.IType("BLT") -> (List(
       true.B,
-      fu_branch,
-      AluOP.None,
-      lsu_op_none,
-      branch_op_blt,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      none_val,
-      zero_ext,
-      rv64w,
-      b_type
-    ),
+      FuType.Br,
+      FuOP.BrBlt,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.B
+    ) ::: branch_op),
     // if (rs1 <u rs2) pc += sext(offset)
-    Instructions.IType("BLTU") -> List(
+    Instructions.IType("BLTU") -> (List(
       true.B,
-      fu_branch,
-      AluOP.None,
-      lsu_op_none,
-      branch_op_bltu,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      none_val,
-      zero_ext,
-      rv64w,
-      b_type
-    ),
+      FuType.Br,
+      FuOP.BrBltu,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.B
+    ) ::: branch_op),
     // if (rs1 6= rs2) pc += sext(offset)
-    Instructions.IType("BNE") -> List(
+    Instructions.IType("BNE") -> (List(
       true.B,
-      fu_branch,
-      AluOP.None,
-      lsu_op_none,
-      branch_op_bne,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      none_val,
-      zero_ext,
-      rv64w,
-      b_type
-    ),
+      FuType.Br,
+      FuOP.BrBne,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.B
+    ) ::: branch_op),
     // x[rd] = pc+4; pc += sext(offset)
-    Instructions.IType("JAL") -> List(
+    Instructions.IType("JAL") -> (List(
       true.B,
-      fu_branch,
-      AluOP.None,
-      lsu_op_none,
-      branch_op_jal,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      pc_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      j_type
-    ),
+      FuType.Br,
+      FuOP.BrJal,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.J
+    ) ::: jal_op),
     // t =pc+4; pc=(x[rs1]+sext(offset))&∼1; x[rd]=t
-    Instructions.IType("JALR") -> List(
+    Instructions.IType("JALR") -> (List(
       true.B,
-      fu_branch,
-      AluOP.None,
-      lsu_op_none,
-      branch_op_jalr,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      i_type
-    ),
+      FuType.Br,
+      FuOP.BrJalr,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.I
+    ) ::: jalr_op),
     // lb rd, offset(rs1)
     // x[rd] = sext(M[x[rs1] + sext(offset)][7:0])
-    Instructions.IType("LB") -> List(
+    Instructions.IType("LB") -> (List(
       true.B,
-      fu_lsu,
-      AluOP.None,
-      lsu_op_lb,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      sign_ext,
-      rv64w,
-      i_type
-    ),
+      FuType.Lsu,
+      FuOP.LsuLb,
+      SignExt.Signed,
+      OPWidth.W64,
+      InstType.I
+    ) ::: load_op),
     // lb rd, offset(rs1)
     // x[rd] = sext(M[x[rs1] + sext(offset)][7:0])
-    Instructions.IType("LBU") -> List(
+    Instructions.IType("LBU") -> (List(
       true.B,
-      fu_lsu,
-      AluOP.None,
-      lsu_op_lb,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      i_type
-    ),
+      FuType.Lsu,
+      FuOP.LsuLb,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.I
+    ) ::: load_op),
     // lh rd, offset(rs1)
     // x[rd] = sext(M[x[rs1] + sext(offset)][15:0])
-    Instructions.IType("LH") -> List(
+    Instructions.IType("LH") -> (List(
       true.B,
-      fu_lsu,
-      AluOP.None,
-      lsu_op_lh,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      sign_ext,
-      rv64w,
-      i_type
-    ),
+      FuType.Lsu,
+      FuOP.LsuLh,
+      SignExt.Signed,
+      OPWidth.W64,
+      InstType.I
+    ) ::: load_op),
     // lhu rd, offset(rs1)
     // x[rd] = M[x[rs1] + sext(offset)][15:0]
-    Instructions.IType("LHU") -> List(
+    Instructions.IType("LHU") -> (List(
       true.B,
-      fu_lsu,
-      AluOP.None,
-      lsu_op_lh,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      i_type
-    ),
+      FuType.Lsu,
+      FuOP.LsuLh,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.I
+    ) ::: load_op),
     // lw rd, offset(rs1)
     // x[rd] = sext(M[x[rs1] + sext(offset)][31:0])
-    Instructions.IType("LW") -> List(
+    Instructions.IType("LW") -> (List(
       true.B,
-      fu_lsu,
-      AluOP.None,
-      lsu_op_lw,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      sign_ext,
-      rv64w,
-      i_type
-    ),
+      FuType.Lsu,
+      FuOP.LsuLw,
+      SignExt.Signed,
+      OPWidth.W64,
+      InstType.I
+    ) ::: load_op),
     // or rd, rs1, rs2
     // x[rd] = x[rs1] | x[rs2]
-    Instructions.IType("OR") -> List(
+    Instructions.IType("OR") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Or,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluOr,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_reg_op),
     // ori rd, rs1, immediate
     // x[rd] = x[rs1] | sext(immediate)
-    Instructions.IType("ORI") -> List(
+    Instructions.IType("ORI") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Or,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      i_type
-    ),
+      FuType.Alu,
+      FuOP.AluOr,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.I
+    ) ::: reg_imm_op),
     // sb rs2, offset(rs1)
     // M[x[rs1] + sext(offset)] = x[rs2][7:0]
-    Instructions.IType("SB") -> List(
+    Instructions.IType("SB") -> (List(
       true.B,
-      fu_branch,
-      AluOP.None,
-      lsu_op_sb,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      none_val,
-      zero_ext,
-      rv64w,
-      s_type
-    ),
+      FuType.Lsu,
+      FuOP.LsuSb,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.S
+    ) ::: store_op),
     // sh rs2, offset(rs1)
     // M[x[rs1] + sext(offset)] = x[rs2][15:0]
-    Instructions.IType("SH") -> List(
+    Instructions.IType("SH") -> (List(
       true.B,
-      fu_branch,
-      AluOP.None,
-      lsu_op_sh,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      none_val,
-      zero_ext,
-      rv64w,
-      s_type
-    ),
+      FuType.Lsu,
+      FuOP.LsuSh,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.S
+    ) ::: store_op),
     // sll rd, rs1, rs2
     // x[rd] = x[rs1] << x[rs2]
-    Instructions.IType("SLL") -> List(
+    Instructions.IType("SLL") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Sll,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluSll,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_reg_op),
     // slt rd, rs1, rs2
     // x[rd] = x[rs1] <s x[rs2]
-    Instructions.IType("SLT") -> List(
+    Instructions.IType("SLT") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Slt,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluSlt,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_reg_op),
     // slti rd, rs1, immediate
     // x[rd] = x[rs1] <s sext(immediate)
-    Instructions.IType("SLTI") -> List(
+    Instructions.IType("SLTI") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Slt,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      i_type
-    ),
+      FuType.Alu,
+      FuOP.AluSlt,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.I
+    ) ::: reg_imm_op),
     // sltiu rd, rs1, immediate
     // x[rd] = x[rs1] <u sext(immediate)
-    Instructions.IType("SLTIU") -> List(
+    Instructions.IType("SLTIU") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Sltu,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      i_type
-    ),
+      FuType.Alu,
+      FuOP.AluSltu,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.I
+    ) ::: reg_imm_op),
     // sltu rd, rs1, rs2
     // x[rd] = x[rs1] <u x[rs2]
-    Instructions.IType("SLTU") -> List(
+    Instructions.IType("SLTU") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Sltu,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluSltu,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_reg_op),
     // sra rd, rs1, rs2
     // x[rd] = x[rs1] >>s x[rs2]
-    Instructions.IType("SRA") -> List(
+    Instructions.IType("SRA") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Sra,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluSra,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_reg_op),
     // srl rd, rs1, rs2
     // x[rd] = x[rs1] >>u x[rs2]
-    Instructions.IType("SRL") -> List(
+    Instructions.IType("SRL") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Srl,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluSrl,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_reg_op),
     // sub rd, rs1, rs2
     // x[rd] = x[rs1] - x[rs2]
-    Instructions.IType("SUB") -> List(
+    Instructions.IType("SUB") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Sub,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
+      FuType.Alu,
+      FuOP.AluSub,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_reg_op),
     // sw rs2, offset(rs1)
     // M[x[rs1] + sext(offset)] = x[rs2][31:0]
-    Instructions.IType("SW") -> List(
+    Instructions.IType("SW") -> (List(
       true.B,
-      fu_lsu,
-      AluOP.None,
-      lsu_op_sw,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      none_val,
-      zero_ext,
-      rv64w,
-      s_type
-    ),
+      FuType.Lsu,
+      FuOP.LsuSw,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.S
+    ) ::: store_op),
     // xor rd, rs1, rs2
     // x[rd] = x[rs1] ˆ x[rs2]
-    Instructions.IType("XOR") -> List(
+    Instructions.IType("XOR") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Xor,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      rs2_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      r_type
-    ),
-    Instructions.IType("XORI") -> List(
+      FuType.Alu,
+      FuOP.AluXor,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.IType("XORI") -> (List(
       true.B,
-      fu_alu,
-      AluOP.Xor,
-      lsu_op_none,
-      branch_op_none,
-      mul_op_none,
-      div_op_none,
-      csr_op_none,
-      rs1_val,
-      imm_val,
-      rd_val,
-      zero_ext,
-      rv64w,
-      i_type
-    )
+      FuType.Alu,
+      FuOP.AluXor,
+      SignExt.Unsigned,
+      OPWidth.W64,
+      InstType.I
+    ) ::: reg_imm_op)
   )
 
+}
+
+object ExceptionCause extends ChiselEnum {
+  val misaligned_fetch = Value(0x0.U)
+  val fetch_access = Value(0x1.U)
+  val illegal_instruction = Value(0x2.U)
+  val breakpoint = Value(0x3.U)
+  val misaligned_load = Value(0x4.U)
+  val load_access = Value(0x5.U)
+  val misaligned_store = Value(0x6.U)
+  val store_access = Value(0x7.U)
+  val user_ecall = Value(0x8.U)
+  val supervisor_ecall = Value(0x9.U)
+  val virtual_supervisor_ecall = Value(0xa.U)
+  val machine_ecall = Value(0xb.U)
+  val fetch_page_fault = Value(0xc.U)
+  val load_page_fault = Value(0xd.U)
+  val store_page_fault = Value(0xf.U)
+  val fetch_guest_page_fault = Value(0x14.U)
+  val load_guest_page_fault = Value(0x15.U)
+  val virtual_instruction = Value(0x16.U)
+  val store_guest_page_fault = Value(0x17.U)
+}
+
+object BpType extends ChiselEnum {
+  val None, Call, Return, Branch, Jal, Jalr = Value
+}
+
+class ExceptionEntry extends Bundle {
+  val tval = UInt(64.W)
+  val valid = Bool()
+  val cause = ExceptionCause()
+}
+
+class BpEntry extends Bundle {
+  val bp_type = BpType()
+  val predict_pc = UInt(64.W)
+  val is_taken: Bool = Bool()
+  val is_miss_predict = Bool()
+}
+
+class FetchEntry extends Bundle {
+  val pc = UInt(64.W)
+  val inst = UInt(32.W)
+  val is_rvc = Bool()
+  val is_valid = Bool()
+  val exception = new ExceptionEntry()
+  val bp = new BpEntry()
+}
+
+class ScoreBoardEntry extends Bundle {
+  val pc = UInt(64.W) // pc of the instruction
+  val inst = UInt(32.W) // instruction
+  val is_rvc = Bool() // is rvc instruction
+  val fu_type = FuType() // function unit types
+  val fu_op = FuOP() // function unit operation
+  val rs1_addr = UInt(5.W) // rs1 address
+  val rs2_addr = UInt(5.W) // rs2 address
+  val rd_addr = UInt(5.W) // rd address
+  val result = UInt(64.W) // result of the instruction, or immediate
+  val result_valid = Bool() // result is valid
+  val use_imm = Bool() // should we use the immediate as operand b?
+  val use_immz = Bool() // csr zimm
+  val use_pc =
+    Bool() // set if we need to use the PC as operand a, PC from exception
+  val exception = new ExceptionEntry() // exception occurs
+  val bp = new BpEntry() // branch prediction
+}
+
+class InstBase(inst: UInt) extends Module {
+  def opcode = inst(6, 0)
+  def rd = inst(11, 7)
+  def funct3 = inst(14, 12)
+  def rs1 = inst(19, 15)
+  def rs2 = inst(24, 20)
+  def funct7 = inst(31, 25)
+  def imm_i = inst(31, 20)
+  def imm_s = Cat(inst(31, 25), inst(11, 7))
+  def imm_b = Cat(inst(31), inst(7), inst(30, 25), inst(11, 8))
+  def imm_u = inst(31, 12)
+  def imm_j = Cat(inst(31), inst(19, 12), inst(20), inst(30, 21))
+  def imm_z = Cat(Fill(27, 0.U), inst(19, 15))
+
+  def is_rvc = inst(1, 0) =/= 0.U
+  def rvc_rd = inst(4, 2)
+  def rvc_rs1 = inst(9, 7)
+  def rvc_rs2 = inst(6, 2)
 }

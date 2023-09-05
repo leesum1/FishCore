@@ -5,8 +5,7 @@ import chisel3.experimental.{DataMirror, requireIsChiselType}
 import chisel3.stage.ChiselStage
 import chisel3.util.{Counter, Decoupled, PopCount, isPow2, log2Ceil}
 
-class MultiportFIFO[T <: Data](
-    val gen: T,
+class ScoreBoard(
     val entries: Int,
     val num_pushports: Int,
     val num_popports: Int
@@ -14,22 +13,14 @@ class MultiportFIFO[T <: Data](
     extends Module() {
   require(
     entries > 0,
-    "MultiportFIFO must have non-zero number of entries"
+    "ScoreBoard must have non-zero number of entries"
   )
   require(
     isPow2(entries),
-    "MultiportFIFO must have power-of-2 number of entries"
+    "ScoreBoard must have power-of-2 number of entries"
   )
-  val genType = if (compileOptions.declaredTypeMustBeUnbound) {
-    requireIsChiselType(gen)
-    gen
-  } else {
-    if (DataMirror.internal.isSynthesizable(gen)) {
-      chiselTypeOf(gen)
-    } else {
-      gen
-    }
-  }
+
+  val genType = new ScoreBoardEntry()
 
   val io = IO(
     // 1. 只能一次 push num_writeports 个数据
@@ -37,7 +28,6 @@ class MultiportFIFO[T <: Data](
     new Bundle {
       val push_data = Input(Vec(num_pushports, genType))
       val push_valid = Input(Vec(num_pushports, Bool()))
-
       val pop_data = Output(Vec(num_popports, genType))
       val pop_valid = Input(Vec(num_popports, Bool()))
       val flush = Input(Bool())
@@ -45,6 +35,36 @@ class MultiportFIFO[T <: Data](
       val full = Output(Bool())
       val free_entries = Output(UInt((log2Ceil(entries) + 1).W))
       val occupied_entries = Output(UInt((log2Ceil(entries) + 1).W))
+
+      // writeback port
+      // alu
+      val fu_alu_valid = Input(Bool())
+      val fu_alu_id = Input(UInt(log2Ceil(entries).W))
+      val fu_alu_wb = Input(UInt(64.W))
+      val fu_alu_exception =
+        Input(new ExceptionEntry()) // use for fetch exception
+      // branch
+      val fu_branch_valid = Input(Bool())
+      val fu_branch_id = Input(UInt(log2Ceil(entries).W))
+      val fu_branch_wb = Input(UInt(64.W))
+      val fu_branch_miss_predict = Input(Bool())
+      val fu_branch_redirect_pc = Input(UInt(64.W))
+      // load
+      val fu_load_valid = Input(Bool())
+      val fu_load_id = Input(UInt(log2Ceil(entries).W))
+      val fu_load_wb = Input(UInt(64.W))
+      val fu_load_io_space = Input(Bool()) // io space load,such as uart
+      val fu_load_exception = Input(new ExceptionEntry())
+      // store
+      val fu_store_valid = Input(Bool())
+      val fu_store_id = Input(UInt(log2Ceil(entries).W))
+      val fu_store_exception = Input(new ExceptionEntry())
+      // mul_div
+      val fu_mul_div_valid = Input(Bool())
+      val fu_mul_div_id = Input(UInt(log2Ceil(entries).W))
+      val fu_mul_div_wb = Input(UInt(64.W))
+      val fu_mul_div_exception = Input(new ExceptionEntry())
+
     }
   )
 
@@ -142,14 +162,14 @@ class MultiportFIFO[T <: Data](
   }
 }
 
-object gen_multiport_fifo_verilog extends App {
+object gen_ScoreBoard_verilog extends App {
   val projectDir = System.getProperty("user.dir")
 
   val verilogDir = s"$projectDir/gen_verilog"
   println(s"verilogDir: $verilogDir")
   val stage = new ChiselStage()
     .emitVerilog(
-      new MultiportFIFO(UInt(32.W), 8, 4, 4),
+      new ScoreBoard(8, 4, 4),
       Array(
         "--target-dir",
         verilogDir,

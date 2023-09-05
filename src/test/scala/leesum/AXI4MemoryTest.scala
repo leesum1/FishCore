@@ -80,6 +80,63 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
     ))
   }
 
+  "narrow_transfer_test" in {
+    test(new AXI4Memory())
+      .withAnnotations(
+        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+      ) { dut =>
+        dut.io.ar.initSource()
+        dut.io.ar.setSourceClock(dut.clock)
+        dut.io.r.initSink()
+        dut.io.r.setSinkClock(dut.clock)
+        dut.io.aw.initSource()
+        dut.io.aw.setSourceClock(dut.clock)
+        dut.io.w.initSource()
+        dut.io.w.setSourceClock(dut.clock)
+        dut.io.b.initSink()
+        dut.io.b.setSinkClock(dut.clock)
+
+        val w_addr = new AXIAddressChannel(32).Lit(
+          _.id -> 2.U,
+          _.addr -> 4.U,
+          _.len -> 0.U,
+          _.size -> SIZE_4,
+          _.burst -> BURST_INCR,
+          _.lock -> 0.U,
+          _.cache -> 0.U,
+          _.prot -> 0.U,
+          _.qos -> 0.U,
+          _.region -> 0.U,
+          _.user -> 0.U
+        )
+
+        val w_data = new AXIWriteDataChannel(64).Lit(
+          _.data -> "x1122334455667788".U,
+          _.strb -> 0x0f.U,
+          _.last -> true.B,
+          _.user -> 0.U
+        )
+
+        val r_data = new AXIReadDataChannel(64).Lit(
+          _.data -> "x0000000055667788".U,
+          _.resp -> 0.U,
+          _.last -> true.B,
+          _.user -> 0.U,
+          _.id -> w_addr.id
+        )
+
+        // prepare write data
+        dut.io.aw.enqueue(w_addr)
+        dut.io.w.enqueue(w_data)
+        dut.io.b.expectDequeue(b_channel_gen(w_addr.id.litValue.toInt))
+
+        // read data
+        dut.io.ar.enqueue(w_addr)
+        dut.io.r.expectDequeue(r_data)
+
+      }
+  }
+
   // basic loopback test
   // 1. address aligned, burst transfer
   "loopback_test" in {
