@@ -1674,8 +1674,10 @@ class ScoreBoardEntry extends Bundle {
   val use_immz = Bool() // csr zimm
   val use_pc =
     Bool() // set if we need to use the PC as operand a, PC from exception
+  val lsu_io_space = Bool() // set if we need to use the IO space
   val exception = new ExceptionEntry() // exception occurs
   val bp = new BpEntry() // branch prediction
+
 }
 
 class InstBase(inst: UInt) extends Module {
