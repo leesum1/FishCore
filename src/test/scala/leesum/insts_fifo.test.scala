@@ -1,6 +1,5 @@
 package leesum
 
-import Chisel.Cat
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.experimental.VecLiterals.{
@@ -66,7 +65,6 @@ class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
             dut.io.in.setSourceClock(dut.clock)
             dut.io.out.initSink()
             dut.io.out.setSinkClock(dut.clock)
-
 
             val insts_item_gen =
               gen_rand()

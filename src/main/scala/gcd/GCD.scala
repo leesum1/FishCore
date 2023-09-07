@@ -6,7 +6,6 @@ import chisel3._
 import chisel3.util.Decoupled
 import chisel3.util.Queue
 import chisel3.util.Irrevocable
-import chisel3.stage.ChiselStage
 
 /** Compute GCD using subtraction method. Subtracts the smaller from the larger
   * until register y is zero. value in register x is then the GCD
@@ -41,39 +40,29 @@ class my_stream_fifo extends Module {
     val out = Irrevocable(UInt(8.W))
   })
 
-  val fifo =  new Queue(UInt(8.W),4)
+  val fifo = new Queue(UInt(8.W), 4)
 
   fifo.io.enq <> io.in
   io.out <> fifo.io.deq
 }
 
-
-
-
-
-
-
-
-
 object my_stream_fifo extends App {
   emitVerilog(new my_stream_fifo())
 }
 
+class Queue5(w: Int, n: Int) extends Module {
+  val io = IO(new Bundle {
+    val in = Flipped(Irrevocable(UInt(w.W)))
+    val out = Irrevocable(UInt(w.W))
+  })
 
-class Queue5(w:Int , n:Int) extends Module{
-val io = IO(new Bundle {
-val in = Flipped(Irrevocable(UInt(w.W)))
-val out = Irrevocable(UInt(w.W))
-})
+  val x = Queue.irrevocable(io.in, n)
 
-val x = Queue.irrevocable(io.in, n)
-
-
-x.ready := io.out.ready
-io.out.valid := x.valid
-io.out.bits := x.bits
+  x.ready := io.out.ready
+  io.out.valid := x.valid
+  io.out.bits := x.bits
 }
 
 object my_stream_fifo1 extends App {
-  emitVerilog(new Queue5(8,8))
+  emitVerilog(new Queue5(8, 8))
 }

@@ -1,7 +1,7 @@
 package leesum.axi4
 
 import chisel3._
-import chisel3.stage.ChiselStage
+import circt.stage.ChiselStage
 
 class BasicMemory(ADDR_WIDTH: Int, DATA_WIDTH: Int, BASE_ADDR: Int)
     extends Module {
@@ -53,8 +53,8 @@ object gen_axi_addr_verilog extends App {
 
   val verilogDir = s"$projectDir/gen_verilog"
   println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
+  ChiselStage
+    .emitSystemVerilog(
       new BasicMemory(ADDR_WIDTH = 12, DATA_WIDTH = 64, BASE_ADDR = 0),
       Array(
         "--target-dir",

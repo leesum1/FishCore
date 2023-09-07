@@ -1,11 +1,10 @@
 package leesum
 
-import chisel3.DontCare.:=
 import chisel3._
-import chisel3.stage.ChiselStage
 import chisel3.{Bundle, Flipped, Input, Module}
 import chisel3.util.{BitPat, Decoupled, ListLookup, MuxLookup}
 import chisel3.util.experimental.decode._
+import circt.stage.ChiselStage
 
 class InstDecoder extends Module {
   val io = IO(new Bundle {
@@ -43,9 +42,9 @@ class InstDecoder extends Module {
   scoreboard_entry.inst := decode_sigs.inst
   scoreboard_entry.pc := decode_sigs.inst_pc
   scoreboard_entry.is_rvc := decode_sigs.inst_rvc
-  // ---------------------
+  // -------------------------------
   // scoreboard operand information
-  // ---------------------
+  // -------------------------------
   scoreboard_entry.rs1_addr := Mux(decode_sigs.need_rs1, inst_base.rs1, 0.U)
   scoreboard_entry.rs2_addr := Mux(decode_sigs.need_rs2, inst_base.rs2, 0.U)
   scoreboard_entry.rd_addr := Mux(decode_sigs.need_rd, inst_base.rd, 0.U)
@@ -55,6 +54,9 @@ class InstDecoder extends Module {
 
   scoreboard_entry.fu_op := decode_sigs.fu_op
   scoreboard_entry.fu_type := decode_sigs.fu_type
+  // TODO : if a exception happened, complete should be true?
+  scoreboard_entry.complete := false.B
+  scoreboard_entry.lsu_io_space := false.B
 
   // TODO!
   val imm = MuxLookup(
@@ -72,9 +74,9 @@ class InstDecoder extends Module {
   scoreboard_entry.result := Mux(decode_sigs.need_imm, imm, 0.U)
   scoreboard_entry.result_valid := false.B
 
-  // -----------------------
+  // -----------------------------------
   // scoreboard exception information
-  // -----------------------
+  // -----------------------------------
   when(io.in.exception.valid) {
     // exception happened in fetch stage
     scoreboard_entry.exception := io.in.exception
@@ -89,26 +91,15 @@ class InstDecoder extends Module {
     scoreboard_entry.exception.cause := DontCare
     scoreboard_entry.exception.tval := 0.U
   }
-  // -----------------------
+  // ------------------------------------------
   //  scoreboard branch predictor information
-  // -----------------------
+  // ------------------------------------------
   scoreboard_entry.bp := io.in.bp
 
   io.out := scoreboard_entry
 }
 
 object gen_verilog4 extends App {
-  val projectDir = System.getProperty("user.dir")
+  GenVerilogHelper(new InstDecoder())
 
-  val verilogDir = s"$projectDir/gen_verilog"
-  println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
-      new InstDecoder(),
-      Array(
-        "--target-dir",
-        verilogDir,
-        "--emission-options=disableMemRandomization,disableRegisterRandomization"
-      )
-    )
 }

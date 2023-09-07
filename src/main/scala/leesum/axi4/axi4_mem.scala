@@ -1,8 +1,8 @@
 package leesum.axi4
-import Chisel.switch
 import chisel3._
-import chisel3.stage.ChiselStage
-import chisel3.util.{Decoupled, Enum, is}
+import chisel3.util.{Decoupled, Enum, is, switch}
+import circt.stage.ChiselStage
+import leesum.GenVerilogHelper
 class AXI4Memory extends Module {
   val io = IO(new AXISlaveIO(32, 64))
   io.clear()
@@ -322,17 +322,6 @@ class fsm_test extends Module {
   io.reg_out := reg_a
 }
 object gen_verilog extends App {
-  val projectDir = System.getProperty("user.dir")
+  GenVerilogHelper(new AXI4Memory())
 
-  val verilogDir = s"$projectDir/gen_verilog"
-  println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
-      new AXI4Memory(),
-      Array(
-        "--target-dir",
-        verilogDir,
-        "--emission-options=disableMemRandomization,disableRegisterRandomization"
-      )
-    )
 }

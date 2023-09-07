@@ -2,16 +2,15 @@ package leesum
 
 import chisel3._
 import chisel3.experimental.{DataMirror, requireIsChiselType}
-import chisel3.stage.ChiselStage
 import chisel3.util.{Counter, Decoupled, PopCount, isPow2, log2Ceil}
+import circt.stage.ChiselStage
 
 class MultiportFIFO[T <: Data](
     val gen: T,
     val entries: Int,
     val num_pushports: Int,
     val num_popports: Int
-)(implicit compileOptions: chisel3.CompileOptions)
-    extends Module() {
+) extends Module() {
   require(
     entries > 0,
     "MultiportFIFO must have non-zero number of entries"
@@ -20,16 +19,7 @@ class MultiportFIFO[T <: Data](
     isPow2(entries),
     "MultiportFIFO must have power-of-2 number of entries"
   )
-  val genType = if (compileOptions.declaredTypeMustBeUnbound) {
-    requireIsChiselType(gen)
-    gen
-  } else {
-    if (DataMirror.internal.isSynthesizable(gen)) {
-      chiselTypeOf(gen)
-    } else {
-      gen
-    }
-  }
+  val genType = gen
 
   val io = IO(
     // 1. 只能一次 push num_writeports 个数据
@@ -143,17 +133,7 @@ class MultiportFIFO[T <: Data](
 }
 
 object gen_multiport_fifo_verilog extends App {
-  val projectDir = System.getProperty("user.dir")
 
-  val verilogDir = s"$projectDir/gen_verilog"
-  println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
-      new MultiportFIFO(UInt(32.W), 8, 4, 4),
-      Array(
-        "--target-dir",
-        verilogDir,
-        "--emission-options=disableMemRandomization,disableRegisterRandomization"
-      )
-    )
+  GenVerilogHelper(new MultiportFIFO(UInt(32.W), 8, 4, 4))
+
 }

@@ -1,9 +1,7 @@
 package leesum
-import Chisel.{Cat, Fill, Mux1H, MuxLookup}
 import chisel3._
-import chisel3.experimental.IO
-import chisel3.stage.ChiselStage
-import chisel3.util.{Decoupled, PopCount, Reverse}
+import chisel3.util.{Decoupled, MuxLookup}
+import circt.stage.ChiselStage
 
 class FuBranchIn extends Bundle {
   val fu_op = Input(FuOP())
@@ -51,7 +49,8 @@ class FuBranch extends Module {
 
   val branch_taken = MuxLookup(
     io.in.bits.fu_op.asUInt,
-    false.B,
+    false.B
+  )(
     Seq(
       FuOP.BrJalr.asUInt -> true.B,
       FuOP.BrJal.asUInt -> true.B,
@@ -88,17 +87,6 @@ class FuBranch extends Module {
   io.in.ready := io.out.ready
 }
 object gen_Fubranch extends App {
-  val projectDir = System.getProperty("user.dir")
+  GenVerilogHelper(new FuBranch())
 
-  val verilogDir = s"$projectDir/gen_verilog"
-  println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
-      new FuBranch(),
-      Array(
-        "--target-dir",
-        verilogDir,
-        "--emission-options=disableMemRandomization,disableRegisterRandomization"
-      )
-    )
 }

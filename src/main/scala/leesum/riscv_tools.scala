@@ -1660,6 +1660,11 @@ class FetchEntry extends Bundle {
 }
 
 class ScoreBoardEntry extends Bundle {
+  // set if the instruction is completed
+  // 1. exception occurs
+  // 2. arithmetic operation (no exception)
+  // 3. load/store (no exception)
+  val complete = Bool()
   val pc = UInt(64.W) // pc of the instruction
   val inst = UInt(32.W) // instruction
   val is_rvc = Bool() // is rvc instruction
@@ -1677,6 +1682,18 @@ class ScoreBoardEntry extends Bundle {
   val lsu_io_space = Bool() // set if we need to use the IO space
   val exception = new ExceptionEntry() // exception occurs
   val bp = new BpEntry() // branch prediction
+
+  def clear_valid(): Unit = {
+    complete := false.B
+    result_valid := false.B
+    exception.valid := false.B
+    bp.is_miss_predict := false.B
+    bp.is_taken := false.B
+  }
+
+  def rd_data_valid(): Bool = {
+    complete && result_valid && !exception.valid && !lsu_io_space
+  }
 
 }
 

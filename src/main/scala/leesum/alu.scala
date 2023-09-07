@@ -1,9 +1,8 @@
 package leesum
 
-import Chisel.{Cat, Fill, Mux1H}
 import chisel3._
-import chisel3.stage.ChiselStage
-import chisel3.util.{Decoupled, PopCount, Reverse}
+import chisel3.util.{Cat, Decoupled, Fill, Mux1H, PopCount, Reverse}
+import circt.stage.ChiselStage
 
 class AluIn extends Bundle {
   private val alu_width = 64
@@ -168,36 +167,12 @@ class AluShift extends Module {
   io.shift_out := Mux(io.shift32_req, Cat(0.U(32), shout(31, 0)), shout)
 }
 object gen_shift_verilog extends App {
-  val projectDir = System.getProperty("user.dir")
-
-  val verilogDir = s"$projectDir/gen_verilog"
-  println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
-      new AluShift(),
-      Array("--target-dir", verilogDir)
-    )
+  GenVerilogHelper(new AluShift())
 }
 
 object gen_adder_verilog extends App {
-  val projectDir = System.getProperty("user.dir")
-
-  val verilogDir = s"$projectDir/gen_verilog"
-  println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
-      new AluAdder(),
-      Array("--target-dir", verilogDir)
-    )
+  GenVerilogHelper(new AluAdder())
 }
 object gen_alu_verilog extends App {
-  val projectDir = System.getProperty("user.dir")
-
-  val verilogDir = s"$projectDir/gen_verilog"
-  println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
-      new FuAlu(),
-      Array("--target-dir", verilogDir)
-    )
+  GenVerilogHelper(new FuAlu())
 }

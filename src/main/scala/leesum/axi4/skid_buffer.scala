@@ -1,8 +1,7 @@
 package leesum.axi4
-import Chisel.switch
 import chisel3._
-import chisel3.stage.ChiselStage
-import chisel3.util.{Decoupled, DecoupledIO, Enum, is}
+import chisel3.util.{Decoupled, DecoupledIO, Enum, is, switch}
+import circt.stage.ChiselStage
 
 class skid_buffer[T <: Data](gen: T, CUT_VALID: Boolean, CUT_READY: Boolean)
     extends Module {
@@ -147,8 +146,8 @@ object gen_verilog2 extends App {
 
   val verilogDir = s"$projectDir/gen_verilog"
   println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
+  ChiselStage
+    .emitSystemVerilog(
       new skid_buffer(UInt(32.W), true, false),
       Array(
         "--target-dir",

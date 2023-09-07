@@ -342,3 +342,4 @@ hs_err_pid*
 # Configuration by leesum
 .*/
 gen_verilog
+*.anno.json

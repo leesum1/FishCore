@@ -1,7 +1,7 @@
 package leesum.axi4
 import chisel3._
-import chisel3.stage.ChiselStage
 import chisel3.util.{HasBlackBoxResource, MuxLookup}
+import circt.stage.ChiselStage
 import leesum.axi4.AXIDef._
 
 class axi_addr(ADDR_WIDTH: Int, DATA_WIDTH: Int)
@@ -86,8 +86,8 @@ object gen_verilog1 extends App {
 
   val verilogDir = s"$projectDir/gen_verilog"
   println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
+  ChiselStage
+    .emitSystemVerilog(
       new back_box_test(12, 64),
       Array(
         "--target-dir",

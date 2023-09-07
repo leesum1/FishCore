@@ -1,9 +1,8 @@
 package leesum
 
-import Chisel.Cat
 import chisel3._
-import chisel3.util.Decoupled
-import chisel3.stage.ChiselStage
+import chisel3.util.{Cat, Decoupled}
+import circt.stage.ChiselStage
 
 // TODO: make RspPacket configurable
 class RspPacket extends Bundle {
@@ -198,8 +197,8 @@ object gen_verilog extends App {
 
   val verilogDir = s"$projectDir/gen_verilog"
   println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
+  ChiselStage
+    .emitSystemVerilog(
       new RspPacket2Insts(),
       Array("--target-dir", verilogDir)
     )

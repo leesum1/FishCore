@@ -1,9 +1,8 @@
 package leesum
 
-import Chisel.{Cat, switch}
 import chisel3._
-import chisel3.util.{Decoupled, Enum, Queue, is}
-import chisel3.stage.ChiselStage
+import chisel3.util.{Decoupled, Enum, Queue, is, switch}
+import circt.stage.ChiselStage
 
 class INSTEntry extends Bundle {
   val pc = UInt(32.W)
@@ -160,8 +159,8 @@ object gen_fifo_verilog extends App {
 
   val verilogDir = s"$projectDir/gen_verilog"
   println(s"verilogDir: $verilogDir")
-  val stage = new ChiselStage()
-    .emitVerilog(
+  ChiselStage
+    .emitSystemVerilog(
       new InstsFifo(),
       Array("--target-dir", verilogDir)
     )

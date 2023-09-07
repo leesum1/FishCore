@@ -1,7 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.tester._
+import chiseltest._
 import chiseltest.ChiselScalatestTester
 import leesum.RiscvTools.sign_ext
 import org.scalatest.freespec.AnyFreeSpec
