@@ -2,7 +2,6 @@ package leesum
 
 import chisel3._
 import chisel3.util.{Cat, Decoupled, Fill, Mux1H, PopCount, Reverse}
-import circt.stage.ChiselStage
 
 class AluIn extends Bundle {
   private val alu_width = 64
@@ -69,7 +68,7 @@ class FuAlu extends Module {
 
   io.out.bits.res := Mux(
     io.in.bits.rvw === OPWidth.W32,
-    RiscvTools.sign_ext(resonehot(31, 0), 32, 64),
+    SignExt(resonehot(31, 0), 32, 64),
     resonehot
   )
 }

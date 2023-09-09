@@ -8,12 +8,6 @@ import scala.annotation.unused
 
 object RiscvTools {
 
-  def sign_ext(x: UInt, input_width: Int, output_width: Int): UInt = {
-    val sign = x(input_width - 1)
-    val sign_ext = Fill(output_width - input_width, sign)
-    Cat(sign_ext, x)
-  }
-
   def is_rvc(inst: UInt): Bool = {
     inst(1, 0) =/= 3.U
   }
@@ -1232,7 +1226,7 @@ object AluOP extends ChiselEnum {
 object OPWidth extends ChiselEnum {
   val W32, W64 = Value
 }
-object SignExt extends ChiselEnum {
+object ResultExt extends ChiselEnum {
   val Signed, Unsigned = Value
 }
 object InstType extends ChiselEnum {
@@ -1252,20 +1246,20 @@ class DecoderSignals extends Bundle {
   val need_imm = Output(Bool())
   val need_immz = Output(Bool())
   val need_pc = Output(Bool())
-  val sign_ext = Output(SignExt())
+  val sign_ext = Output(ResultExt())
   val op_width = Output(OPWidth())
   val inst_type = Output(InstType())
 }
 
 object RVinst {
-  SignExt.Unsigned
+  ResultExt.Unsigned
   OPWidth.W64
   val inst_default = {
     List(
       false.B, // 0-> valid
       FuType.None, // 1-> function unit
       FuOP.None, // 2-> alu operation
-      SignExt.Unsigned, // 3-> sign extension
+      ResultExt.Unsigned, // 3-> sign extension
       OPWidth.W64, // 4-> operation width
       InstType.R, // 5-> inst type
       false.B, // 6-> need rs1
@@ -1297,7 +1291,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluAdd,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_reg_op),
@@ -1306,7 +1300,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluAdd,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_imm_op),
@@ -1315,7 +1309,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluAdd,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_reg_op),
@@ -1324,7 +1318,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluAdd,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_imm_op),
@@ -1333,7 +1327,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluAdd,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.U
     ) ::: pc_imm_op),
@@ -1342,7 +1336,7 @@ object RVinst {
       true.B,
       FuType.Br,
       FuOP.BrBeq,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.B
     ) ::: branch_op),
@@ -1351,7 +1345,7 @@ object RVinst {
       true.B,
       FuType.Br,
       FuOP.BrBge,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.B
     ) ::: branch_op),
@@ -1360,7 +1354,7 @@ object RVinst {
       true.B,
       FuType.Br,
       FuOP.BrBgeu,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.B
     ) ::: branch_op),
@@ -1369,7 +1363,7 @@ object RVinst {
       true.B,
       FuType.Br,
       FuOP.BrBlt,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.B
     ) ::: branch_op),
@@ -1378,7 +1372,7 @@ object RVinst {
       true.B,
       FuType.Br,
       FuOP.BrBltu,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.B
     ) ::: branch_op),
@@ -1387,7 +1381,7 @@ object RVinst {
       true.B,
       FuType.Br,
       FuOP.BrBne,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.B
     ) ::: branch_op),
@@ -1396,7 +1390,7 @@ object RVinst {
       true.B,
       FuType.Br,
       FuOP.BrJal,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.J
     ) ::: jal_op),
@@ -1405,7 +1399,7 @@ object RVinst {
       true.B,
       FuType.Br,
       FuOP.BrJalr,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.I
     ) ::: jalr_op),
@@ -1415,7 +1409,7 @@ object RVinst {
       true.B,
       FuType.Lsu,
       FuOP.LsuLb,
-      SignExt.Signed,
+      ResultExt.Signed,
       OPWidth.W64,
       InstType.I
     ) ::: load_op),
@@ -1425,7 +1419,7 @@ object RVinst {
       true.B,
       FuType.Lsu,
       FuOP.LsuLb,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.I
     ) ::: load_op),
@@ -1435,7 +1429,7 @@ object RVinst {
       true.B,
       FuType.Lsu,
       FuOP.LsuLh,
-      SignExt.Signed,
+      ResultExt.Signed,
       OPWidth.W64,
       InstType.I
     ) ::: load_op),
@@ -1445,7 +1439,7 @@ object RVinst {
       true.B,
       FuType.Lsu,
       FuOP.LsuLh,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.I
     ) ::: load_op),
@@ -1455,7 +1449,7 @@ object RVinst {
       true.B,
       FuType.Lsu,
       FuOP.LsuLw,
-      SignExt.Signed,
+      ResultExt.Signed,
       OPWidth.W64,
       InstType.I
     ) ::: load_op),
@@ -1465,7 +1459,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluOr,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_reg_op),
@@ -1475,7 +1469,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluOr,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.I
     ) ::: reg_imm_op),
@@ -1485,7 +1479,7 @@ object RVinst {
       true.B,
       FuType.Lsu,
       FuOP.LsuSb,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.S
     ) ::: store_op),
@@ -1495,7 +1489,7 @@ object RVinst {
       true.B,
       FuType.Lsu,
       FuOP.LsuSh,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.S
     ) ::: store_op),
@@ -1505,7 +1499,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluSll,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_reg_op),
@@ -1515,7 +1509,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluSlt,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_reg_op),
@@ -1525,7 +1519,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluSlt,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.I
     ) ::: reg_imm_op),
@@ -1535,7 +1529,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluSltu,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.I
     ) ::: reg_imm_op),
@@ -1545,7 +1539,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluSltu,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_reg_op),
@@ -1555,7 +1549,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluSra,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_reg_op),
@@ -1565,7 +1559,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluSrl,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_reg_op),
@@ -1575,7 +1569,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluSub,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_reg_op),
@@ -1585,7 +1579,7 @@ object RVinst {
       true.B,
       FuType.Lsu,
       FuOP.LsuSw,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.S
     ) ::: store_op),
@@ -1595,7 +1589,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluXor,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.R
     ) ::: reg_reg_op),
@@ -1603,7 +1597,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluXor,
-      SignExt.Unsigned,
+      ResultExt.Unsigned,
       OPWidth.W64,
       InstType.I
     ) ::: reg_imm_op)

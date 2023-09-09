@@ -61,7 +61,8 @@ class InstDecoder extends Module {
   // TODO!
   val imm = MuxLookup(
     decode_sigs.inst_type.asUInt,
-    0.U,
+    0.U
+  )(
     Seq(
       InstType.I.asUInt -> inst_base.imm_i,
       InstType.S.asUInt -> inst_base.imm_s,

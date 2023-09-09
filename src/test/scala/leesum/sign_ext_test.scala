@@ -3,7 +3,6 @@ package leesum
 import chisel3._
 import chiseltest._
 import chiseltest.ChiselScalatestTester
-import leesum.RiscvTools.sign_ext
 import org.scalatest.freespec.AnyFreeSpec
 
 class SignExtModule(input_width: Int, output_width: Int) extends Module {
@@ -12,7 +11,7 @@ class SignExtModule(input_width: Int, output_width: Int) extends Module {
     val result = Output(UInt(output_width.W))
   })
 
-  io.result := sign_ext(io.x, input_width, output_width)
+  io.result := SignExt(io.x, input_width, output_width)
 }
 
 class SignExtSpec extends AnyFreeSpec with ChiselScalatestTester {

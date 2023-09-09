@@ -2,6 +2,7 @@ package leesum.axi4
 import chisel3._
 import chisel3.util.{Decoupled, DecoupledIO, Enum, is, switch}
 import circt.stage.ChiselStage
+import leesum.GenVerilogHelper
 
 class skid_buffer[T <: Data](gen: T, CUT_VALID: Boolean, CUT_READY: Boolean)
     extends Module {
@@ -132,7 +133,7 @@ object skid_buffer {
       out: DecoupledIO[T],
       CUT_VALID: Boolean,
       CUT_READY: Boolean
-  ) = {
+  ): Unit = {
     val buffer = Module(
       new skid_buffer(in.bits.cloneType, CUT_VALID, CUT_READY)
     )
@@ -141,19 +142,6 @@ object skid_buffer {
   }
 }
 
-object gen_verilog2 extends App {
-  val projectDir = System.getProperty("user.dir")
-
-  val verilogDir = s"$projectDir/gen_verilog"
-  println(s"verilogDir: $verilogDir")
-  ChiselStage
-    .emitSystemVerilog(
-      new skid_buffer(UInt(32.W), true, false),
-      Array(
-        "--target-dir",
-        verilogDir,
-        "--emission-options=disableMemRandomization,disableRegisterRandomization"
-      )
-    )
-
+object gen_skid_buff_verilog extends App {
+  GenVerilogHelper(new skid_buffer(UInt(32.W), true, false))
 }

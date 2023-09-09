@@ -193,13 +193,6 @@ class RspPacket2Insts extends Module {
 }
 
 object gen_verilog extends App {
-  val projectDir = System.getProperty("user.dir")
 
-  val verilogDir = s"$projectDir/gen_verilog"
-  println(s"verilogDir: $verilogDir")
-  ChiselStage
-    .emitSystemVerilog(
-      new RspPacket2Insts(),
-      Array("--target-dir", verilogDir)
-    )
+  GenVerilogHelper(new RspPacket2Insts())
 }

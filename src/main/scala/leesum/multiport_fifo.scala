@@ -1,9 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.experimental.{DataMirror, requireIsChiselType}
-import chisel3.util.{Counter, Decoupled, PopCount, isPow2, log2Ceil}
-import circt.stage.ChiselStage
+import chisel3.util.{PopCount, isPow2, log2Ceil}
 
 class MultiportFIFO[T <: Data](
     val gen: T,
@@ -133,7 +131,5 @@ class MultiportFIFO[T <: Data](
 }
 
 object gen_multiport_fifo_verilog extends App {
-
   GenVerilogHelper(new MultiportFIFO(UInt(32.W), 8, 4, 4))
-
 }

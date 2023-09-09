@@ -2,6 +2,7 @@ package leesum.axi4
 import chisel3._
 import chisel3.util.{HasBlackBoxResource, MuxLookup}
 import circt.stage.ChiselStage
+import leesum.{GenMaskZero, GenVerilogHelper}
 import leesum.axi4.AXIDef._
 
 class axi_addr(ADDR_WIDTH: Int, DATA_WIDTH: Int)
@@ -60,39 +61,28 @@ class AXIAddr(ADDR_WIDTH: Int, DATA_WIDTH: Int) extends Module {
   assert(inc <= DATA_WIDTH.U, "increment size should be less than data width")
 
   val next_addr_tmp = io.addr + inc
+
   val alignmentMask = MuxLookup(
     io.size,
-    0.U,
-    Array(
-      SIZE_1 -> ~"b000".U(addr_width.W),
-      SIZE_2 -> ~"b001".U(addr_width.W),
-      SIZE_4 -> ~"b011".U(addr_width.W),
-      SIZE_8 -> ~"b111".U(addr_width.W),
-      SIZE_16 -> ~"b1111".U(addr_width.W),
-      SIZE_32 -> ~"b11111".U(addr_width.W),
-      SIZE_64 -> ~"b111111".U(addr_width.W),
-      SIZE_128 -> ~"b1111111".U(addr_width.W)
+    0.U
+  )(
+    Seq(
+      SIZE_1 -> GenMaskZero(addr_width, 0),
+      SIZE_2 -> GenMaskZero(addr_width, 1),
+      SIZE_4 -> GenMaskZero(addr_width, 2),
+      SIZE_8 -> GenMaskZero(addr_width, 3),
+      SIZE_16 -> GenMaskZero(addr_width, 4),
+      SIZE_32 -> GenMaskZero(addr_width, 5),
+      SIZE_64 -> GenMaskZero(addr_width, 6),
+      SIZE_128 -> GenMaskZero(addr_width, 7)
     )
   )
-
   require(alignmentMask.getWidth == addr_width)
 
   val aligned_next_addr = next_addr_tmp & alignmentMask.asUInt
   io.next_addr := aligned_next_addr
 }
 
-object gen_verilog1 extends App {
-  val projectDir = System.getProperty("user.dir")
-
-  val verilogDir = s"$projectDir/gen_verilog"
-  println(s"verilogDir: $verilogDir")
-  ChiselStage
-    .emitSystemVerilog(
-      new back_box_test(12, 64),
-      Array(
-        "--target-dir",
-        verilogDir
-      )
-    )
-
+object gen_AXIAddr_verilog extends App {
+  GenVerilogHelper(new AXIAddr(ADDR_WIDTH = 12, DATA_WIDTH = 64))
 }

@@ -2,10 +2,7 @@ package leesum
 
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
-import chisel3.experimental.VecLiterals.{
-  AddObjectLiteralConstructor,
-  AddVecLiteralConstructor
-}
+import chisel3.experimental.VecLiterals.AddObjectLiteralConstructor
 import chiseltest._
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
@@ -151,4 +148,43 @@ class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
 
   }
 
+  "new_fifo_test" in {
+    test(new CompressInstsItem()).withAnnotations(
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+    ) { dut =>
+      dut.io.in.initSource()
+      dut.io.in.setSourceClock(dut.clock)
+      val insts_item_gen =
+        gen_rand()
+
+      // prepare test data
+
+      // use Gen.listOfN to generate a list of 100 items as input data
+      val input_data_seq = Gen
+        .listOfN(10000, insts_item_gen)
+        .sample
+        .get
+
+      // reference data,only valid insts will be pushed into the fifo
+      var ref_data_seq =
+        input_data_seq.flatten(_.insts_vec).filter(_.valid.litToBoolean)
+
+      dut.clock.step(5)
+
+      for (in <- input_data_seq) {
+        // enqueue input data
+        dut.io.in.enqueue(in)
+        // check output data
+        val out_valid = dut.io.out_valid.peek()
+        for (i <- 0 until out_valid.length) {
+          if (out_valid(i).litToBoolean) {
+            dut.io.out_data(i).expect(ref_data_seq.head)
+            // remove the head element
+            ref_data_seq = ref_data_seq.tail
+          }
+        }
+      }
+      dut.clock.step(5)
+    }
+  }
 }

@@ -1,17 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.experimental.{DataMirror, requireIsChiselType}
-import chisel3.util.{
-  Counter,
-  Decoupled,
-  Mux1H,
-  PopCount,
-  PriorityMux,
-  isPow2,
-  log2Ceil
-}
-import circt.stage.ChiselStage
+import chisel3.util.{Mux1H, PopCount, isPow2, log2Ceil}
 
 class GPRColorBarEntry extends Bundle {
   val fu_type = FuType()
@@ -98,36 +88,7 @@ class ScoreBoard(
     }
   )
 
-  // only if previous push is valid, then current push can be valid
-  // 0000 -> pass check
-  // 1000 -> pass check
-  // 1100 -> pass check
-  // 1110 -> pass check
-  // 1111 -> pass check
-  // 0001 -> fail check
-  // 0101 -> fail check
-  def checkPopRspOrder(idx: Int): Bool = {
-    idx match {
-      case 0 => true.B
-      case _ =>
-        ((io.pop_valid(idx - 1) || !io.pop_valid(idx))) && checkPopRspOrder(
-          idx - 1
-        )
-    }
-  }
-  // only if previous pop is valid, then current pop can be valid
-  def checkPushValidOrder(idx: Int): Bool = {
-    idx match {
-      case 0 => true.B
-      case _ =>
-        ((io.push_valid(idx - 1) || !io.push_valid(
-          idx
-        ))) && checkPushValidOrder(
-          idx - 1
-        )
-    }
-  }
-
+  // if Write-back ID conflict, then return false
   def checkWritebackConflict(): Bool = {
     val fu_valid = VecInit(
       Seq(
@@ -161,11 +122,11 @@ class ScoreBoard(
   }
 
   assert(
-    checkPopRspOrder(io.pop_valid.length - 1),
+    CheckOrder(io.pop_valid),
     "pop_valid must be ordered"
   )
   assert(
-    checkPushValidOrder(io.push_valid.length - 1),
+    CheckOrder(io.push_valid),
     "push_valid must be ordered"
   )
   assert(
@@ -449,6 +410,5 @@ class ScoreBoard(
 }
 
 object gen_ScoreBoard_verilog extends App {
-  GenVerilogHelper(new ScoreBoard(8, 4, 4))
-
+  GenVerilogHelper(new ScoreBoard(8, 2, 2))
 }
