@@ -36,42 +36,12 @@ class MultiportFIFO[T <: Data](
     }
   )
 
-  // only if previous push is valid, then current push can be valid
-  // 0000 -> pass check
-  // 1000 -> pass check
-  // 1100 -> pass check
-  // 1110 -> pass check
-  // 1111 -> pass check
-  // 0001 -> fail check
-  // 0101 -> fail check
-  def checkPopRspOrder(idx: Int): Bool = {
-    idx match {
-      case 0 => true.B
-      case _ =>
-        ((io.pop_valid(idx - 1) || !io.pop_valid(idx))) && checkPopRspOrder(
-          idx - 1
-        )
-    }
-  }
-  // only if previous pop is valid, then current pop can be valid
-  def checkPushValidOrder(idx: Int): Bool = {
-    idx match {
-      case 0 => true.B
-      case _ =>
-        ((io.push_valid(idx - 1) || !io.push_valid(
-          idx
-        ))) && checkPushValidOrder(
-          idx - 1
-        )
-    }
-  }
-
   assert(
-    checkPopRspOrder(io.pop_valid.length - 1),
+    CheckOrder(io.pop_valid),
     "pop_valid must be ordered"
   )
   assert(
-    checkPushValidOrder(io.push_valid.length - 1),
+    CheckOrder(io.push_valid),
     "push_valid must be ordered"
   )
 

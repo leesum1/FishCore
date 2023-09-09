@@ -11,14 +11,14 @@ import chisel3.util._
   */
 class CompressInstsItem extends Module {
   val io = IO(new Bundle {
-    val in = Flipped(Decoupled(new InstsItem))
+    val in = Input(new InstsItem)
     val out_valid = Output(Vec(4, Bool()))
     val out_data = Output(Vec(4, new INSTEntry))
   })
 
-  val validSeq = VecInit(io.in.bits.insts_vec.map(_.valid))
+  val validSeq = VecInit(io.in.insts_vec.map(_.valid))
   val validSeq_count = PopCount(validSeq)
-  val dataSeq = io.in.bits.insts_vec
+  val dataSeq = io.in.insts_vec
 
   val out_data_0 = PriorityMux(validSeq, dataSeq)
   val out_data_3 = dataSeq(3)
@@ -39,7 +39,7 @@ class CompressInstsItem extends Module {
     )
   ) // validSeq PopCount == 3.U
 
-  val out_data_1_Pop4 = dataSeq(3) // validSeq PopCount == 4.U
+  val out_data_1_Pop4 = dataSeq(1) // validSeq PopCount == 4.U
 
   val out_data_1 = Mux1H(
     Seq(
@@ -78,9 +78,38 @@ class CompressInstsItem extends Module {
 
   assert(CheckOrder(out_valid), "out_valid must be ordered")
 
-  io.in.ready := true.B
+}
+
+class InstsFIFO2 extends Module {
+  val io = IO(new Bundle {
+    val push = Flipped(Decoupled(new InstsItem))
+    val pop = Decoupled(Vec(2, new INSTEntry))
+
+    val flush = Input(Bool())
+  })
+
+  val compress = Module(new CompressInstsItem)
+  compress.io.in := io.push.bits
+
+  val inst_fifo = Module(new MultiportFIFO(new INSTEntry, 8, 4, 2))
+
+  io.push.ready := inst_fifo.io.free_entries >= 4.U
+
+  inst_fifo.io.push_valid := compress.io.out_valid.map(_ && io.push.fire)
+  inst_fifo.io.push_data := compress.io.out_data
+
+  io.pop.valid := inst_fifo.io.occupied_entries >= 2.U
+  io.pop.bits := inst_fifo.io.pop_data
+  inst_fifo.io.pop_valid := VecInit(Seq.fill(2)(io.pop.fire))
+
+  inst_fifo.io.flush := io.flush
+
 }
 
 object gen_InstFIFO_test extends App {
   GenVerilogHelper(new CompressInstsItem)
+}
+
+object gen_InstFIFO_test2 extends App {
+  GenVerilogHelper(new InstsFIFO2)
 }
