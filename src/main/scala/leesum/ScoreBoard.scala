@@ -1,23 +1,16 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Mux1H, PopCount, isPow2, log2Ceil}
-
-class GPRColorBarEntry extends Bundle {
-  val fu_type = FuType()
-  val io_space = Bool()
-}
-class GPRColorBar extends Bundle {
-  val gpr = Vec(32, new GPRColorBarEntry())
-}
+import chisel3.util.{Fill, Mux1H, PopCount, isPow2, log2Ceil}
 
 class OperandByPassIO extends Bundle {
   val rs1_addr = Input(UInt(5.W))
   val rs1_data = Output(UInt(64.W))
-  val rs1_valid = Output(Bool())
+  val rs1_fwd_valid = Output(Bool())
+
   val rs2_addr = Input(UInt(5.W))
   val rs2_data = Output(UInt(64.W))
-  val rs2_valid = Output(Bool())
+  val rs2_fwd_valid = Output(Bool())
 
   def rs1_is_x0(): Bool = rs1_addr === 0.U
   def rs2_is_x0(): Bool = rs2_addr === 0.U
@@ -46,12 +39,17 @@ class ScoreBoard(
       val pop_data = Output(Vec(num_popports, genType))
       val pop_valid = Input(Vec(num_popports, Bool()))
       val flush = Input(Bool())
+      // fifo status
       val empty = Output(Bool())
       val full = Output(Bool())
       val free_entries = Output(UInt((log2Ceil(entries) + 1).W))
       val occupied_entries = Output(UInt((log2Ceil(entries) + 1).W))
+      // id of the current push data(scoreboard-entry)
+      val write_ptr_trans_id =
+        Output(Vec(num_pushports, UInt(log2Ceil(entries).W)))
 
       val operand_bypass = Vec(2, new OperandByPassIO())
+      val rd_occupied_gpr = Vec(32, FuType())
 
       // write-back port
       // alu
@@ -142,7 +140,7 @@ class ScoreBoard(
   val pop_ptr = RegInit(0.U(log2Ceil(entries).W))
   val num_counter = RegInit(0.U((log2Ceil(entries) + 1).W))
   // -------------------------
-  // writeback ports logic
+  // write-back ports logic
   // -------------------------
   when(io.fu_alu_valid) {
     ram(io.fu_alu_id).complete := true.B
@@ -208,6 +206,11 @@ class ScoreBoard(
       }
     })
 
+  0.until(num_pushports)
+    .foreach(i => {
+      io.write_ptr_trans_id(i) := push_ptr + i.U
+    })
+
   push_ptr := push_ptr + PopCount(io.push_valid)
   // ------------------
   // pop logic
@@ -230,6 +233,23 @@ class ScoreBoard(
     push_ptr := 0.U
     num_counter := 0.U
   }
+
+  // ---------------------
+  // rd_occupied_gpr logic
+  // ---------------------
+
+  val rd_occupied_gpr = VecInit(Seq.fill(32)(FuType.None))
+
+  0.until(entries)
+    .foreach(idx => {
+      val scb_entry = ram(idx)
+      rd_occupied_gpr(scb_entry.rd_addr) := scb_entry.fu_type
+    })
+  // x0 always be None
+  rd_occupied_gpr(0) := FuType.None
+
+  io.rd_occupied_gpr := rd_occupied_gpr
+
   // ----------------------
   // bypass logic
   // ----------------------
@@ -374,34 +394,34 @@ class ScoreBoard(
       }
     })
 
-  // ------------------
-  // val op1_rs1_fwd_req = Vec(entries + fu_id.length, Bool())
+  // ------------------------------------------------------------
+  //  val op1_rs1_fwd_req = Vec(entries + fu_id.length, Bool())
   //  val op1_rs2_fwd_req = Vec(entries + fu_id.length, Bool())
   //  val op2_rs1_fwd_req = Vec(entries + fu_id.length, Bool())
   //  val op2_rs2_fwd_req = Vec(entries + fu_id.length, Bool())
   //  val rs_fwd_data = Vec(entries + fu_id.length, UInt(64.W))
-  // ------------------
+  // ------------------------------------------------------------
 
   io.operand_bypass(0).rs1_data := Mux1H(op1_rs1_fwd_req, rs_fwd_data)
   io.operand_bypass(0).rs2_data := Mux1H(op1_rs2_fwd_req, rs_fwd_data)
   io.operand_bypass(1).rs1_data := Mux1H(op2_rs1_fwd_req, rs_fwd_data)
   io.operand_bypass(1).rs2_data := Mux1H(op2_rs2_fwd_req, rs_fwd_data)
-  io.operand_bypass(0).rs1_valid := Mux(
+  io.operand_bypass(0).rs1_fwd_valid := Mux(
     io.operand_bypass(0).rs1_is_x0(),
     false.B,
     op1_rs1_fwd_req.reduce(_ || _)
   )
-  io.operand_bypass(0).rs2_valid := Mux(
+  io.operand_bypass(0).rs2_fwd_valid := Mux(
     io.operand_bypass(0).rs2_is_x0(),
     false.B,
     op1_rs2_fwd_req.reduce(_ || _)
   )
-  io.operand_bypass(1).rs1_valid := Mux(
+  io.operand_bypass(1).rs1_fwd_valid := Mux(
     io.operand_bypass(1).rs1_is_x0(),
     false.B,
     op2_rs1_fwd_req.reduce(_ || _)
   )
-  io.operand_bypass(1).rs2_valid := Mux(
+  io.operand_bypass(1).rs2_fwd_valid := Mux(
     io.operand_bypass(1).rs2_is_x0(),
     false.B,
     op2_rs2_fwd_req.reduce(_ || _)

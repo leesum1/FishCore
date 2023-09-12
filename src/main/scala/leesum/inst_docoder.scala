@@ -16,24 +16,40 @@ class InstDecoder extends Module {
   private val decode_sig_seq: Seq[Element] =
     ListLookup(io.in.inst, RVinst.inst_default, RVinst.inst_map)
   val decode_sigs = Wire(new DecoderSignals())
+
+//  val inst_default = {
+//    List(
+//      false.B, // 0-> valid
+//      FuType.None, // 1-> function unit
+//      FuOP.None, // 2-> alu operation
+//      false.B, // 3-> is rv32
+//      InstType.R, // 4-> inst type
+//      false.B, // 5-> need rs1
+//      false.B, // 6-> need rs2
+//      false.B, // 7-> need rd
+//      false.B, // 8-> need imm
+//      false.B, // 9-> need pc
+//      false.B // 10-> need immz
+//    )
+//  }
   // -------------------
   // get decode signals
   // -------------------
   decode_sigs.inst := io.in.inst
   decode_sigs.inst_pc := io.in.pc
   decode_sigs.inst_rvc := io.in.is_rvc
+  // TODO: check valid signal?
   decode_sigs.inst_valid := decode_sig_seq(0)
   decode_sigs.fu_type := decode_sig_seq(1)
   decode_sigs.fu_op := decode_sig_seq(2)
-  decode_sigs.sign_ext := decode_sig_seq(3)
-  decode_sigs.op_width := decode_sig_seq(4)
-  decode_sigs.inst_type := decode_sig_seq(5)
-  decode_sigs.need_rs1 := decode_sig_seq(6)
-  decode_sigs.need_rs2 := decode_sig_seq(7)
-  decode_sigs.need_rd := decode_sig_seq(8)
-  decode_sigs.need_imm := decode_sig_seq(9)
-  decode_sigs.need_pc := decode_sig_seq(10)
-  decode_sigs.need_immz := decode_sig_seq(11)
+  decode_sigs.is_rv32 := decode_sig_seq(3)
+  decode_sigs.inst_type := decode_sig_seq(4)
+  decode_sigs.need_rs1 := decode_sig_seq(5)
+  decode_sigs.need_rs2 := decode_sig_seq(6)
+  decode_sigs.need_rd := decode_sig_seq(7)
+  decode_sigs.need_imm := decode_sig_seq(8)
+  decode_sigs.need_pc := decode_sig_seq(9)
+  decode_sigs.need_immz := decode_sig_seq(10)
 
   val scoreboard_entry = Wire(new ScoreBoardEntry())
 
@@ -42,6 +58,7 @@ class InstDecoder extends Module {
   scoreboard_entry.inst := decode_sigs.inst
   scoreboard_entry.pc := decode_sigs.inst_pc
   scoreboard_entry.is_rvc := decode_sigs.inst_rvc
+  scoreboard_entry.is_rv32 := decode_sigs.is_rv32
   // -------------------------------
   // scoreboard operand information
   // -------------------------------

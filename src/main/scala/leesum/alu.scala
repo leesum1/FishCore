@@ -1,18 +1,49 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Cat, Decoupled, Fill, Mux1H, PopCount, Reverse}
+import chisel3.util.{
+  Cat,
+  Decoupled,
+  Fill,
+  Mux1H,
+  MuxLookup,
+  PopCount,
+  Reverse,
+  log2Ceil
+}
 
 class AluIn extends Bundle {
   private val alu_width = 64
-  val a = Input(UInt(alu_width.W))
-  val b = Input(UInt(alu_width.W))
-  val op = Input(AluOP())
-  val rvw = Input(OPWidth())
+  val a = (UInt(alu_width.W))
+  val b = (UInt(alu_width.W))
+  val trans_id = UInt(log2Ceil(8).W)
+
+  val op = (AluOP())
+  val is_rv32 = Bool()
+
+  def convert_fuop2aluop(fuop: FuOP.Type): AluOP.Type = {
+    val aluop = Wire(AluOP())
+
+    aluop := MuxLookup(fuop.asUInt, AluOP.None)(
+      Seq(
+        FuOP.AluAdd.asUInt -> AluOP.Add,
+        FuOP.AluSub.asUInt -> AluOP.Sub,
+        FuOP.AluAnd.asUInt -> AluOP.And,
+        FuOP.AluOr.asUInt -> AluOP.Or,
+        FuOP.AluXor.asUInt -> AluOP.Xor,
+        FuOP.AluSll.asUInt -> AluOP.Sll,
+        FuOP.AluSrl.asUInt -> AluOP.Srl,
+        FuOP.AluSra.asUInt -> AluOP.Sra,
+        FuOP.AluSlt.asUInt -> AluOP.Slt,
+        FuOP.AluSltu.asUInt -> AluOP.Sltu
+      )
+    )
+    aluop
+  }
 }
 class AluOut extends Bundle {
   private val alu_width = 64
-  val res = Output(UInt(alu_width.W))
+  val res = (UInt(alu_width.W))
 }
 
 class FuAlu extends Module {
@@ -47,7 +78,7 @@ class FuAlu extends Module {
   shift.io.sra_req := io.in.bits.op === AluOP.Sra
   shift.io.srl_req := io.in.bits.op === AluOP.Srl
   shift.io.sll_req := io.in.bits.op === AluOP.Sll
-  shift.io.shift32_req := io.in.bits.rvw === OPWidth.W32
+  shift.io.shift32_req := io.in.bits.is_rv32
   val shift_res = shift.io.shift_out
   /* shift module End*/
 
@@ -67,7 +98,7 @@ class FuAlu extends Module {
   )
 
   io.out.bits.res := Mux(
-    io.in.bits.rvw === OPWidth.W32,
+    io.in.bits.is_rv32,
     SignExt(resonehot(31, 0), 32, 64),
     resonehot
   )

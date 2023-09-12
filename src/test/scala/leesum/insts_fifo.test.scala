@@ -151,6 +151,81 @@ class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
 
   }
 
+  "InstFIFO2_flush_test" in {
+    test(new InstsFIFO2).withAnnotations(
+      Seq(VerilatorBackendAnnotation, WriteVcdAnnotation)
+    ) { dut =>
+      dut.io.push.initSource()
+      dut.io.push.setSourceClock(dut.clock)
+      dut.io.pop.initSink()
+      dut.io.pop.setSinkClock(dut.clock)
+
+      val insts_item_gen =
+        gen_rand()
+
+      // prepare test data
+
+      // use Gen.listOfN to generate a list of 100 items as input data
+      val input_data_seq = Gen
+        .listOfN(10000, insts_item_gen)
+        .sample
+        .get
+
+      // reference data,only valid insts will be pushed into the fifo
+      val ref_data_seq =
+        input_data_seq.flatten(_.insts_vec).filter(_.valid.litToBoolean)
+
+      // TODO: BUG IN CHISELTEST
+      val ref_data_seq2 =
+        ref_data_seq
+          .grouped(2)
+          .toSeq
+          .dropRight(1)
+          .map(x => {
+            val x1 = (new INSTEntry).Lit(
+              _.inst -> x.head.inst,
+              _.valid -> x.head.valid,
+              _.rvc -> x.head.rvc,
+              _.pc -> x.head.pc
+            )
+            val x2 = (new INSTEntry).Lit(
+              _.inst -> x.last.inst,
+              _.valid -> x.last.valid,
+              _.rvc -> x.last.rvc,
+              _.pc -> x.last.pc
+            )
+            Vec.Lit(x1, x2)
+
+          })
+
+      dut.clock.step(5)
+      // --------------------
+      // flush test
+      // --------------------
+      dut.io.push.enqueue(insts_item_gen.sample.get)
+      fork {
+        dut.io.push.enqueue(insts_item_gen.sample.get)
+      }.fork {
+        dut.io.flush.poke(true.B)
+        dut.clock.step(1)
+        dut.io.flush.poke(false.B)
+        dut.clock.step(1)
+      }.join()
+      // --------------------
+      // push pop test after flush
+      // --------------------
+      fork {
+        val (seq1, seq2) = input_data_seq.splitAt(input_data_seq.length / 3)
+        dut.io.push.enqueueSeq(seq1)
+        dut.clock.step(11)
+        dut.io.push.enqueueSeq(seq2)
+      }.fork {
+        dut.io.pop.expectDequeueSeq(ref_data_seq2)
+      }.join()
+      dut.clock.step(5)
+    }
+  }
+
   "InstsFIFO2_push_pop_test" in {
     test(new InstsFIFO2).withAnnotations(
       Seq(VerilatorBackendAnnotation, WriteVcdAnnotation)
