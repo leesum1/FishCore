@@ -101,7 +101,7 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
       AluOP.Sltu
     )
 
-    val op_width_list = Array(OPWidth.W32, OPWidth.W64)
+    val op_width_list = Array(true.B, false.B)
 
     val op_type_gen = Gen.choose(0, 9).map(alu_op_list(_))
 
@@ -133,7 +133,7 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
       op_a: UInt,
       op_b: UInt,
       op_type: AluOP.Type,
-      op_width: OPWidth.Type
+      is_rv32: Bool
   ): Long = {
     require((op_a.getWidth == 64) && (op_b.getWidth == 64), "width error")
 
@@ -148,34 +148,33 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
 
     val slt_res = op_a_lit < op_b_lit
     val sltu_res = long2Ulong(op_a_lit) < long2Ulong(op_b_lit)
-
-    val res = (op_type, op_width) match {
-      case (AluOP.Add, OPWidth.W64) => add_res
-      case (AluOP.Sub, OPWidth.W64) => sub_res
-      case (AluOP.And, OPWidth.W64) => and_res
-      case (AluOP.Or, OPWidth.W64)  => or_res
-      case (AluOP.Xor, OPWidth.W64) => xor_res
-      case (AluOP.Sll, OPWidth.W64) => op_a_lit << (op_b_lit & 0x3f)
-      case (AluOP.Srl, OPWidth.W64) => op_a_lit >>> (op_b_lit & 0x3f)
-      case (AluOP.Sra, OPWidth.W64) => op_a_lit >> (op_b_lit & 0x3f)
-      case (AluOP.Slt, _)           => if (slt_res) 1L else 0L
-      case (AluOP.Sltu, _)          => if (sltu_res) 1L else 0L
-      case (AluOP.Add, OPWidth.W32) => add_res.toInt.toLong // sign extend
-      case (AluOP.Sub, OPWidth.W32) => sub_res.toInt.toLong // sign extend
-      case (AluOP.And, OPWidth.W32) => and_res.toInt.toLong // sign extend
-      case (AluOP.Or, OPWidth.W32)  => or_res.toInt.toLong // sign extend
-      case (AluOP.Xor, OPWidth.W32) => xor_res.toInt.toLong // sign extend
-      case (AluOP.Sll, OPWidth.W32) =>
+    val res = (op_type, is_rv32.litToBoolean) match {
+      case (AluOP.Add, false) => add_res
+      case (AluOP.Sub, false) => sub_res
+      case (AluOP.And, false) => and_res
+      case (AluOP.Or, false)  => or_res
+      case (AluOP.Xor, false) => xor_res
+      case (AluOP.Sll, false) => op_a_lit << (op_b_lit & 0x3f)
+      case (AluOP.Srl, false) => op_a_lit >>> (op_b_lit & 0x3f)
+      case (AluOP.Sra, false) => op_a_lit >> (op_b_lit & 0x3f)
+      case (AluOP.Slt, _)     => if (slt_res) 1L else 0L
+      case (AluOP.Sltu, _)    => if (sltu_res) 1L else 0L
+      case (AluOP.Add, true)  => add_res.toInt.toLong // sign extend
+      case (AluOP.Sub, true)  => sub_res.toInt.toLong // sign extend
+      case (AluOP.And, true)  => and_res.toInt.toLong // sign extend
+      case (AluOP.Or, true)   => or_res.toInt.toLong // sign extend
+      case (AluOP.Xor, true)  => xor_res.toInt.toLong // sign extend
+      case (AluOP.Sll, true) =>
         (op_a_lit.toInt << (op_b_lit & 0x1f)).toInt.toLong // sign extend
-      case (AluOP.Srl, OPWidth.W32) =>
+      case (AluOP.Srl, true) =>
         (op_a_lit.toInt >>> (op_b_lit & 0x1f)).toInt.toLong // sign extend
-      case (AluOP.Sra, OPWidth.W32) =>
+      case (AluOP.Sra, true) =>
         (op_a_lit.toInt >> (op_b_lit & 0x1f)).toInt.toLong
       case _ =>
         throw new Exception(
           "op_type:%d, op_width:%d not support".format(
             op_type.litValue,
-            op_width.litValue
+            is_rv32.litValue
           )
         )
     }
@@ -216,12 +215,13 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
         // 以后带有 input 模块，需要使用的时候再生成，例如 AluIn
         val (seq1, seq2) =
           input_seq
-            .map({ case (op_a, op_b, op_type, op_width) =>
+            .map({ case (op_a, op_b, op_type, is_rv32) =>
               (new AluIn).Lit(
                 _.a -> op_a,
                 _.b -> op_b,
+                _.trans_id -> 0.U,
                 _.op -> op_type,
-                _.rvw -> op_width
+                _.is_rv32 -> is_rv32
               )
             })
             .splitAt(input_seq.length / 3)

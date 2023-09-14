@@ -194,7 +194,7 @@ class AluShift extends Module {
     )
   )
 
-  io.shift_out := Mux(io.shift32_req, Cat(0.U(32), shout(31, 0)), shout)
+  io.shift_out := Mux(io.shift32_req, Cat(0.U(32.W), shout(31, 0)), shout)
 }
 object gen_shift_verilog extends App {
   GenVerilogHelper(new AluShift())

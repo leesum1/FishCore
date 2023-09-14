@@ -34,7 +34,8 @@ class FuBranch extends Module {
 
   val taraget_pc = MuxLookup(
     io.in.bits.fu_op.asUInt,
-    0.U,
+    0.U
+  )(
     Seq(
       FuOP.BrJalr.asUInt -> pc_rs1,
       FuOP.BrJal.asUInt -> pc_imm,

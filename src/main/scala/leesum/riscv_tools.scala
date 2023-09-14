@@ -1,7 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.experimental.ChiselEnum
+import chisel3.ChiselEnum
 import chisel3.util.{BitPat, Cat, Decoupled, Enum, Fill}
 
 import scala.annotation.unused
