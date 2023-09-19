@@ -1,29 +1,7 @@
 package leesum
 import chisel3._
-import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
-import chiseltest.simulator.WriteVcdAnnotation
-import leesum.axi4.AXIDef.{
-  BURST_INCR,
-  SIZE_1,
-  SIZE_128,
-  SIZE_16,
-  SIZE_2,
-  SIZE_32,
-  SIZE_4,
-  SIZE_64,
-  SIZE_8
-}
-import leesum.axi4.{
-  AXI4Memory,
-  AXIAddr,
-  AXIAddressChannel,
-  axi_addr,
-  skid_buffer,
-  skid_buffer_cut_valid
-}
-import leesum.test_utils.{int2UInt64, long2UInt64, long2Ulong}
-import org.scalacheck.Gen
+import leesum.axi4.skid_buffer
 import org.scalatest.freespec.AnyFreeSpec
 
 class skid_buffer_test extends AnyFreeSpec with ChiselScalatestTester {
