@@ -4,7 +4,7 @@ import chisel3._
 import circt.stage.ChiselStage
 import leesum.GenVerilogHelper
 
-class BasicMemory(ADDR_WIDTH: Int, DATA_WIDTH: Int, BASE_ADDR: Int)
+class BasicMemory(ADDR_WIDTH: Int, DATA_WIDTH: Int, BASE_ADDR: Long)
     extends Module {
   val io = IO(new Bundle {
     val i_we = Input(Bool())

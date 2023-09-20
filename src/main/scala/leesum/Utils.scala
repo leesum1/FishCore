@@ -94,6 +94,7 @@ object GenMaskOne {
 }
 
 object CheckAligned {
+  // size: 0 -> 1 byte, 1 -> 2 bytes, 2 -> 4 bytes, 3 -> 8 bytes
   def apply(addr: UInt, size: UInt): Bool = {
     require(
       size.getWidth == 2 && addr.getWidth >= 3,
@@ -239,5 +240,51 @@ object GenWstrb {
     }
 
     beMask
+  }
+}
+
+/** get rdata from axi r channel, shift it to the right position, and fill the
+  * rest with 0
+  */
+object GetRdata {
+  def apply(rdata: UInt, addr: UInt, size: UInt): UInt = {
+    require(size.getWidth == 2, "size must be 2 bits")
+    require(addr.getWidth == 64, "addr must be 64 bits")
+
+    val rdata_aligned = Wire(UInt(64.W))
+    val offset = addr(2, 0)
+
+    rdata_aligned := rdata
+    switch(size) {
+      is(0.U) {
+        switch(offset) {
+          is(0.U) { rdata_aligned := Cat(0.U(56), rdata(7, 0)) }
+          is(1.U) { rdata_aligned := Cat(0.U(56), rdata(15, 8)) }
+          is(2.U) { rdata_aligned := Cat(0.U(56), rdata(23, 16)) }
+          is(3.U) { rdata_aligned := Cat(0.U(56), rdata(31, 24)) }
+          is(4.U) { rdata_aligned := Cat(0.U(56), rdata(39, 32)) }
+          is(5.U) { rdata_aligned := Cat(0.U(56), rdata(47, 40)) }
+          is(6.U) { rdata_aligned := Cat(0.U(56), rdata(55, 48)) }
+          is(7.U) { rdata_aligned := Cat(0.U(56), rdata(63, 56)) }
+        }
+      }
+      is(1.U) {
+        switch(offset) {
+          is(0.U) { rdata_aligned := Cat(0.U(48), rdata(15, 0)) }
+          is(2.U) { rdata_aligned := Cat(0.U(48), rdata(31, 16)) }
+          is(4.U) { rdata_aligned := Cat(0.U(48), rdata(47, 32)) }
+          is(6.U) { rdata_aligned := Cat(0.U(48), rdata(63, 48)) }
+        }
+      }
+      is(2.U) {
+        switch(offset) {
+          is(0.U) { rdata_aligned := Cat(0.U(32), rdata(31, 0)) }
+          is(4.U) { rdata_aligned := Cat(0.U(32), rdata(63, 32)) }
+        }
+      }
+      is(3.U) { rdata_aligned := rdata }
+    }
+
+    rdata_aligned
   }
 }

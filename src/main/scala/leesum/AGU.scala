@@ -5,21 +5,21 @@ import chisel3.util.{Decoupled, Enum, MuxLookup, PopCount, Queue, is, switch}
 class AGUIn extends Bundle {
   val op_a = UInt(64.W)
   val op_b = UInt(64.W)
-  val size = UInt(3.W)
+  val size = UInt(2.W)
   val store_data = UInt(64.W)
   val is_store = Bool()
 }
 class AGUOut extends Bundle {
   val load_pipe = Decoupled(new LoadQueueIn())
   val store_pipe = Decoupled(new StoreQueueIn())
-  val exception_pipe = Decoupled(UInt(64.W))
+  val exception_pipe = Decoupled(new ExceptionEntry())
 
   def agu_out_assert(): Unit = {
     assert(
       PopCount(
         Seq(load_pipe.valid, store_pipe.valid, exception_pipe.valid)
       ) <= 1.U,
-      "AGUout_assert error"
+      "AGU_out_assert error"
     )
   }
 }
@@ -39,23 +39,31 @@ class AGU extends Module {
   val sIdle :: sWaitTLBRsp :: sWaitFifo :: sFlush :: Nil = Enum(4)
   val state = RegInit(sIdle)
   val tlb_rsp_buf = RegInit(0.U.asTypeOf(new TLBResp))
-  val exception_pipe = Module(new PipeLine(UInt(64.W)))
+  val size_buf = RegInit(0.U(2.W))
+  val store_data_buf = RegInit(0.U(64.W))
+
+  val exception_pipe = Module(new PipeLine(new ExceptionEntry()))
+
 //  val load_pipe = Module(new PipeLine(UInt(64.W)))
 //  val store_pipe = Module(new PipeLine(UInt(64.W)))
 
   io.tlb_req.valid := false.B
   io.tlb_resp.ready := false.B
   io.in.ready := false.B
-  io.tlb_req.bits.vaddr := 0.U
-  io.tlb_req.bits.req_type := DontCare
+  io.tlb_req.bits := DontCare
 
   exception_pipe.io.in.valid := false.B
   exception_pipe.io.in.bits := DontCare
   exception_pipe.io.flush := io.flush
+  io.out.store_pipe.valid := false.B
+  io.out.store_pipe.bits := DontCare
+  io.out.load_pipe.valid := false.B
+  io.out.load_pipe.bits := DontCare
 
-  def send_tlb_req(virtual_addr: UInt): Unit = {
+  def send_tlb_req(virtual_addr: UInt, size: UInt): Unit = {
     io.tlb_req.valid := true.B
     io.tlb_req.bits.vaddr := virtual_addr
+    io.tlb_req.bits.size := size
     io.tlb_req.bits.req_type := Mux(
       io.in.bits.is_store,
       TLBReqType.STORE,
@@ -67,20 +75,38 @@ class AGU extends Module {
     io.in.ready := true.B && !io.flush
     when(io.in.fire) {
       state := sWaitTLBRsp
-      send_tlb_req(vaddr.asUInt)
+      size_buf := io.in.bits.size
+      store_data_buf := io.in.bits.store_data
+      send_tlb_req(vaddr.asUInt, io.in.bits.size)
     }.otherwise {
       state := sIdle
     }
   }
-
+  // TODO: not implemented now
   def check_privilege(tlb_rsp: TLBResp): Bool = {
-    tlb_rsp.exception.valid
+    val addr_align = CheckAligned(tlb_rsp.paddr, tlb_rsp.size)
+
+    tlb_rsp.exception.valid || !addr_align
   }
 
+  // TODO: not implemented now
   def dispatch_to_exception(tlb_rsp: TLBResp): Unit = {
     exception_pipe.io.in.valid := true.B
     when(exception_pipe.io.in.fire) {
-      exception_pipe.io.in.bits := 0.U
+      exception_pipe.io.in.bits.valid := true.B
+      exception_pipe.io.in.bits.tval := tlb_rsp.paddr
+
+      val mis_aligned_cause = Mux(
+        tlb_rsp.req_type === TLBReqType.LOAD,
+        ExceptionCause.misaligned_load,
+        ExceptionCause.misaligned_store
+      )
+      // page fault or access fault has higher priority
+      exception_pipe.io.in.bits.cause := Mux(
+        tlb_rsp.exception.valid,
+        tlb_rsp.exception.cause,
+        mis_aligned_cause
+      )
       receive_tlb_req()
     }.otherwise {
       state := sWaitFifo
@@ -90,7 +116,7 @@ class AGU extends Module {
     io.out.load_pipe.valid := true.B
     when(io.out.load_pipe.fire) {
       io.out.load_pipe.bits.paddr := tlb_rsp.paddr
-      io.out.load_pipe.bits.size := io.in.bits.size
+      io.out.load_pipe.bits.size := size_buf
       // TODO: is_mmio is not implemented
       io.out.load_pipe.bits.is_mmio := false.B
       receive_tlb_req()
@@ -102,8 +128,8 @@ class AGU extends Module {
     io.out.store_pipe.valid := true.B
     when(io.out.store_pipe.fire) {
       io.out.store_pipe.bits.paddr := tlb_rsp.paddr
-      io.out.store_pipe.bits.size := io.in.bits.size
-      io.out.store_pipe.bits.store_data := io.in.bits.store_data
+      io.out.store_pipe.bits.size := size_buf
+      io.out.store_pipe.bits.store_data := store_data_buf
       io.out.store_pipe.bits.is_mmio := false.B
       receive_tlb_req()
     }.otherwise {

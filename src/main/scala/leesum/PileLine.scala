@@ -6,7 +6,7 @@ import circt.stage.ChiselStage
 class PipeLine[T <: Data](gen: T) extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(gen))
-    val out = Decoupled(UInt(64.W))
+    val out = Decoupled(gen)
     val flush = Input(Bool())
   })
 

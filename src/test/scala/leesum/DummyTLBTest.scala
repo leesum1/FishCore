@@ -11,12 +11,14 @@ class DummyTLBTest extends AnyFreeSpec with ChiselScalatestTester {
 
   def gen_tlb_req = {
     val vaddr = gen_rand_uint(64)
+    val size = gen_rand_uint(2)
     val tlb_type = Gen.oneOf(TLBReqType.LOAD, TLBReqType.STORE)
     val tlb_req = for {
       vaddr <- vaddr
       tlb_type <- tlb_type
+      size <- size
     } yield {
-      (new TLBReq).Lit(_.vaddr -> vaddr, _.req_type -> tlb_type)
+      (new TLBReq).Lit(_.vaddr -> vaddr, _.req_type -> tlb_type, _.size -> size)
     }
     tlb_req
   }
@@ -34,6 +36,7 @@ class DummyTLBTest extends AnyFreeSpec with ChiselScalatestTester {
           (new TLBResp).Lit(
             _.paddr -> req.vaddr,
             _.req_type -> req.req_type,
+            _.size -> req.size,
             _.exception.valid -> false.B,
             _.exception.tval -> 0.U,
             _.exception.cause -> ExceptionCause.load_access

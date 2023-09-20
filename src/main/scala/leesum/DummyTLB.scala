@@ -10,14 +10,16 @@ object TLBReqType extends ChiselEnum {
 
 class TLBReq extends Bundle {
   val vaddr = UInt(64.W)
+  val size = UInt(2.W)
   val req_type = TLBReqType()
 }
 
 class TLBResp extends Bundle {
   val paddr = UInt(64.W)
   val req_type = TLBReqType()
-  val exception = new ExceptionEntry()
-
+  // size: 0: 1 byte, 1: 2 bytes, 2: 4 bytes, 3: 8 bytes
+  val size = UInt(2.W)
+  val exception = new ExceptionEntry(has_valid = true)
 }
 
 class DummyTLB extends Module {
@@ -52,8 +54,11 @@ class DummyTLB extends Module {
     when(io.tlb_resp.fire) {
       io.tlb_resp.bits.req_type := req_buf.req_type
       io.tlb_resp.bits.paddr := req_buf.vaddr
+      io.tlb_resp.bits.size := req_buf.size
+      // TODO: not implemented, page fault or access fault
       io.tlb_resp.bits.exception.valid := false.B
       io.tlb_resp.bits.exception.tval := 0.U
+      // TODO:
       io.tlb_resp.bits.exception.cause := ExceptionCause.load_access
       recv_tlb_req()
     }

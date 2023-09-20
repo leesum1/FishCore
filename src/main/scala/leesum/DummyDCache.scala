@@ -1,6 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.Decoupled
+import chisel3.util.{Cat, Decoupled, MuxLookup, RegEnable, is, switch}
 import leesum.axi4.{AXI4Memory, AXIDef, AXIMasterIO, StreamFork}
 
 class DummyDCache extends Module {
@@ -11,12 +11,20 @@ class DummyDCache extends Module {
     val store_resp = Decoupled(new StoreDcacheResp)
     val flush = Input(Bool())
   })
-  val axi_addr_width = 12
+  val axi_addr_width = 32
   val axi_data_width = 64
 
   val axi_master = Wire(new AXIMasterIO(axi_addr_width, axi_data_width))
 
-  val axi_mem = Module(new AXI4Memory)
+  val axi_mem = Module(
+    new AXI4Memory(
+      AXI_AW = axi_addr_width,
+      AXI_DW = axi_data_width,
+      INTERNAL_MEM_SIZE = 0x1000,
+      INTERNAL_MEM_DW = axi_data_width,
+      INTERNAL_MEM_BASE = 0
+    )
+  )
 
   axi_mem.io <> axi_master
 
@@ -33,10 +41,16 @@ class DummyDCache extends Module {
   axi_master.ar.bits.len := 0.U
   axi_master.ar.bits.id := 0.U
 
+  val load_req_buf = RegEnable(io.load_req.bits, io.load_req.fire)
+
   // r
   io.load_resp.valid := axi_master.r.valid
   axi_master.r.ready := io.load_resp.ready
-  io.load_resp.bits.data := axi_master.r.bits.data
+  io.load_resp.bits.data := GetRdata(
+    axi_master.r.bits.data,
+    load_req_buf.paddr,
+    load_req_buf.size
+  )
 
   when(axi_master.r.fire) {
     assert(axi_master.r.bits.id === 0.U, "axi_master.r.bits.id === 0.U")

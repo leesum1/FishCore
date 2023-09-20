@@ -4,7 +4,7 @@ import chisel3.util.{Decoupled, Enum, Queue, is, switch}
 class LoadQueueIn extends Bundle {
   val paddr = UInt(64.W)
   // 0: 1 byte, 1: 2 bytes, 2: 4 bytes, 3: 8 bytes
-  val size = UInt(3.W)
+  val size = UInt(2.W)
   val is_mmio = Bool()
 }
 

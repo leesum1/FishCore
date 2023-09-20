@@ -58,7 +58,7 @@ class ScoreBoard(
       val fu_alu_wb = Input(UInt(64.W))
       val fu_alu_wb_valid = Input(Bool())
       val fu_alu_exception =
-        Input(new ExceptionEntry()) // use for fetch exception
+        Input(new ExceptionEntry(has_valid = true)) // use for fetch exception
       // branch
       val fu_branch_valid = Input(Bool())
       val fu_branch_id = Input(UInt(log2Ceil(entries).W))
@@ -72,17 +72,17 @@ class ScoreBoard(
       val fu_load_wb = Input(UInt(64.W))
       val fu_load_wb_valid = Input(Bool())
       val fu_load_io_space = Input(Bool()) // io space load,such as uart
-      val fu_load_exception = Input(new ExceptionEntry())
+      val fu_load_exception = Input(new ExceptionEntry(has_valid = true))
       // store
       val fu_store_valid = Input(Bool())
       val fu_store_id = Input(UInt(log2Ceil(entries).W))
-      val fu_store_exception = Input(new ExceptionEntry())
+      val fu_store_exception = Input(new ExceptionEntry(has_valid = true))
       // mul_div
       val fu_mul_div_valid = Input(Bool())
       val fu_mul_div_id = Input(UInt(log2Ceil(entries).W))
       val fu_mul_div_wb = Input(UInt(64.W))
       val fu_mul_div_wb_valid = Input(Bool())
-      val fu_mul_div_exception = Input(new ExceptionEntry())
+      val fu_mul_div_exception = Input(new ExceptionEntry(has_valid = true))
     }
   )
 

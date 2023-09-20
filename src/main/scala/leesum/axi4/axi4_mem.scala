@@ -1,23 +1,44 @@
 package leesum.axi4
 import chisel3._
-import chisel3.util.{Decoupled, Enum, is, switch}
+import chisel3.util.{Decoupled, Enum, is, isPow2, switch}
 import circt.stage.ChiselStage
 import leesum.GenVerilogHelper
-class AXI4Memory extends Module {
-  val io = IO(new AXISlaveIO(32, 64))
+
+import scala.math.BigInt.{int2bigInt, long2bigInt}
+class AXI4Memory(
+    AXI_AW: Int, // axi address width
+    AXI_DW: Int, // axi data width
+    INTERNAL_MEM_SIZE: Long, // internal memory size
+    INTERNAL_MEM_DW: Int, // internal memory data width
+    INTERNAL_MEM_BASE: Long // internal memory base address
+) extends Module {
+  require(AXI_DW == 32 || AXI_DW == 64, "AXI_DW must be 32 or 64")
+  require(AXI_AW == 32 || AXI_AW == 64, "AXI_AW must be 32 or 64")
+  require(AXI_DW == INTERNAL_MEM_DW, "AXI_DW must be equal to INTERNAL_MEM_DW")
+  require(
+    isPow2(INTERNAL_MEM_SIZE),
+    "INTERNAL_MEM_SIZE must be power of 2"
+  )
+  require(INTERNAL_MEM_BASE >= 0, "INTERNAL_MEM_BASE must be positive")
+  require(
+    INTERNAL_MEM_BASE % INTERNAL_MEM_SIZE == 0,
+    "INTERNAL_MEM_BASE must be multiple of INTERNAL_MEM_SIZE"
+  )
+
+  val io = IO(new AXISlaveIO(AXI_AW, AXI_DW))
   io.clear()
   ///////////////////////////////
   /// register all output signals
   ///////////////////////////////
 
-  val axi_ar = Wire(Decoupled(new AXIAddressChannel(32)))
+  val axi_ar = Wire(Decoupled(new AXIAddressChannel(AXI_AW)))
   skid_buffer(
     io.ar,
     axi_ar,
     CUT_VALID = false,
     CUT_READY = true
   )
-  val axi_aw = Wire(Decoupled(new AXIAddressChannel(32)))
+  val axi_aw = Wire(Decoupled(new AXIAddressChannel(AXI_AW)))
 
   skid_buffer(
     io.aw,
@@ -25,7 +46,7 @@ class AXI4Memory extends Module {
     CUT_VALID = false,
     CUT_READY = true
   )
-  val axi_w = Wire(Decoupled(new AXIWriteDataChannel(64)))
+  val axi_w = Wire(Decoupled(new AXIWriteDataChannel(AXI_DW)))
   skid_buffer(
     io.w,
     axi_w,
@@ -40,7 +61,7 @@ class AXI4Memory extends Module {
     CUT_VALID = true,
     CUT_READY = false
   )
-  val axi_r = Wire(Decoupled(new AXIReadDataChannel(64)))
+  val axi_r = Wire(Decoupled(new AXIReadDataChannel(AXI_DW)))
   skid_buffer(
     axi_r,
     io.r,
@@ -48,9 +69,9 @@ class AXI4Memory extends Module {
     CUT_READY = false
   )
 
-  val ADDR_WIDTH = 12
-  val DATA_WIDTH = 64
-  val BASE_ADDR = 0
+  val ADDR_WIDTH = (INTERNAL_MEM_BASE + INTERNAL_MEM_SIZE).bitLength
+  val DATA_WIDTH = INTERNAL_MEM_DW
+  val BASE_ADDR = INTERNAL_MEM_BASE
   ////////////////////////////
   /// internal memory
   ////////////////////////////
@@ -100,7 +121,7 @@ class AXI4Memory extends Module {
   // used to store the next address, used in burst modes
   val next_raddr = RegInit(0.U(32.W))
 
-  val axi_raddr_gen = Module(new AXIAddr(ADDR_WIDTH, DATA_WIDTH))
+  val axi_raddr_gen = Module(new AXIAddr(AXI_AW, AXI_DW))
   axi_raddr_gen.io.clear()
 
   def get_next_raddr(addr: UInt, len: UInt, size: UInt, burst: UInt): UInt = {
@@ -202,16 +223,16 @@ class AXI4Memory extends Module {
   val w_state = RegInit(sWIdle)
   val wburst_count = RegInit(0.U(8.W))
 
-  val aw_buf = RegInit(0.U.asTypeOf(new AXIAddressChannel(32)))
+  val aw_buf = RegInit(0.U.asTypeOf(new AXIAddressChannel(AXI_AW)))
   // used to store the next address, used in burst modes
   // TODO: 有问题吗？
-  val next_waddr = RegInit(0.U(32.W))
+  val next_waddr = RegInit(0.U(AXI_AW.W))
   when(axi_aw.fire) {
     aw_buf := axi_aw.bits
     next_waddr := axi_aw.bits.addr
   }
 
-  val axi_waddr_gen = Module(new AXIAddr(ADDR_WIDTH, DATA_WIDTH))
+  val axi_waddr_gen = Module(new AXIAddr(AXI_AW, AXI_DW))
   axi_waddr_gen.io.clear()
 
   def get_next_waddr(addr: UInt, len: UInt, size: UInt, burst: UInt): UInt = {
@@ -322,6 +343,14 @@ class fsm_test extends Module {
   io.reg_out := reg_a
 }
 object gen_verilog extends App {
-  GenVerilogHelper(new AXI4Memory())
+  GenVerilogHelper(
+    new AXI4Memory(
+      AXI_AW = 64,
+      AXI_DW = 32,
+      INTERNAL_MEM_SIZE = 0x10000,
+      INTERNAL_MEM_DW = 32,
+      INTERNAL_MEM_BASE = 0
+    )
+  )
 
 }

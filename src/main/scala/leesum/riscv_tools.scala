@@ -1551,9 +1551,10 @@ object BpType extends ChiselEnum {
   val None, Call, Return, Branch, Jal, Jalr = Value
 }
 
-class ExceptionEntry extends Bundle {
-  val tval = UInt(64.W)
+// TODO:
+class ExceptionEntry(has_valid: Boolean = true) extends Bundle {
   val valid = Bool()
+  val tval = UInt(64.W)
   val cause = ExceptionCause()
 }
 
@@ -1569,7 +1570,7 @@ class FetchEntry extends Bundle {
   val inst = UInt(32.W)
   val is_rvc = Bool()
   val is_valid = Bool()
-  val exception = new ExceptionEntry()
+  val exception = new ExceptionEntry(has_valid = true)
   val bp = new BpEntry()
 }
 
@@ -1595,7 +1596,7 @@ class ScoreBoardEntry extends Bundle {
   val use_pc =
     Bool() // set if we need to use the PC as operand a, PC from exception
   val lsu_io_space = Bool() // set if we need to use the IO space
-  val exception = new ExceptionEntry() // exception occurs
+  val exception = new ExceptionEntry(has_valid = true) // exception occurs
   val bp = new BpEntry() // branch prediction
 
   def clear_valid(): Unit = {

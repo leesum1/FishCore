@@ -50,19 +50,29 @@ object test_utils {
       .valueOf(1)
   }
 
-  def gen_rand_uint(width: Int) = {
-    // Generate a random hex string with 8 characters and prefix it with "x"
-    // such as "x12345678", "xabcdef12", etc.
-    // and than convert it to UInt(32.W)
+  def gen_rand_uint(width: Int): Gen[UInt] = {
+    require(width > 0, "width must be greater than 0")
 
-    require(width % 8 == 0, "width must be a multiple of 8")
-    require(width <= 64, "width must be less than 64")
     val uint_gen =
       Gen
-        .listOfN(width / 8, Gen.hexChar)
-        .map("x" + _.mkString)
+        .listOfN(width, Gen.oneOf('0', '1'))
+        .map("b" + _.mkString)
         .map(_.U(width.W))
 
     uint_gen
   }
+  // size: 0 -> 1 byte, 1 -> 2 bytes, 2 -> 4 bytes, 3 -> 8 bytes
+  def check_aligned(addr: Long, size: Int): Boolean = {
+    require(
+      size >= 0 && size <= 3,
+      "size must be in range [0, 3]"
+    )
+    (addr & ((1 << size) - 1)) == 0
+  }
+
+}
+
+object rand_test1 extends App {
+  val uint_gen = test_utils.gen_rand_uint(4)
+  println(uint_gen.sample.get)
 }

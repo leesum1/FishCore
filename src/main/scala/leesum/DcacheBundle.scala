@@ -32,7 +32,7 @@ class LoadDcacheReq extends Bundle {
 }
 class LoadDcacheResp extends Bundle {
   val data = UInt(64.W)
-  val exception = new ExceptionEntry()
+  val exception = new ExceptionEntry(has_valid = true)
 }
 class StoreDcacheReq extends Bundle {
   // must be aligned at 8 bytes
@@ -45,7 +45,7 @@ class StoreDcacheReq extends Bundle {
   val is_mmio = Bool()
 }
 class StoreDcacheResp extends Bundle {
-  val exception = new ExceptionEntry()
+  val exception = new ExceptionEntry(has_valid = true)
 }
 
 class ByteEnableGenerator extends Module {

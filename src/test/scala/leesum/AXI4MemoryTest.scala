@@ -20,6 +20,11 @@ import org.scalatest.freespec.AnyFreeSpec
 //  4. narrow transfer
 //  5. unaligned transfer
 class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
+  val AXI_AW = 32
+  val AXI_DW = 64 // only support 64 bit data width
+  val INTERNAL_MEM_SIZE = 0x1000
+  val INTERNAL_MEM_DW = 64
+  val INTERNAL_MEM_BASE = 0
 
   def addr_channel_gen(ADDR_WIDTH: Int, BURST_EN: Boolean) = {
     require(ADDR_WIDTH % 4 == 0, "ADDR_WIDTH must be a multiple of 4")
@@ -81,7 +86,15 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   "narrow_transfer_test" in {
-    test(new AXI4Memory())
+    test(
+      new AXI4Memory(
+        AXI_AW,
+        AXI_DW,
+        INTERNAL_MEM_SIZE,
+        INTERNAL_MEM_DW,
+        INTERNAL_MEM_BASE
+      )
+    )
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
@@ -96,7 +109,7 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
         dut.io.b.initSink()
         dut.io.b.setSinkClock(dut.clock)
 
-        val w_addr = new AXIAddressChannel(32).Lit(
+        val w_addr = new AXIAddressChannel(AXI_AW).Lit(
           _.id -> 2.U,
           _.addr -> 4.U,
           _.len -> 0.U,
@@ -110,20 +123,21 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
           _.user -> 0.U
         )
 
-        val w_data = new AXIWriteDataChannel(64).Lit(
+        val w_data = new AXIWriteDataChannel(AXI_DW).Lit(
           _.data -> "x1122334455667788".U,
-          _.strb -> 0x0f.U,
+          _.strb -> 0xf0.U,
           _.last -> true.B,
           _.user -> 0.U
         )
 
-        val r_data = new AXIReadDataChannel(64).Lit(
-          _.data -> "x0000000055667788".U,
+        val r_data = new AXIReadDataChannel(AXI_DW).Lit(
+          _.data -> "x1122334400000000".U,
           _.resp -> 0.U,
           _.last -> true.B,
           _.user -> 0.U,
           _.id -> w_addr.id
         )
+        dut.clock.step(5)
 
         // prepare write data
         dut.io.aw.enqueue(w_addr)
@@ -133,6 +147,7 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
         // read data
         dut.io.ar.enqueue(w_addr)
         dut.io.r.expectDequeue(r_data)
+        dut.clock.step(5)
 
       }
   }
@@ -140,7 +155,15 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
   // basic loopback test
   // 1. address aligned, burst transfer
   "loopback_test" in {
-    test(new AXI4Memory())
+    test(
+      new AXI4Memory(
+        AXI_AW,
+        AXI_DW,
+        INTERNAL_MEM_SIZE,
+        INTERNAL_MEM_DW,
+        INTERNAL_MEM_BASE
+      )
+    )
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
@@ -155,7 +178,7 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
         dut.io.b.initSink()
         dut.io.b.setSinkClock(dut.clock)
 
-        val aw_addr = new AXIAddressChannel(32).Lit(
+        val aw_addr = new AXIAddressChannel(AXI_AW).Lit(
           _.id -> 2.U,
           _.addr -> 8.U,
           _.len -> 31.U,
@@ -172,7 +195,7 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
         val w_seq = 0
           .to(aw_addr.len.litValue.toInt)
           .map(idx =>
-            new AXIWriteDataChannel(64).Lit(
+            new AXIWriteDataChannel(AXI_DW).Lit(
               _.data -> (idx * 1024).U,
               _.strb -> 0xff.U,
               _.last -> (idx == (aw_addr.len.litValue.toInt)).B, // Set last to true for the last element
@@ -182,7 +205,7 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
         assert(w_seq.last.last.litValue == 1)
 
         val r_seq = w_seq.map(w => {
-          new AXIReadDataChannel(64).Lit(
+          new AXIReadDataChannel(AXI_DW).Lit(
             _.data -> w.data,
             _.resp -> 0.U,
             _.last -> w.last,
@@ -208,7 +231,15 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   "back_to_back" in {
-    test(new AXI4Memory())
+    test(
+      new AXI4Memory(
+        AXI_AW,
+        AXI_DW,
+        INTERNAL_MEM_SIZE,
+        INTERNAL_MEM_DW,
+        INTERNAL_MEM_BASE
+      )
+    )
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
@@ -227,23 +258,23 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
 
         // read test data
         val ar_burst_seq =
-          0.until(10).map(_ => addr_channel_gen(32, BURST_EN = true))
+          0.until(10).map(_ => addr_channel_gen(AXI_AW, BURST_EN = true))
         val ar_single_seq =
-          0.until(10).map(_ => addr_channel_gen(32, BURST_EN = false))
+          0.until(10).map(_ => addr_channel_gen(AXI_AW, BURST_EN = false))
         // write test data
         val aw_burst_seq =
-          0.until(10).map(_ => addr_channel_gen(32, BURST_EN = true))
+          0.until(10).map(_ => addr_channel_gen(AXI_AW, BURST_EN = true))
         val w_burst_seq = aw_burst_seq.map(aw => {
-          w_channel_gen(64, aw.len.litValue.toInt)
+          w_channel_gen(AXI_DW, aw.len.litValue.toInt)
         })
         val b_burst_seq = aw_burst_seq.map(aw => {
           b_channel_gen(aw.id.litValue.toInt)
         })
 
         val aw_signal_seq =
-          0.until(10).map(_ => addr_channel_gen(32, BURST_EN = false))
+          0.until(10).map(_ => addr_channel_gen(AXI_AW, BURST_EN = false))
         val w_signal_seq = aw_signal_seq.map(aw => {
-          w_channel_gen(64, aw.len.litValue.toInt)
+          w_channel_gen(AXI_DW, aw.len.litValue.toInt)
         })
         val b_signal_seq = aw_signal_seq.map(aw => {
           b_channel_gen(aw.id.litValue.toInt)
