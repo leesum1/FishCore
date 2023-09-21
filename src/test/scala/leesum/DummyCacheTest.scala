@@ -26,11 +26,11 @@ class DummyCacheTest extends AnyFreeSpec with ChiselScalatestTester {
 //    val size = UInt(2.W)
 //    val is_mmio = Bool()
 //  }
-  def gen_store_req(paddr: UInt, wdata: UInt, wstrb: UInt) = {
+  def gen_store_req(paddr: UInt, wdata: UInt, size: UInt, wstrb: UInt) = {
     (new StoreDcacheReq).Lit(
       _.paddr -> paddr,
       _.wstrb -> wstrb,
-      _.size -> 3.U,
+      _.size -> size,
       _.wdata -> wdata,
       _.is_mmio -> false.B
     )
@@ -39,7 +39,7 @@ class DummyCacheTest extends AnyFreeSpec with ChiselScalatestTester {
   "DummyCacheTest1" in {
     test(new DummyDCache)
       .withAnnotations(
-        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+        Seq(VerilatorBackendAnnotation)
       ) { dut =>
         dut.io.load_req.initSource().setSourceClock(dut.clock)
         dut.io.load_resp.initSink().setSinkClock(dut.clock)
@@ -51,7 +51,8 @@ class DummyCacheTest extends AnyFreeSpec with ChiselScalatestTester {
         val size4 = 2.U
         val size8 = 3.U
 
-        val store_req1 = gen_store_req(0.U, "xdeadbeefdeadbeef".U, "xff".U)
+        val store_req1 =
+          gen_store_req(0.U, "xdeadbeefdeadbeef".U, size8, "xff".U)
         val store_resp1 = (new StoreDcacheResp).Lit(
           _.exception.valid -> false.B,
           _.exception.tval -> 0.U,

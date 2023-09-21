@@ -7,7 +7,6 @@ import leesum.axi4.BasicMemory
 import leesum.test_utils.{int2UInt64, long2UInt64, long2Ulong}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
-
 // TODO: when read and write the same address, there are two tactics
 // 1. write first, then read
 // 2. read first, then write
@@ -84,7 +83,15 @@ class BasicMemoryTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   "read_after_write" in {
-    test(new BasicMemory(ADDR_WIDTH = 12, DATA_WIDTH = 64, BASE_ADDR = 0))
+    test(
+      new BasicMemory(
+        ADDR_WIDTH = 12,
+        DATA_WIDTH = 64,
+        BASE_ADDR = 0,
+        memoryFile =
+          "/home/leesum/workhome/chisel-fish/src/main/resources/random_data_readmemh.txt"
+      )
+    )
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut: BasicMemory =>

@@ -15,6 +15,7 @@ object test_utils {
       x.U(64.W)
     }
   }
+
   def int2UInt32(x: Int): UInt = {
     if (x < 0) {
       // because of chisel doesn't support convert a negative number to UInt
@@ -26,6 +27,7 @@ object test_utils {
       x.U(32.W)
     }
   }
+
   def int2UInt64(x: Int): UInt = {
     long2UInt64(int2unsignedInt(x))
   }
@@ -61,6 +63,7 @@ object test_utils {
 
     uint_gen
   }
+
   // size: 0 -> 1 byte, 1 -> 2 bytes, 2 -> 4 bytes, 3 -> 8 bytes
   def check_aligned(addr: Long, size: Int): Boolean = {
     require(
@@ -70,6 +73,12 @@ object test_utils {
     (addr & ((1 << size) - 1)) == 0
   }
 
+  def byteSeq2Uint64LittleEndian(bytes: Seq[Byte]): Long = {
+    require(bytes.nonEmpty)
+    bytes.zipWithIndex.foldLeft(0L) { case (acc, (b, i)) =>
+      acc | ((b & 0xffL) << (i * 8))
+    }
+  }
 }
 
 object rand_test1 extends App {

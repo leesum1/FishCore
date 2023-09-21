@@ -9,6 +9,7 @@ class DummyDCache extends Module {
     val load_resp = Decoupled(new LoadDcacheResp)
     val store_req = Flipped(Decoupled(new StoreDcacheReq))
     val store_resp = Decoupled(new StoreDcacheResp)
+    // TODO: not support flush now
     val flush = Input(Bool())
   })
   val axi_addr_width = 32
@@ -20,9 +21,10 @@ class DummyDCache extends Module {
     new AXI4Memory(
       AXI_AW = axi_addr_width,
       AXI_DW = axi_data_width,
-      INTERNAL_MEM_SIZE = 0x1000,
+      INTERNAL_MEM_SIZE = 1024,
       INTERNAL_MEM_DW = axi_data_width,
-      INTERNAL_MEM_BASE = 0
+      INTERNAL_MEM_BASE = 0,
+      memoryFile = "src/main/resources/random_data_readmemh.txt"
     )
   )
 
@@ -51,18 +53,6 @@ class DummyDCache extends Module {
     load_req_buf.paddr,
     load_req_buf.size
   )
-
-  when(axi_master.r.fire) {
-    assert(axi_master.r.bits.id === 0.U, "axi_master.r.bits.id === 0.U")
-    assert(
-      axi_master.r.bits.resp === AXIDef.RESP_OKAY,
-      "axi_master.r.bits.resp === 0.U"
-    )
-    assert(
-      axi_master.r.bits.last === true.B,
-      "axi_master.r.bits.last === true.B"
-    )
-  }
 
   io.load_resp.bits.exception.valid := false.B
   io.load_resp.bits.exception.tval := 0.U
@@ -93,13 +83,40 @@ class DummyDCache extends Module {
   // b channel
   io.store_resp.valid := axi_master.b.valid
   axi_master.b.ready := io.store_resp.ready
-  when(axi_master.b.fire) {
-    assert(axi_master.b.bits.id === 0.U, "axi_master.b.bits.id === 0.U")
-  }
 
   io.store_resp.bits.exception.valid := false.B
   io.store_resp.bits.exception.tval := 0.U
   io.store_resp.bits.exception.cause := ExceptionCause.store_access
+
+  // --------------------------
+  // assert
+  // --------------------------
+  when(io.load_req.fire) {
+    assert(
+      CheckAligned(io.load_req.bits.paddr, io.load_req.bits.size),
+      "load address not aligned"
+    )
+  }
+  when(io.store_req.fire) {
+    assert(
+      CheckAligned(io.store_req.bits.paddr, io.store_req.bits.size),
+      "store address not aligned"
+    )
+  }
+  when(axi_master.r.fire) {
+    assert(axi_master.r.bits.id === 0.U, "axi_master.r.bits.id === 0.U")
+    assert(
+      axi_master.r.bits.resp === AXIDef.RESP_OKAY,
+      "axi_master.r.bits.resp must be OKAY"
+    )
+    assert(
+      axi_master.r.bits.last === true.B,
+      "not support burst transfer"
+    )
+  }
+  when(axi_master.b.fire) {
+    assert(axi_master.b.bits.id === 0.U, "axi_master.b.bits.id === 0.U")
+  }
 
 }
 

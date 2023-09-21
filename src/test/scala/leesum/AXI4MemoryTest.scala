@@ -161,7 +161,9 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
         AXI_DW,
         INTERNAL_MEM_SIZE,
         INTERNAL_MEM_DW,
-        INTERNAL_MEM_BASE
+        INTERNAL_MEM_BASE,
+        memoryFile =
+          "/home/leesum/workhome/chisel-fish/src/main/resources/random_data_readmemh.txt"
       )
     )
       .withAnnotations(
@@ -308,7 +310,7 @@ class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
           b_signal_seq.foreach(b => {
             dut.io.b.expectDequeue(b)
           })
-        }.join()
+        }.joinAndStep(dut.clock)
       }
   }
 }

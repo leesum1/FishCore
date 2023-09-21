@@ -10,7 +10,8 @@ class AXI4Memory(
     AXI_DW: Int, // axi data width
     INTERNAL_MEM_SIZE: Long, // internal memory size
     INTERNAL_MEM_DW: Int, // internal memory data width
-    INTERNAL_MEM_BASE: Long // internal memory base address
+    INTERNAL_MEM_BASE: Long, // internal memory base address,
+    memoryFile: String = ""
 ) extends Module {
   require(AXI_DW == 32 || AXI_DW == 64, "AXI_DW must be 32 or 64")
   require(AXI_AW == 32 || AXI_AW == 64, "AXI_AW must be 32 or 64")
@@ -75,7 +76,9 @@ class AXI4Memory(
   ////////////////////////////
   /// internal memory
   ////////////////////////////
-  val mem = Module(new BasicMemory(ADDR_WIDTH, DATA_WIDTH, BASE_ADDR))
+  val mem = Module(
+    new BasicMemory(ADDR_WIDTH, DATA_WIDTH, BASE_ADDR, memoryFile)
+  )
 
   val x = WireInit
   val i_we = WireInit(Bool(), false.B)
