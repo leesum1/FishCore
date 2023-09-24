@@ -3,13 +3,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
 import leesum.axi4.AXIDef.{BURST_INCR, SIZE_4, SIZE_8}
-import leesum.axi4.{
-  AXI4Memory,
-  AXIAddressChannel,
-  AXIReadDataChannel,
-  AXIWriteDataChannel,
-  AXIWriteResponseChannel
-}
+import leesum.axi4._
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 

@@ -1,10 +1,8 @@
 package leesum
 import chisel3._
-import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
-import chiseltest.simulator.WriteVcdAnnotation
 import leesum.axi4.BasicMemory
-import leesum.test_utils.{int2UInt64, long2UInt64, long2Ulong}
+import leesum.test_utils.long2UInt64
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 // TODO: when read and write the same address, there are two tactics

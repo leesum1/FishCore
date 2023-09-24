@@ -1,8 +1,7 @@
 package leesum
 
 import chisel3._
-import chiseltest._
-import chiseltest.ChiselScalatestTester
+import chiseltest.{ChiselScalatestTester, _}
 import leesum.test_utils.gen_rand_uint
 import org.scalatest.freespec.AnyFreeSpec
 

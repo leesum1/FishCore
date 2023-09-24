@@ -1,9 +1,12 @@
 package leesum
 import chisel3._
-import chisel3.util.{Cat, Decoupled, MuxLookup, RegEnable, is, switch}
+import chisel3.util.{Cat, Decoupled, MuxLookup, Queue, RegEnable, is, switch}
 import leesum.axi4.{AXI4Memory, AXIDef, AXIMasterIO, StreamFork}
 
-class DummyDCache extends Module {
+/** DummyDCache,actually there is no cache, just convert load and store req to
+  * axi memory req
+  */
+class DummyDCache(memoryFIle: String = "") extends Module {
   val io = IO(new Bundle {
     val load_req = Flipped(Decoupled(new LoadDcacheReq))
     val load_resp = Decoupled(new LoadDcacheResp)
@@ -24,34 +27,43 @@ class DummyDCache extends Module {
       INTERNAL_MEM_SIZE = 1024,
       INTERNAL_MEM_DW = axi_data_width,
       INTERNAL_MEM_BASE = 0,
-      memoryFile = "src/main/resources/random_data_readmemh.txt"
+      memoryFile = memoryFIle
     )
   )
 
   axi_mem.io <> axi_master
 
-  axi_master.clear()
+  axi_master.ar.bits := DontCare
+  axi_master.aw.bits := DontCare
+  axi_master.w.bits := DontCare
+
   // --------------------------
   // load to axi
   // --------------------------
   // ar
-  axi_master.ar.valid := io.load_req.valid
-  io.load_req.ready := axi_master.ar.ready
+
+  val load_req_fork = Module(new StreamFork(new LoadDcacheReq, 2))
+  load_req_fork.io.input <> io.load_req
+
+  axi_master.ar.valid := load_req_fork.io.outputs(0).valid
+  load_req_fork.io.outputs(0).ready := axi_master.ar.ready
+
   axi_master.ar.bits.addr := io.load_req.bits.paddr
   axi_master.ar.bits.size := DcacheSize2AxiSize(io.load_req.bits.size)
   axi_master.ar.bits.burst := AXIDef.BURST_INCR
   axi_master.ar.bits.len := 0.U
   axi_master.ar.bits.id := 0.U
 
-  val load_req_buf = RegEnable(io.load_req.bits, io.load_req.fire)
+  val load_req_fifo = Queue(load_req_fork.io.outputs(1), 4)
+  load_req_fifo.ready := io.load_resp.fire
 
   // r
   io.load_resp.valid := axi_master.r.valid
   axi_master.r.ready := io.load_resp.ready
   io.load_resp.bits.data := GetRdata(
     axi_master.r.bits.data,
-    load_req_buf.paddr,
-    load_req_buf.size
+    load_req_fifo.bits.paddr,
+    load_req_fifo.bits.size
   )
 
   io.load_resp.bits.exception.valid := false.B
@@ -91,6 +103,11 @@ class DummyDCache extends Module {
   // --------------------------
   // assert
   // --------------------------
+
+  when(io.load_resp.fire) {
+    assert(load_req_fifo.valid === true.B, "load_req_fifo.valid must be true")
+  }
+
   when(io.load_req.fire) {
     assert(
       CheckAligned(io.load_req.bits.paddr, io.load_req.bits.size),
@@ -104,7 +121,7 @@ class DummyDCache extends Module {
     )
   }
   when(axi_master.r.fire) {
-    assert(axi_master.r.bits.id === 0.U, "axi_master.r.bits.id === 0.U")
+    assert(axi_master.r.bits.id === 0.U, "id === 0.U")
     assert(
       axi_master.r.bits.resp === AXIDef.RESP_OKAY,
       "axi_master.r.bits.resp must be OKAY"
@@ -115,7 +132,7 @@ class DummyDCache extends Module {
     )
   }
   when(axi_master.b.fire) {
-    assert(axi_master.b.bits.id === 0.U, "axi_master.b.bits.id === 0.U")
+    assert(axi_master.b.bits.id === 0.U, "id === 0.U")
   }
 
 }

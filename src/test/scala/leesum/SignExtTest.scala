@@ -1,8 +1,7 @@
 package leesum
 
 import chisel3._
-import chiseltest._
-import chiseltest.ChiselScalatestTester
+import chiseltest.{ChiselScalatestTester, _}
 import org.scalatest.freespec.AnyFreeSpec
 
 class SignExtModule(input_width: Int, output_width: Int) extends Module {

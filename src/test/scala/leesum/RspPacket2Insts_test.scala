@@ -2,12 +2,12 @@ package leesum
 
 import chisel3._
 import chiseltest._
-import org.scalatest.freespec.AnyFreeSpec
 import chiseltest.simulator.WriteVcdAnnotation
 import net.fornwall.jelf
+import org.scalatest.freespec.AnyFreeSpec
 
-import java.nio.file.{Files, Paths}
 import java.math.BigInteger
+import java.nio.file.{Files, Paths}
 
 class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
 

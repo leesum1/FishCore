@@ -1,21 +1,8 @@
 package leesum
 import chisel3._
-import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
-import chiseltest.simulator.WriteVcdAnnotation
-import leesum.axi4.AXIDef.{
-  BURST_INCR,
-  SIZE_1,
-  SIZE_128,
-  SIZE_16,
-  SIZE_2,
-  SIZE_32,
-  SIZE_4,
-  SIZE_64,
-  SIZE_8
-}
+import leesum.axi4.AXIDef._
 import leesum.axi4.{AXIAddr, axi_addr}
-import leesum.test_utils.{int2UInt64, long2UInt64, long2Ulong}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -44,7 +31,7 @@ class RefDutCmp(ADDR_WIDTH: Int, DATA_WIDTH: Int) extends Module {
   dut.io.burst := io.burst
   io.next_addr_dut := dut.io.next_addr
 }
-class AXIaddrTest extends AnyFreeSpec with ChiselScalatestTester {
+class AXI4AddrTest extends AnyFreeSpec with ChiselScalatestTester {
   def gen_rand_input(ADDR_WIDTH: Int) = {
     val gen_addr = Gen
       .listOfN(ADDR_WIDTH / 4, Gen.hexChar)

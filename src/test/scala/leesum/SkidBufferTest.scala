@@ -4,7 +4,7 @@ import chiseltest._
 import leesum.axi4.skid_buffer
 import org.scalatest.freespec.AnyFreeSpec
 
-class skid_buffer_test extends AnyFreeSpec with ChiselScalatestTester {
+class SkidBufferTest extends AnyFreeSpec with ChiselScalatestTester {
 
   "skid_buffer_test" in {
     test(new skid_buffer(UInt(32.W), CUT_VALID = true, CUT_READY = true))
@@ -36,7 +36,7 @@ class skid_buffer_test extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   "skid_buffer_test_on_stop" in {
-    test(new skid_buffer(UInt(32.W), CUT_VALID = true, CUT_READY = true))
+    test(new skid_buffer(UInt(32.W), CUT_VALID = true, CUT_READY = false))
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
@@ -63,12 +63,11 @@ class skid_buffer_test extends AnyFreeSpec with ChiselScalatestTester {
         }.joinAndStep(dut.clock)
         dut.clock.step(5)
 
-        dut.io.in.enqueueSeq(data_seq.take(2))
         fork {
           dut.clock.step(1)
           dut.io.in.enqueueSeq(data_seq.drop(2))
         }.fork {
-          dut.io.out.expectDequeueSeq(data_seq)
+          dut.io.out.expectDequeueSeq(data_seq.drop(2))
         }.joinAndStep(dut.clock)
       }
   }

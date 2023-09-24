@@ -3,20 +3,12 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
-import leesum.axi4.AXIDef.{BURST_INCR, SIZE_4, SIZE_8}
-import leesum.axi4.{
-  AXI4Memory,
-  AXIAddressChannel,
-  AXIReadDataChannel,
-  AXIWriteDataChannel,
-  AXIWriteResponseChannel
-}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
 import scala.io.Source
 
-class LoadQueueDut extends Module {
+class LoadQueueDut(memoryFile: String) extends Module {
   val io = IO(new Bundle {
     val load_req = Flipped(Decoupled(new LoadDcacheReq))
     val load_resp = Decoupled(UInt(64.W))
@@ -26,7 +18,7 @@ class LoadQueueDut extends Module {
     val mmio_commit = Flipped(Decoupled())
   })
   val load_queue = Module(new LoadQueue())
-  val dcache = Module(new DummyDCache())
+  val dcache = Module(new DummyDCache(memoryFile))
 
   load_queue.io.in <> io.load_req
   load_queue.io.out <> io.load_resp
@@ -46,7 +38,7 @@ class LoadQueueDut extends Module {
 }
 
 object gen_load_queue_dut_verilog extends App {
-  GenVerilogHelper(new LoadQueueDut())
+  GenVerilogHelper(new LoadQueueDut(""))
 }
 
 class LoadQueueTest extends AnyFreeSpec with ChiselScalatestTester {
@@ -54,23 +46,19 @@ class LoadQueueTest extends AnyFreeSpec with ChiselScalatestTester {
   val memfile = "src/main/resources/random_data_readmemh.txt"
   val mem = Source.fromFile(memfile).map(_.toByte).toSeq
 
-//  class LoadDcacheReq extends Bundle {
-//    val paddr = UInt(64.W)
-//    val size = UInt(2.W)
-//    val is_mmio = Bool()
-//  }
-  def gen_load_req(paddr: Int, size: Int) = {
+  def gen_load_req(paddr: Int, size: Int, is_mmio: Boolean = false) = {
     require(test_utils.check_aligned(paddr, size), "paddr must be aligned")
     (new LoadDcacheReq).Lit(
       _.paddr -> paddr.U,
       _.size -> size.U,
-      _.is_mmio -> false.B
+      _.is_mmio -> is_mmio.B
     )
   }
 
   "LoadQueueTest_load_size" in {
     test(
       new LoadQueueDut(
+        memoryFile = memfile
       )
     )
       .withAnnotations(

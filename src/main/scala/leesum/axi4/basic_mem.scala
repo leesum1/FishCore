@@ -1,13 +1,20 @@
 package leesum.axi4
 
 import chisel3._
-import chisel3.util.{RegEnable, log2Ceil}
-import chisel3.experimental
-import chisel3.util.experimental.{loadMemoryFromFile, loadMemoryFromFileInline}
-import circt.stage.ChiselStage
+import chisel3.util.RegEnable
 import leesum.GenVerilogHelper
 
 import scala.io.Source
+
+class BasicMemoryIO(ADDR_WIDTH: Int, DATA_WIDTH: Int) extends Bundle {
+  val i_we = Input(Bool())
+  val i_wstrb = Input(UInt((DATA_WIDTH / 8).W))
+  val i_waddr = Input(UInt(ADDR_WIDTH.W))
+  val i_wdata = Input(UInt(DATA_WIDTH.W))
+  val i_rd = Input(Bool())
+  val i_raddr = Input(UInt(ADDR_WIDTH.W))
+  val o_rdata = Output(UInt(DATA_WIDTH.W))
+}
 
 /** sync memory with one read port and one write port, with 1 latency of read or
   * write. use SyncReadMem as internal memory
@@ -20,23 +27,16 @@ import scala.io.Source
   * @param memoryFile
   *   binary file to load into memory(not support)
   */
-class BasicMemory2(
+class BasicMemorySyncReadMem(
     ADDR_WIDTH: Int,
     DATA_WIDTH: Int,
     BASE_ADDR: Long,
     memoryFile: String = ""
 ) extends Module {
-  val io = IO(new Bundle {
-    val i_we = Input(Bool())
-    val i_wstrb = Input(UInt((DATA_WIDTH / 8).W))
-    val i_waddr = Input(UInt(ADDR_WIDTH.W))
-    val i_wdata = Input(UInt(DATA_WIDTH.W))
-    val i_rd = Input(Bool())
-    val i_raddr = Input(UInt(ADDR_WIDTH.W))
-    val o_rdata = Output(UInt(DATA_WIDTH.W))
-  })
+  val io = IO(new BasicMemoryIO(ADDR_WIDTH, DATA_WIDTH))
 
   require(DATA_WIDTH % 8 == 0, "DATA_WIDTH must be a multiple of 8")
+  require(memoryFile.trim.isEmpty, "not support initial memoryFile now")
 
   def mem_addr(addr: UInt): UInt = {
     ((addr - BASE_ADDR.U) >> 3).asUInt
@@ -48,7 +48,7 @@ class BasicMemory2(
   )
 
   val prevRdataReg = RegInit(
-    0.U(32.W)
+    0.U(DATA_WIDTH.W)
   ) // Register to hold previous output value
 
   val read_data = mem.read(mem_addr(io.i_raddr), io.i_rd).asUInt
@@ -66,7 +66,8 @@ class BasicMemory2(
     prevRdataReg := read_data
   }
 
-  io.o_rdata := Mux(RegNext(io.i_rd), read_data, prevRdataReg)
+//  io.o_rdata := Mux(RegNext(io.i_rd), read_data, prevRdataReg)
+  io.o_rdata := read_data
 }
 
 /** sync memory with one read port and one write port, with 1 latency of read or
@@ -81,21 +82,13 @@ class BasicMemory2(
   * @param memoryFile
   *   binary file to load into memory
   */
-class BasicMemory(
+class BasicMemoryVec(
     ADDR_WIDTH: Int,
     DATA_WIDTH: Int,
     BASE_ADDR: Long,
     memoryFile: String = ""
 ) extends Module {
-  val io = IO(new Bundle {
-    val i_we = Input(Bool())
-    val i_wstrb = Input(UInt((DATA_WIDTH / 8).W))
-    val i_waddr = Input(UInt(ADDR_WIDTH.W))
-    val i_wdata = Input(UInt(DATA_WIDTH.W))
-    val i_rd = Input(Bool())
-    val i_raddr = Input(UInt(ADDR_WIDTH.W))
-    val o_rdata = Output(UInt(DATA_WIDTH.W))
-  })
+  val io = IO(new BasicMemoryIO(ADDR_WIDTH, DATA_WIDTH))
 
   require(DATA_WIDTH % 8 == 0, "DATA_WIDTH must be a multiple of 8")
 
@@ -105,7 +98,7 @@ class BasicMemory(
   // -------------------------
   // init memory from file
   // -------------------------
-  val contentsDelayed = if (!memoryFile.trim.isEmpty) {
+  val contentsDelayed = if (memoryFile.trim.nonEmpty) {
     Source
       .fromFile(memoryFile)
       .map(_.toByte)
@@ -115,7 +108,7 @@ class BasicMemory(
   }
   // reference: https://github.com/chipsalliance/rocket-chip/blob/master/src/main/scala/devices/tilelink/BootROM.scala#L44
   val contents = contentsDelayed
-  val addrSize = (1 << ADDR_WIDTH)
+  val addrSize = 1 << ADDR_WIDTH
   val beatBytes = DATA_WIDTH / 8
   require(contents.size <= addrSize)
 
@@ -137,8 +130,9 @@ class BasicMemory(
   // -------------------------
   // Read logic
   // -------------------------
+  val read_addr = mem_addr(io.i_raddr)
   val read_data = RegEnable(
-    mem(mem_addr(io.i_raddr)),
+    mem(read_addr),
     io.i_rd
   )
   // -------------------------
@@ -158,7 +152,7 @@ class BasicMemory(
   }
 
   val prevRdataReg = RegInit(
-    0.U(32.W)
+    0.U(DATA_WIDTH.W)
   ) // Register to hold previous output value
 
   // Register to hold previous output value
@@ -167,6 +161,39 @@ class BasicMemory(
   }
 
   io.o_rdata := Mux(RegNext(io.i_rd), read_data.asUInt, prevRdataReg)
+}
+
+/** Because of Chisel's SyncReadMem does not support initial memory, so we use
+  * self-defined memory module instead.
+  * @param ADDR_WIDTH
+  * @param DATA_WIDTH
+  * @param BASE_ADDR
+  * @param memoryFile
+  */
+class BasicMemory(
+    ADDR_WIDTH: Int,
+    DATA_WIDTH: Int,
+    BASE_ADDR: Long,
+    memoryFile: String = ""
+) extends Module {
+  val io = IO(new BasicMemoryIO(ADDR_WIDTH, DATA_WIDTH))
+  if (memoryFile.trim.isEmpty) {
+    val mem =
+      Module(
+        new BasicMemorySyncReadMem(
+          ADDR_WIDTH,
+          DATA_WIDTH,
+          BASE_ADDR,
+          memoryFile
+        )
+      )
+    io <> mem.io
+  } else {
+    val memVec = Module(
+      new BasicMemoryVec(ADDR_WIDTH, DATA_WIDTH, BASE_ADDR, memoryFile)
+    )
+    io <> memVec.io
+  }
 }
 
 object gen_basic_mem_verilog extends App {

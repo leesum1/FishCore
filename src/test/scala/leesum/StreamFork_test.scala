@@ -1,7 +1,7 @@
 package leesum
 import chisel3._
 import chiseltest._
-import leesum.axi4.{StreamFork, skid_buffer}
+import leesum.axi4.StreamFork
 import org.scalatest.freespec.AnyFreeSpec
 
 class StreamFork_test extends AnyFreeSpec with ChiselScalatestTester {

@@ -1,12 +1,7 @@
 package leesum
 import chisel3._
-import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
-import chisel3.experimental.VecLiterals.AddObjectLiteralConstructor
 import chiseltest._
-import chiseltest.simulator.WriteVcdAnnotation
-import leesum.axi4.fsm_test
-import leesum.test_utils.{int2UInt32, int2UInt64, long2UInt64, long2Ulong}
-import org.scalacheck.Gen
+import leesum.test_utils.int2UInt32
 import org.scalatest.freespec.AnyFreeSpec
 
 import scala.util.Random

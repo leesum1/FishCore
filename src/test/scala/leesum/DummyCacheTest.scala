@@ -2,10 +2,7 @@ package leesum
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
-import leesum.axi4.{StreamFork, skid_buffer}
-import leesum.test_utils.gen_rand_uint
 import org.scalatest.freespec.AnyFreeSpec
-import org.scalacheck.Gen
 
 class DummyCacheTest extends AnyFreeSpec with ChiselScalatestTester {
 
@@ -26,13 +23,19 @@ class DummyCacheTest extends AnyFreeSpec with ChiselScalatestTester {
 //    val size = UInt(2.W)
 //    val is_mmio = Bool()
 //  }
-  def gen_store_req(paddr: UInt, wdata: UInt, size: UInt, wstrb: UInt) = {
+  def gen_store_req(
+      paddr: UInt,
+      wdata: UInt,
+      size: UInt,
+      wstrb: UInt,
+      is_mmio: Boolean = false
+  ) = {
     (new StoreDcacheReq).Lit(
       _.paddr -> paddr,
       _.wstrb -> wstrb,
       _.size -> size,
       _.wdata -> wdata,
-      _.is_mmio -> false.B
+      _.is_mmio -> is_mmio.B
     )
   }
 

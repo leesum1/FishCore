@@ -137,8 +137,13 @@ object skid_buffer {
     val buffer = Module(
       new skid_buffer(in.bits.cloneType, CUT_VALID, CUT_READY)
     )
-    buffer.io.in <> in
-    buffer.io.out <> out
+    buffer.io.in.valid := in.valid
+    in.ready := buffer.io.in.ready
+    buffer.io.in.bits := in.bits
+
+    out.valid := buffer.io.out.valid
+    buffer.io.out.ready := out.ready
+    out.bits := buffer.io.out.bits
   }
 }
 

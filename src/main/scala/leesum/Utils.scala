@@ -25,7 +25,7 @@ object GenVerilogHelper {
         "--strip-debug-info",
         "--lowering-options=disallowLocalVariables,disallowPackedArrays",
         //        "--split-verilog",
-//        "--lower-memories",
+        "--lower-memories",
         "--ignore-read-enable-mem",
         "-o=" + file_path,
         "-O=release"
@@ -258,28 +258,28 @@ object GetRdata {
     switch(size) {
       is(0.U) {
         switch(offset) {
-          is(0.U) { rdata_aligned := Cat(0.U(56), rdata(7, 0)) }
-          is(1.U) { rdata_aligned := Cat(0.U(56), rdata(15, 8)) }
-          is(2.U) { rdata_aligned := Cat(0.U(56), rdata(23, 16)) }
-          is(3.U) { rdata_aligned := Cat(0.U(56), rdata(31, 24)) }
-          is(4.U) { rdata_aligned := Cat(0.U(56), rdata(39, 32)) }
-          is(5.U) { rdata_aligned := Cat(0.U(56), rdata(47, 40)) }
-          is(6.U) { rdata_aligned := Cat(0.U(56), rdata(55, 48)) }
-          is(7.U) { rdata_aligned := Cat(0.U(56), rdata(63, 56)) }
+          is(0.U) { rdata_aligned := Cat(0.U(56.W), rdata(7, 0)) }
+          is(1.U) { rdata_aligned := Cat(0.U(56.W), rdata(15, 8)) }
+          is(2.U) { rdata_aligned := Cat(0.U(56.W), rdata(23, 16)) }
+          is(3.U) { rdata_aligned := Cat(0.U(56.W), rdata(31, 24)) }
+          is(4.U) { rdata_aligned := Cat(0.U(56.W), rdata(39, 32)) }
+          is(5.U) { rdata_aligned := Cat(0.U(56.W), rdata(47, 40)) }
+          is(6.U) { rdata_aligned := Cat(0.U(56.W), rdata(55, 48)) }
+          is(7.U) { rdata_aligned := Cat(0.U(56.W), rdata(63, 56)) }
         }
       }
       is(1.U) {
         switch(offset) {
-          is(0.U) { rdata_aligned := Cat(0.U(48), rdata(15, 0)) }
-          is(2.U) { rdata_aligned := Cat(0.U(48), rdata(31, 16)) }
-          is(4.U) { rdata_aligned := Cat(0.U(48), rdata(47, 32)) }
-          is(6.U) { rdata_aligned := Cat(0.U(48), rdata(63, 48)) }
+          is(0.U) { rdata_aligned := Cat(0.U(48.W), rdata(15, 0)) }
+          is(2.U) { rdata_aligned := Cat(0.U(48.W), rdata(31, 16)) }
+          is(4.U) { rdata_aligned := Cat(0.U(48.W), rdata(47, 32)) }
+          is(6.U) { rdata_aligned := Cat(0.U(48.W), rdata(63, 48)) }
         }
       }
       is(2.U) {
         switch(offset) {
-          is(0.U) { rdata_aligned := Cat(0.U(32), rdata(31, 0)) }
-          is(4.U) { rdata_aligned := Cat(0.U(32), rdata(63, 32)) }
+          is(0.U) { rdata_aligned := Cat(0.U(32.W), rdata(31, 0)) }
+          is(4.U) { rdata_aligned := Cat(0.U(32.W), rdata(63, 32)) }
         }
       }
       is(3.U) { rdata_aligned := rdata }

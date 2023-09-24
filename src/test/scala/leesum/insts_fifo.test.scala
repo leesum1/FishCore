@@ -2,14 +2,11 @@ package leesum
 
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
-import chisel3.experimental.VecLiterals.{
-  AddObjectLiteralConstructor,
-  AddVecLiteralConstructor
-}
+import chisel3.experimental.VecLiterals.AddObjectLiteralConstructor
 import chiseltest._
+import chiseltest.simulator.WriteVcdAnnotation
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
-import chiseltest.simulator.WriteVcdAnnotation
 
 class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
 

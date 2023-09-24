@@ -39,7 +39,7 @@ class StoreDcacheReq extends Bundle {
   val paddr = UInt(64.W)
   // wdata should be aligned with wstrb
   val wdata = UInt(64.W)
-  // mask of wdata, same as wstrb in AXI4
+  // same as wstrb in AXI4
   val wstrb = UInt(8.W)
   val size = UInt(2.W)
   val is_mmio = Bool()

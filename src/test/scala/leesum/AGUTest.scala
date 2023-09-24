@@ -3,8 +3,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
-import leesum.axi4.{StreamFork, skid_buffer}
-import leesum.test_utils.{check_aligned, gen_rand_uint, int2UInt64, long2UInt64}
+import leesum.test_utils.{check_aligned, gen_rand_uint, long2UInt64}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -32,7 +31,7 @@ object gen_agu_dut_verilog extends App {
   GenVerilogHelper(new AGU_dut())
 }
 
-class AGU_test extends AnyFreeSpec with ChiselScalatestTester {
+class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
 
   def gen_agu_in_input(): Gen[AGUIn] = {
     val op_a = gen_rand_uint(64)

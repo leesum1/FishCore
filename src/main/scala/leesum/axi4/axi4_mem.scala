@@ -11,7 +11,7 @@ class AXI4Memory(
     INTERNAL_MEM_SIZE: Long, // internal memory size
     INTERNAL_MEM_DW: Int, // internal memory data width
     INTERNAL_MEM_BASE: Long, // internal memory base address,
-    memoryFile: String = ""
+    memoryFile: String = "" // initial value of internal memory
 ) extends Module {
   require(AXI_DW == 32 || AXI_DW == 64, "AXI_DW must be 32 or 64")
   require(AXI_AW == 32 || AXI_AW == 64, "AXI_AW must be 32 or 64")
@@ -27,7 +27,7 @@ class AXI4Memory(
   )
 
   val io = IO(new AXISlaveIO(AXI_AW, AXI_DW))
-  io.clear()
+
   ///////////////////////////////
   /// register all output signals
   ///////////////////////////////
@@ -76,9 +76,8 @@ class AXI4Memory(
   ////////////////////////////
   /// internal memory
   ////////////////////////////
-  val mem = Module(
-    new BasicMemory(ADDR_WIDTH, DATA_WIDTH, BASE_ADDR, memoryFile)
-  )
+  val mem =
+    Module(new BasicMemory(ADDR_WIDTH, DATA_WIDTH, BASE_ADDR, memoryFile))
 
   val x = WireInit
   val i_we = WireInit(Bool(), false.B)
@@ -348,10 +347,10 @@ class fsm_test extends Module {
 object gen_verilog extends App {
   GenVerilogHelper(
     new AXI4Memory(
-      AXI_AW = 64,
-      AXI_DW = 32,
-      INTERNAL_MEM_SIZE = 0x10000,
-      INTERNAL_MEM_DW = 32,
+      AXI_AW = 32,
+      AXI_DW = 64,
+      INTERNAL_MEM_SIZE = 0x1000,
+      INTERNAL_MEM_DW = 64,
       INTERNAL_MEM_BASE = 0
     )
   )

@@ -2,10 +2,9 @@ package leesum
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
-import leesum.axi4.{StreamFork, skid_buffer}
 import leesum.test_utils.gen_rand_uint
-import org.scalatest.freespec.AnyFreeSpec
 import org.scalacheck.Gen
+import org.scalatest.freespec.AnyFreeSpec
 
 class DummyTLBTest extends AnyFreeSpec with ChiselScalatestTester {
 

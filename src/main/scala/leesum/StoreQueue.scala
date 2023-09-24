@@ -1,7 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Decoupled, Enum, is, log2Ceil, switch}
+import chisel3.util.{Cat, Decoupled, Enum, is, log2Ceil, switch}
 
 class StoreQueueIn extends Bundle {
   val store_data = UInt(64.W)
@@ -19,7 +19,7 @@ class StoreQueue extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new StoreQueueIn))
     val flush = Input(Bool())
-    val store_commit = Input(Bool())
+    val store_commit = Flipped(Decoupled(Bool()))
     val dcache_req = Decoupled(new StoreDcacheReq)
     val dcache_resp = Flipped(Decoupled(new StoreDcacheResp))
   })
@@ -41,23 +41,36 @@ class StoreQueue extends Module {
   val speculate_fifo_empty = speculate_num_counter === 0.U
   val speculate_fifo_full =
     speculate_num_counter === speculate_store_queue_size.U
-  def speculate_push(entry: StoreQueueIn): Unit = {
-    speculate_store_fifo(speculate_push_ptr).bits := entry
-    speculate_store_fifo(speculate_push_ptr).valid := true.B
-    speculate_push_ptr := speculate_push_ptr + 1.U
-    speculate_num_counter := speculate_num_counter + 1.U
+
+  def speculate_push_pop_cond(
+      push_cond: Bool,
+      pop_cond: Bool,
+      entry: StoreQueueIn
+  ): Unit = {
+    when(push_cond) {
+      speculate_store_fifo(speculate_push_ptr).bits := entry
+      speculate_store_fifo(speculate_push_ptr).valid := true.B
+
+      speculate_push_ptr := speculate_push_ptr + 1.U
+      speculate_num_counter := speculate_num_counter + 1.U
+    }
+    when(pop_cond) {
+      speculate_store_fifo(speculate_pop_ptr).valid := false.B
+      speculate_pop_ptr := speculate_pop_ptr + 1.U
+      speculate_num_counter := speculate_num_counter - 1.U
+    }
+    when(push_cond && pop_cond) {
+      speculate_num_counter := speculate_num_counter
+    }
   }
-  def speculate_pop(): Unit = {
-    speculate_store_fifo(speculate_pop_ptr).valid := false.B
-    speculate_pop_ptr := speculate_pop_ptr + 1.U
-    speculate_num_counter := speculate_num_counter - 1.U
-  }
-  def speculate_flush(): Unit = {
-    speculate_push_ptr := 0.U
-    speculate_pop_ptr := 0.U
-    speculate_num_counter := 0.U
-    0.until(speculate_store_queue_size).foreach { i =>
-      speculate_store_fifo(i).valid := false.B
+  def speculate_flush(flush_cond: Bool): Unit = {
+    when(flush_cond) {
+      speculate_push_ptr := 0.U
+      speculate_pop_ptr := 0.U
+      speculate_num_counter := 0.U
+      0.until(speculate_store_queue_size).foreach { i =>
+        speculate_store_fifo(i).valid := false.B
+      }
     }
   }
 
@@ -79,17 +92,27 @@ class StoreQueue extends Module {
   val commit_fifo_full =
     commit_num_counter === commit_store_queue_size.U
 
-  def commit_push(entry: StoreQueueIn): Unit = {
-    commit_store_fifo(commit_push_ptr).bits := entry
-    commit_store_fifo(commit_push_ptr).valid := true.B
-    commit_push_ptr := commit_push_ptr + 1.U
-    commit_num_counter := commit_num_counter + 1.U
+  def commit_push_pop_cond(
+      push_cond: Bool,
+      pop_cond: Bool,
+      entry: StoreQueueIn
+  ): Unit = {
+    when(push_cond) {
+      commit_store_fifo(commit_push_ptr).bits := entry
+      commit_store_fifo(commit_push_ptr).valid := true.B
+      commit_push_ptr := commit_push_ptr + 1.U
+      commit_num_counter := commit_num_counter + 1.U
+    }
+    when(pop_cond) {
+      commit_store_fifo(commit_pop_ptr).valid := false.B
+      commit_pop_ptr := commit_pop_ptr + 1.U
+      commit_num_counter := commit_num_counter - 1.U
+    }
+    when(push_cond && pop_cond) {
+      commit_num_counter := commit_num_counter
+    }
   }
-  def commit_pop(): Unit = {
-    commit_store_fifo(commit_pop_ptr).valid := false.B
-    commit_pop_ptr := commit_pop_ptr + 1.U
-    commit_num_counter := commit_num_counter - 1.U
-  }
+
   def commit_flush(): Unit = {
     commit_push_ptr := 0.U
     commit_pop_ptr := 0.U
@@ -102,27 +125,26 @@ class StoreQueue extends Module {
   // speculate store queue logic
   // --------------------------
   io.in.ready := !speculate_fifo_full
-  when(io.in.fire) {
-    speculate_push(io.in.bits)
-  }
-  when(io.store_commit & !commit_fifo_full) {
-    speculate_pop()
-  }
-  when(io.flush) {
-    speculate_flush()
-  }
+
+  speculate_push_pop_cond(
+    io.in.fire,
+    io.store_commit.fire,
+    io.in.bits
+  )
+  speculate_flush(io.flush)
+
   // -----------------------
   // commit store queue logic
   // -----------------------
-
-  // when get a store commit signal, change speculate store queue to commit store queue
-  when(io.store_commit & !commit_fifo_full) {
-    commit_push(speculate_store_fifo(speculate_pop_ptr).bits)
-  }
   val commit_pop_cond = WireInit(false.B)
-  when(commit_pop_cond) {
-    commit_pop()
-  }
+
+  // when get a store commit signal, transfer speculate store queue to commit store queue
+  commit_push_pop_cond(
+    io.store_commit.fire,
+    commit_pop_cond,
+    speculate_store_fifo.read(speculate_pop_ptr).bits
+  )
+
   // ----------------------------
   // Dcache logic & memory logic
   // ----------------------------
@@ -140,7 +162,6 @@ class StoreQueue extends Module {
       is_mmio: Bool
   ): Unit = {
     io.dcache_req.valid := true.B
-//    io.dcache_req.bits.mask := mask
     io.dcache_req.bits.paddr := paddr
     io.dcache_req.bits.wdata := GenWdataAlign(data, paddr)
     io.dcache_req.bits.wstrb := GenWstrb(paddr, size)
@@ -160,20 +181,37 @@ class StoreQueue extends Module {
       when(!commit_fifo_empty) {
         val entry = commit_store_fifo(commit_pop_ptr)
         assert(entry.valid, "commit store queue must be valid")
-        val paddr = entry.bits.paddr
-        val data = entry.bits.store_data
-        val size = entry.bits.size
-        val is_mmio = entry.bits.is_mmio
-        sen_dcache_store_req(paddr, data, size, is_mmio)
+        sen_dcache_store_req(
+          entry.bits.paddr,
+          entry.bits.store_data,
+          entry.bits.size,
+          entry.bits.is_mmio
+        )
       }
     }
     is(sWaitDcacheResp) {
       io.dcache_resp.ready := true.B
       when(io.dcache_resp.fire) {
-        state := sIdle
+        when(!commit_fifo_empty) {
+          val entry = commit_store_fifo(commit_pop_ptr)
+          assert(entry.valid, "commit store queue must be valid")
+          sen_dcache_store_req(
+            entry.bits.paddr,
+            entry.bits.store_data,
+            entry.bits.size,
+            entry.bits.is_mmio
+          )
+        }.otherwise {
+          state := sIdle
+        }
+
       }
     }
   }
+  // ----------------------
+  // store commit logic
+  // ----------------------
+  io.store_commit.ready := !speculate_fifo_empty && !commit_fifo_full
 }
 
 object gen_store_queue_verilog extends App {
