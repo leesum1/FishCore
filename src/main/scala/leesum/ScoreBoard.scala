@@ -1,7 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Fill, Mux1H, PopCount, isPow2, log2Ceil}
+import chisel3.util.{Mux1H, PopCount, isPow2, log2Ceil}
 
 class OperandByPassIO extends Bundle {
   val rs1_addr = Input(UInt(5.W))

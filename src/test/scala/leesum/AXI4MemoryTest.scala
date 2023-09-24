@@ -16,7 +16,7 @@ import org.scalatest.freespec.AnyFreeSpec
 class AXI4MemoryTest extends AnyFreeSpec with ChiselScalatestTester {
   val AXI_AW = 32
   val AXI_DW = 64 // only support 64 bit data width
-  val INTERNAL_MEM_SIZE = 0x1000
+  val INTERNAL_MEM_SIZE = 2048
   val INTERNAL_MEM_DW = 64
   val INTERNAL_MEM_BASE = 0
 

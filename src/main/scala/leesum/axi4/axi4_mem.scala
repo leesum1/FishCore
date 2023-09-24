@@ -1,6 +1,6 @@
 package leesum.axi4
 import chisel3._
-import chisel3.util.{Decoupled, Enum, is, isPow2, switch}
+import chisel3.util.{Decoupled, Enum, is, isPow2, log2Ceil, switch}
 import circt.stage.ChiselStage
 import leesum.GenVerilogHelper
 
@@ -70,7 +70,7 @@ class AXI4Memory(
     CUT_READY = false
   )
 
-  val ADDR_WIDTH = (INTERNAL_MEM_BASE + INTERNAL_MEM_SIZE).bitLength
+  val ADDR_WIDTH = log2Ceil(INTERNAL_MEM_BASE + INTERNAL_MEM_SIZE)
   val DATA_WIDTH = INTERNAL_MEM_DW
   val BASE_ADDR = INTERNAL_MEM_BASE
   ////////////////////////////

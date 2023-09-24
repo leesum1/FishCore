@@ -1,6 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, DecoupledIO, Enum, Queue, is, switch}
+import chisel3.util.{Decoupled, Enum, Queue, is, switch}
 class LoadQueueIn extends Bundle {
   val paddr = UInt(64.W)
   // 0: 1 byte, 1: 2 bytes, 2: 4 bytes, 3: 8 bytes
@@ -25,16 +25,19 @@ class LoadQueue extends Module {
     load_queue_size,
     flush = Some(io.flush)
   )
+
+  // push a pipeline to the output
   val out_pipe = Module(new PipeLine(UInt(64.W)))
   out_pipe.io.out <> io.out
   out_pipe.io.flush := io.flush
 
+  // initialize value of valid-ready io
   load_queue_out.ready := false.B
-  io.dcache_req.valid := false.B
-  io.dcache_req.bits.paddr := 0.U
-  io.dcache_req.bits.size := 0.U
-  io.dcache_req.bits.is_mmio := false.B
   io.dcache_resp.ready := false.B
+
+  io.dcache_req.valid := false.B
+  io.dcache_req.bits := DontCare
+
   out_pipe.io.in.valid := false.B
   out_pipe.io.in.bits := DontCare
 
@@ -49,6 +52,7 @@ class LoadQueue extends Module {
     io.dcache_req.bits.size := size
     io.dcache_req.bits.is_mmio := is_mmio
     when(io.dcache_req.fire) {
+      assert(load_queue_out.valid, "load_queue_out should be valid")
       load_queue_out.ready := true.B
       state := sWaitDcacheResp
     }.otherwise {
@@ -74,6 +78,7 @@ class LoadQueue extends Module {
       io.dcache_resp.ready := out_pipe.io.in.ready
       // TODO: Improve me, back by back
       when(io.dcache_resp.fire && !io.flush) {
+        // 1. flush is false, and dcache_resp is fire, receive the data
         out_pipe.io.in.valid := true.B
         out_pipe.io.in.bits := io.dcache_resp.bits.data
         when(out_pipe.io.in.fire) {
@@ -82,18 +87,34 @@ class LoadQueue extends Module {
           assert(false.B, "out_pipe.io.in.fire should be true.B")
         }
       }.elsewhen(io.dcache_resp.fire && io.flush) {
+        // 2. flush is true, and dcache_resp is fire, discard the data
         state := sIdle
       }.elsewhen(!io.dcache_resp.fire && io.flush) {
+        // 3. flush is true, and dcache_resp is not fire, go to flush state to wait dcache_resp
         state := sFlush
+      }.otherwise {
+        // 4. flush is false, and dcache_resp is not fire, wait dcache_resp
+        state := sWaitDcacheResp
       }
     }
     is(sFlush) {
+      // if send a dcache_req, and do not receive a dcache_resp before flush.
+      // wait dcache_resp, and discard the data
       io.dcache_resp.ready := true.B
       when(io.dcache_resp.fire) {
         state := sIdle
       }
     }
   }
+
+  // ----------------------
+  // assert
+  // ----------------------
+  assert(
+    !(io.flush && io.mmio_commit.valid),
+    "flush and mmio_commit should not be true at the same time"
+  )
+
 }
 
 object gen_load_queue_verilog extends App {

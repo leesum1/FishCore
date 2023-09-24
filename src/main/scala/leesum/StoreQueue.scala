@@ -1,7 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Cat, Decoupled, Enum, is, log2Ceil, switch}
+import chisel3.util.{Decoupled, Enum, is, isPow2, log2Ceil, switch}
 
 class StoreQueueIn extends Bundle {
   val store_data = UInt(64.W)
@@ -15,7 +15,15 @@ class StoreFIFOEntry extends Bundle {
   val bits = new StoreQueueIn
 }
 
-class StoreQueue extends Module {
+class StoreQueue(
+    speculate_store_queue_size: Int = 4,
+    commit_store_queue_size: Int = 4
+) extends Module {
+  require(
+    isPow2(speculate_store_queue_size) && isPow2(commit_store_queue_size),
+    "speculate_store_queue_size and commit_store_queue_size must be power of 2"
+  )
+
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new StoreQueueIn))
     val flush = Input(Bool())
@@ -23,8 +31,6 @@ class StoreQueue extends Module {
     val dcache_req = Decoupled(new StoreDcacheReq)
     val dcache_resp = Flipped(Decoupled(new StoreDcacheResp))
   })
-  val speculate_store_queue_size = 4
-  val commit_store_queue_size = 4
 
   // --------------------------
   // speculate store queue
@@ -154,57 +160,42 @@ class StoreQueue extends Module {
   io.dcache_req.valid := false.B
   io.dcache_req.bits := DontCare
   io.dcache_resp.ready := false.B
+  commit_pop_cond := false.B
 
-  def sen_dcache_store_req(
-      paddr: UInt,
-      data: UInt,
-      size: UInt,
-      is_mmio: Bool
-  ): Unit = {
-    io.dcache_req.valid := true.B
-    io.dcache_req.bits.paddr := paddr
-    io.dcache_req.bits.wdata := GenWdataAlign(data, paddr)
-    io.dcache_req.bits.wstrb := GenWstrb(paddr, size)
-    io.dcache_req.bits.size := size
-    io.dcache_req.bits.is_mmio := is_mmio
-    when(io.dcache_req.fire) {
-      state := sWaitDcacheResp
-      commit_pop_cond := true.B
+  def send_dcache_store_req() = {
+    when(!commit_fifo_empty) {
+      val entry = commit_store_fifo(commit_pop_ptr)
+      assert(entry.valid, "commit store queue must be valid")
+
+      io.dcache_req.valid := true.B
+      io.dcache_req.bits.paddr := entry.bits.paddr
+      io.dcache_req.bits.wdata := GenWdataAlign(
+        entry.bits.store_data,
+        entry.bits.paddr
+      )
+      io.dcache_req.bits.wstrb := GenWstrb(entry.bits.paddr, entry.bits.size)
+      io.dcache_req.bits.size := entry.bits.size
+      io.dcache_req.bits.is_mmio := entry.bits.is_mmio
+
+      when(io.dcache_req.fire) {
+        state := sWaitDcacheResp
+        commit_pop_cond := true.B
+      }.otherwise {
+        state := sIdle
+      }
     }.otherwise {
       state := sIdle
     }
   }
 
-  // TODO: back to back store
   switch(state) {
     is(sIdle) {
-      when(!commit_fifo_empty) {
-        val entry = commit_store_fifo(commit_pop_ptr)
-        assert(entry.valid, "commit store queue must be valid")
-        sen_dcache_store_req(
-          entry.bits.paddr,
-          entry.bits.store_data,
-          entry.bits.size,
-          entry.bits.is_mmio
-        )
-      }
+      send_dcache_store_req()
     }
     is(sWaitDcacheResp) {
       io.dcache_resp.ready := true.B
       when(io.dcache_resp.fire) {
-        when(!commit_fifo_empty) {
-          val entry = commit_store_fifo(commit_pop_ptr)
-          assert(entry.valid, "commit store queue must be valid")
-          sen_dcache_store_req(
-            entry.bits.paddr,
-            entry.bits.store_data,
-            entry.bits.size,
-            entry.bits.is_mmio
-          )
-        }.otherwise {
-          state := sIdle
-        }
-
+        send_dcache_store_req()
       }
     }
   }
@@ -212,6 +203,24 @@ class StoreQueue extends Module {
   // store commit logic
   // ----------------------
   io.store_commit.ready := !speculate_fifo_empty && !commit_fifo_full
+
+  // ----------------------
+  // assert
+  // ----------------------
+  when(io.in.fire) {
+    assert(!speculate_fifo_full, "speculate store queue must not be full")
+  }
+  when(io.store_commit.fire) {
+    assert(
+      !commit_fifo_full && !speculate_fifo_empty,
+      "commit store queue must not be full, speculate store queue must not be empty"
+    )
+  }
+  assert(
+    !(io.flush && io.store_commit.valid),
+    "flush and store_commit should not be valid at the same time"
+  )
+
 }
 
 object gen_store_queue_verilog extends App {

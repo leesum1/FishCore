@@ -282,14 +282,14 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
           dut.io.shift_in.poke(shift_op1)
           dut.io.shift_count.poke(shift_op2)
           dut.io.shift_out.expect(expect_sll64_seq(idx))
-          println(
-            "sll64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%x".format(
-              shift_op1.litValue.toLong,
-              shift_op2.litValue.toLong,
-              dut.io.shift_out.peek().litValue.toLong,
-              expect_sll64_seq(idx).litValue
-            )
-          )
+//          println(
+//            "sll64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%x".format(
+//              shift_op1.litValue.toLong,
+//              shift_op2.litValue.toLong,
+//              dut.io.shift_out.peek().litValue.toLong,
+//              expect_sll64_seq(idx).litValue
+//            )
+//          )
           dut.clock.step(1)
       })
 
@@ -324,14 +324,14 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
           dut.io.shift_in.poke(shift_op1)
           dut.io.shift_count.poke(shift_op2)
           dut.io.shift_out.expect(expect_seq(idx))
-          println(
-            "sll64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%x".format(
-              shift_op1.litValue.toLong,
-              shift_op2.litValue.toLong,
-              dut.io.shift_out.peek().litValue.toLong,
-              expect_seq(idx).litValue
-            )
-          )
+//          println(
+//            "sll64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%x".format(
+//              shift_op1.litValue.toLong,
+//              shift_op2.litValue.toLong,
+//              dut.io.shift_out.peek().litValue.toLong,
+//              expect_seq(idx).litValue
+//            )
+//          )
           dut.clock.step(1)
         }
       })
@@ -365,14 +365,14 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
           dut.io.shift_in.poke(shift_op1)
           dut.io.shift_count.poke(shift_op2)
           dut.io.shift_out.expect(expect_seq(idx).U)
-          println(
-            "srl64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%s".format(
-              shift_op1.litValue.toLong,
-              shift_op2.litValue.toLong,
-              dut.io.shift_out.peek().litValue.toLong,
-              expect_seq(idx)
-            )
-          )
+//          println(
+//            "srl64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%s".format(
+//              shift_op1.litValue.toLong,
+//              shift_op2.litValue.toLong,
+//              dut.io.shift_out.peek().litValue.toLong,
+//              expect_seq(idx)
+//            )
+//          )
           dut.clock.step(1)
         }
       })
@@ -406,14 +406,14 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
           dut.io.shift_in.poke(shift_op1)
           dut.io.shift_count.poke(shift_op2)
           dut.io.shift_out.expect(expect_seq(idx).U)
-          println(
-            "srl32: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%s".format(
-              shift_op1.litValue.toLong,
-              shift_op2.litValue.toLong,
-              dut.io.shift_out.peek().litValue.toLong,
-              expect_seq(idx)
-            )
-          )
+//          println(
+//            "srl32: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%s".format(
+//              shift_op1.litValue.toLong,
+//              shift_op2.litValue.toLong,
+//              dut.io.shift_out.peek().litValue.toLong,
+//              expect_seq(idx)
+//            )
+//          )
           dut.clock.step(1)
         }
       })
@@ -447,14 +447,14 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
           dut.io.shift_in.poke(shift_op1)
           dut.io.shift_count.poke(shift_op2)
           dut.io.shift_out.expect(expect_seq(idx).U)
-          println(
-            "sra64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%s".format(
-              shift_op1.litValue.toLong,
-              shift_op2.litValue.toLong,
-              dut.io.shift_out.peek().litValue.toLong,
-              expect_seq(idx)
-            )
-          )
+//          println(
+//            "sra64: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%s".format(
+//              shift_op1.litValue.toLong,
+//              shift_op2.litValue.toLong,
+//              dut.io.shift_out.peek().litValue.toLong,
+//              expect_seq(idx)
+//            )
+//          )
           dut.clock.step(1)
         }
       })
@@ -488,14 +488,14 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
           dut.io.shift_in.poke(shift_op1)
           dut.io.shift_count.poke(shift_op2)
           dut.io.shift_out.expect(expect_seq(idx).U)
-          println(
-            "sra32: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%s".format(
-              shift_op1.litValue.toLong,
-              shift_op2.litValue.toLong,
-              dut.io.shift_out.peek().litValue.toLong,
-              expect_seq(idx)
-            )
-          )
+//          println(
+//            "sra32: shift_op1:%x, shift_op2:%x, dut_out:%x,ref_out:%s".format(
+//              shift_op1.litValue.toLong,
+//              shift_op2.litValue.toLong,
+//              dut.io.shift_out.peek().litValue.toLong,
+//              expect_seq(idx)
+//            )
+//          )
           dut.clock.step(1)
         }
       })

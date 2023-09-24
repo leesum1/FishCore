@@ -14,11 +14,11 @@ import chisel3.util.{
 
 class AluIn extends Bundle {
   private val alu_width = 64
-  val a = (UInt(alu_width.W))
-  val b = (UInt(alu_width.W))
+  val a = UInt(alu_width.W)
+  val b = UInt(alu_width.W)
   val trans_id = UInt(log2Ceil(8).W)
 
-  val op = (AluOP())
+  val op = AluOP()
   val is_rv32 = Bool()
 
   def convert_fuop2aluop(fuop: FuOP.Type): AluOP.Type = {
@@ -43,7 +43,7 @@ class AluIn extends Bundle {
 }
 class AluOut extends Bundle {
   private val alu_width = 64
-  val res = (UInt(alu_width.W))
+  val res = UInt(alu_width.W)
 }
 
 class FuAlu extends Module {

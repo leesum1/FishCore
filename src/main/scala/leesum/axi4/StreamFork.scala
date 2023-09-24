@@ -49,8 +49,43 @@ class StreamFork[T <: Data](
   }
 }
 
+object StreamFork {
+  def apply[T <: Data](
+      in: DecoupledIO[T],
+      size: Int,
+      synchronous: Boolean = false
+  ): Seq[DecoupledIO[T]] = {
+    val fork = Module(new StreamFork(in.bits.cloneType, size, synchronous))
+    fork.io.input <> in
+    fork.io.outputs
+  }
+}
+
+object StreamFork2 {
+  def apply[T <: Data](
+      in: DecoupledIO[T],
+      synchronous: Boolean = false
+  ): (DecoupledIO[T], DecoupledIO[T]) = {
+    val fork = Module(new StreamFork(in.bits.cloneType, 2, synchronous))
+    fork.io.input <> in
+    (fork.io.outputs(0), fork.io.outputs(1))
+  }
+}
+
+object StreamFork3 {
+  def apply[T <: Data](
+      in: DecoupledIO[T],
+      synchronous: Boolean = false
+  ): (DecoupledIO[T], DecoupledIO[T], DecoupledIO[T]) = {
+    val fork = Module(new StreamFork(in.bits.cloneType, 3, synchronous))
+    fork.io.input <> in
+    (fork.io.outputs(0), fork.io.outputs(1), fork.io.outputs(2))
+  }
+}
+
 object gen_stream_fork_verilog extends App {
   GenVerilogHelper(
     new StreamFork(UInt(64.W), 2, synchronous = false)
   )
+
 }

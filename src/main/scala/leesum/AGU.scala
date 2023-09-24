@@ -1,6 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, Enum, MuxLookup, PopCount, Queue, is, switch}
+import chisel3.util.{Decoupled, Enum, PopCount, is, switch}
 
 class AGUIn extends Bundle {
   val op_a = UInt(64.W)
@@ -14,14 +14,6 @@ class AGUOut extends Bundle {
   val store_pipe = Decoupled(new StoreQueueIn())
   val exception_pipe = Decoupled(new ExceptionEntry())
 
-  def agu_out_assert(): Unit = {
-    assert(
-      PopCount(
-        Seq(load_pipe.valid, store_pipe.valid, exception_pipe.valid)
-      ) <= 1.U,
-      "AGU_out_assert error"
-    )
-  }
 }
 
 class AGU extends Module {
@@ -145,7 +137,7 @@ class AGU extends Module {
     is(sWaitTLBRsp) {
       io.tlb_resp.ready := true.B
       when(io.tlb_resp.fire && !io.flush) {
-        // flush is false, and tlb_resp is fire
+        // 1. flush is false, and tlb_resp is fire
         tlb_rsp_buf := io.tlb_resp.bits
         when(check_privilege(io.tlb_resp.bits)) {
           dispatch_to_exception(io.tlb_resp.bits)
@@ -157,12 +149,13 @@ class AGU extends Module {
           assert(false.B, "sWaitTLBRsp error, should not reach here")
         }
       }.elsewhen(io.tlb_resp.fire && io.flush) {
-        // flush is true, and tlb_resp is fire
+        // 2. flush is true, and tlb_resp is fire
         state := sIdle
       }.elsewhen(!io.tlb_resp.fire && io.flush) {
-        // flush is true, but tlb_resp is not fire
-        state := sIdle
+        // 3. flush is true, but tlb_resp is not fire
+        state := sFlush
       }.otherwise {
+        // 4. flush is false, and tlb_resp is not fire
         state := sWaitTLBRsp
       }
     }
@@ -190,6 +183,7 @@ class AGU extends Module {
   }
 
   io.out.exception_pipe <> exception_pipe.io.out
+
 }
 
 object gen_agu_verilog extends App {

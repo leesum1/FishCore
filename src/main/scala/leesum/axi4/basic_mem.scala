@@ -117,15 +117,14 @@ class BasicMemoryVec(
     .grouped(beatBytes)
     .toSeq
 
-  val vec1 = words.map(x => {
+  val vec_mem = words.map(x => {
     val vec = VecInit(x.map(_.U(8.W)))
     vec
   })
 
-  val mem = RegInit(VecInit(vec1))
+  val mem = RegInit(VecInit(vec_mem))
   require(mem.size == addrSize / beatBytes, "memory size mismatch")
-  println("vec1 size: " + vec1.size)
-  println("addrSize: " + addrSize)
+  println("BasicMemoryVec Size: " + addrSize)
 
   // -------------------------
   // Read logic

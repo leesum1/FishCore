@@ -1,25 +1,24 @@
 package leesum
 import chisel3._
 import chisel3.util.{Decoupled, MuxLookup}
-import circt.stage.ChiselStage
 
 class FuBranchIn extends Bundle {
-  val fu_op = (FuOP())
-  val trans_id = (UInt(32.W))
-  val bp = (new BpEntry())
-  val is_rvc = (Bool())
-  val pc = (UInt(64.W))
-  val imm = (UInt(64.W))
-  val op_a = (UInt(64.W))
-  val op_b = (UInt(64.W))
+  val fu_op = FuOP()
+  val trans_id = UInt(32.W)
+  val bp = new BpEntry()
+  val is_rvc = Bool()
+  val pc = UInt(64.W)
+  val imm = UInt(64.W)
+  val op_a = UInt(64.W)
+  val op_b = UInt(64.W)
 }
 class FuBranchOut extends Bundle {
   // jal and jalr need write back to register
-  val trans_id = (UInt(32.W))
-  val wb_data = (UInt(64.W))
+  val trans_id = UInt(32.W)
+  val wb_data = UInt(64.W)
   // if branch is mis-predicted, redirect_pc is the correct pc
-  val is_miss_predict = (Bool())
-  val redirect_pc = (UInt(64.W))
+  val is_miss_predict = Bool()
+  val redirect_pc = UInt(64.W)
 }
 
 class FuBranch extends Module {

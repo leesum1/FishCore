@@ -1,7 +1,7 @@
 package leesum
 import chisel3._
-import chisel3.util.{Cat, Decoupled, MuxLookup, Queue, RegEnable, is, switch}
-import leesum.axi4.{AXI4Memory, AXIDef, AXIMasterIO, StreamFork}
+import chisel3.util.{Decoupled, Queue}
+import axi4.{AXI4Memory, AXIDef, AXIMasterIO, StreamFork2, StreamFork}
 
 /** DummyDCache,actually there is no cache, just convert load and store req to
   * axi memory req
@@ -24,7 +24,7 @@ class DummyDCache(memoryFIle: String = "") extends Module {
     new AXI4Memory(
       AXI_AW = axi_addr_width,
       AXI_DW = axi_data_width,
-      INTERNAL_MEM_SIZE = 1024,
+      INTERNAL_MEM_SIZE = 2048,
       INTERNAL_MEM_DW = axi_data_width,
       INTERNAL_MEM_BASE = 0,
       memoryFile = memoryFIle
@@ -42,11 +42,10 @@ class DummyDCache(memoryFIle: String = "") extends Module {
   // --------------------------
   // ar
 
-  val load_req_fork = Module(new StreamFork(new LoadDcacheReq, 2))
-  load_req_fork.io.input <> io.load_req
+  val (load_req_axi_fork, load_req_fifo_fork) = StreamFork2(io.load_req)
 
-  axi_master.ar.valid := load_req_fork.io.outputs(0).valid
-  load_req_fork.io.outputs(0).ready := axi_master.ar.ready
+  axi_master.ar.valid := load_req_axi_fork.valid
+  load_req_axi_fork.ready := axi_master.ar.ready
 
   axi_master.ar.bits.addr := io.load_req.bits.paddr
   axi_master.ar.bits.size := DcacheSize2AxiSize(io.load_req.bits.size)
@@ -54,7 +53,7 @@ class DummyDCache(memoryFIle: String = "") extends Module {
   axi_master.ar.bits.len := 0.U
   axi_master.ar.bits.id := 0.U
 
-  val load_req_fifo = Queue(load_req_fork.io.outputs(1), 4)
+  val load_req_fifo = Queue(load_req_fifo_fork, 4)
   load_req_fifo.ready := io.load_resp.fire
 
   // r

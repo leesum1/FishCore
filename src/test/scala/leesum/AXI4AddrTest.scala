@@ -69,15 +69,15 @@ class AXI4AddrTest extends AnyFreeSpec with ChiselScalatestTester {
           val ref_data = dut.io.next_addr_ref.peek()
           val dut_data = dut.io.next_addr_dut.peek()
           dut.clock.step(1)
-          println(
-            "addr:%x, len:%x, size:%x, burst:%x".format(
-              input._1.litValue,
-              input._2.litValue,
-              input._3.litValue,
-              input._4.litValue
-            )
-          )
-          println("ref:%x, dut:%x".format(ref_data.litValue, dut_data.litValue))
+//          println(
+//            "addr:%x, len:%x, size:%x, burst:%x".format(
+//              input._1.litValue,
+//              input._2.litValue,
+//              input._3.litValue,
+//              input._4.litValue
+//            )
+//          )
+//          println("ref:%x, dut:%x".format(ref_data.litValue, dut_data.litValue))
           assert(ref_data.litValue == dut_data.litValue)
         })
       }

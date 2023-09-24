@@ -1,10 +1,7 @@
 package leesum
 
-import chisel3._
-import chisel3.{Bundle, Flipped, Input, Module}
-import chisel3.util.{BitPat, Decoupled, ListLookup, MuxLookup}
-import chisel3.util.experimental.decode._
-import circt.stage.ChiselStage
+import chisel3.util.{ListLookup, MuxLookup}
+import chisel3.{Bundle, Input, Module, _}
 
 class InstDecoder extends Module {
   val io = IO(new Bundle {
@@ -65,7 +62,7 @@ class InstDecoder extends Module {
   scoreboard_entry.rs1_addr := Mux(decode_sigs.need_rs1, inst_base.rs1, 0.U)
   scoreboard_entry.rs2_addr := Mux(decode_sigs.need_rs2, inst_base.rs2, 0.U)
   scoreboard_entry.rd_addr := Mux(decode_sigs.need_rd, inst_base.rd, 0.U)
-  scoreboard_entry.use_pc := decode_sigs.need_pc;
+  scoreboard_entry.use_pc := decode_sigs.need_pc
   scoreboard_entry.use_imm := decode_sigs.need_imm
   scoreboard_entry.use_immz := decode_sigs.need_immz
 
