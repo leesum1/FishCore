@@ -9,6 +9,7 @@ class StoreQueueIn extends Bundle {
   // 0: 1 byte, 1: 2 bytes, 2: 4 bytes, 3: 8 bytes
   val size = UInt(2.W)
   val is_mmio = Bool()
+  val trans_id = UInt(32.W)
 }
 class StoreFIFOEntry extends Bundle {
   val valid = Bool()

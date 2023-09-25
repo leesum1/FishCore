@@ -38,6 +38,7 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
     val op_b = gen_rand_uint(64)
     val size = gen_rand_uint(2)
     val store_data = gen_rand_uint(64)
+    val trans_id = gen_rand_uint(32)
     val is_store = Gen.oneOf(true.B, false.B)
 
     val input_gen = for {
@@ -46,13 +47,15 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
       size <- size
       store_data <- store_data
       is_store <- is_store
+      trans_id <- trans_id
     } yield {
       (new AGUIn).Lit(
         _.op_a -> op_a,
         _.op_b -> 0.U,
         _.size -> size,
         _.store_data -> store_data,
-        _.is_store -> is_store
+        _.is_store -> is_store,
+        _.trans_id -> trans_id
       )
     }
     input_gen
@@ -85,7 +88,8 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
                 (input.op_a.litValue + input.op_b.litValue).toLong
               ),
               _.size -> input.size,
-              _.is_mmio -> false.B
+              _.is_mmio -> false.B,
+              _.trans_id -> input.trans_id
             )
           })
         // if addr is aligned, then generate load or store
@@ -103,7 +107,8 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
               ),
               _.store_data -> input.store_data,
               _.size -> input.size,
-              _.is_mmio -> false.B
+              _.is_mmio -> false.B,
+              _.trans_id -> input.trans_id
             )
           })
 
@@ -116,7 +121,7 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
             )
           })
           .map(input => {
-            (new ExceptionEntry).Lit(
+            val ex = (new ExceptionEntry).Lit(
               _.valid -> true.B,
               _.tval -> long2UInt64(
                 (input.op_a.litValue + input.op_b.litValue).toLong
@@ -126,6 +131,11 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
                           } else {
                             ExceptionCause.misaligned_load
                           })
+            )
+
+            (new ExceptionQueueIn).Lit(
+              _.trans_id -> input.trans_id,
+              _.exception -> ex
             )
           })
 

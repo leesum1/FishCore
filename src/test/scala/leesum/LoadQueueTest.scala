@@ -10,8 +10,8 @@ import scala.io.Source
 
 class LoadQueueDut(memoryFile: String) extends Module {
   val io = IO(new Bundle {
-    val load_req = Flipped(Decoupled(new LoadDcacheReq))
-    val load_resp = Decoupled(UInt(64.W))
+    val load_req = Flipped(Decoupled(new LoadQueueIn))
+    val load_resp = Decoupled(new LoadWriteBack)
     // TODO: how to implement flush?
     val flush = Input(Bool())
     // from commit stage, when commit a mmio instruction, set mmio_commit to true
@@ -21,7 +21,7 @@ class LoadQueueDut(memoryFile: String) extends Module {
   val dcache = Module(new DummyDCache(memoryFile))
 
   load_queue.io.in <> io.load_req
-  load_queue.io.out <> io.load_resp
+  load_queue.io.load_wb <> io.load_resp
   load_queue.io.flush := io.flush
   load_queue.io.mmio_commit <> io.mmio_commit
 
@@ -46,13 +46,31 @@ class LoadQueueTest extends AnyFreeSpec with ChiselScalatestTester {
   val memfile = "src/main/resources/random_data_readmemh.txt"
   val mem = Source.fromFile(memfile).map(_.toByte).toSeq
 
-  def gen_load_req(paddr: Int, size: Int, is_mmio: Boolean = false) = {
+  def gen_load_req(
+      paddr: Int,
+      size: Int,
+      trans_id: Int,
+      is_mmio: Boolean = false
+  ) = {
     require(test_utils.check_aligned(paddr, size), "paddr must be aligned")
-    (new LoadDcacheReq).Lit(
+    (new LoadQueueIn).Lit(
       _.paddr -> paddr.U,
       _.size -> size.U,
-      _.is_mmio -> is_mmio.B
+      _.is_mmio -> is_mmio.B,
+      _.trans_id -> test_utils.int2UInt32(trans_id)
     )
+  }
+
+//  class LoadWriteBack extends Bundle {
+//    val rdata = UInt(64.W)
+//    val tran_id = UInt(32.W)
+//  }
+  def gen_load_resp(rdata: BigInt, trans_id: BigInt) = {
+    (new LoadWriteBack).Lit(
+      _.rdata -> test_utils.long2UInt64(rdata.toLong),
+      _.tran_id -> test_utils.int2UInt32(trans_id.toInt)
+    )
+
   }
 
   "LoadQueueTest_load_size" in {
@@ -81,48 +99,48 @@ class LoadQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         val input_seq_size8 = 0
           .until(mem_size8, 8)
           .map { addr =>
-            gen_load_req(addr, size8)
+            gen_load_req(addr, size8, addr)
           }
 
         val input_seq_size4 = 0
           .until(mem_size4, 4)
           .map { addr =>
-            gen_load_req(addr, size4)
+            gen_load_req(addr, size4, addr)
           }
         val input_seq_size2 = 0
           .until(mem_size2, 2)
           .map { addr =>
-            gen_load_req(addr, size2)
+            gen_load_req(addr, size2, addr)
           }
         val input_seq_size1 = 0
           .until(mem_size1, 1)
           .map { addr =>
-            gen_load_req(addr, size1)
+            gen_load_req(addr, size1, addr)
           }
 
         val output_seq_size8 = input_seq_size8.map(req => {
           val byte_seq =
             mem.slice(req.paddr.litValue.toInt, req.paddr.litValue.toInt + 8)
           val data_long = test_utils.byteSeq2Uint64LittleEndian(byte_seq)
-          test_utils.long2UInt64(data_long)
+          gen_load_resp(data_long, req.trans_id.litValue)
         })
         val output_seq_size4 = input_seq_size4.map(req => {
           val byte_seq =
             mem.slice(req.paddr.litValue.toInt, req.paddr.litValue.toInt + 4)
           val data_long = test_utils.byteSeq2Uint64LittleEndian(byte_seq)
-          test_utils.long2UInt64(data_long)
+          gen_load_resp(data_long, req.trans_id.litValue)
         })
         val output_seq_size2 = input_seq_size2.map(req => {
           val byte_seq =
             mem.slice(req.paddr.litValue.toInt, req.paddr.litValue.toInt + 2)
           val data_long = test_utils.byteSeq2Uint64LittleEndian(byte_seq)
-          test_utils.long2UInt64(data_long)
+          gen_load_resp(data_long, req.trans_id.litValue)
         })
         val output_seq_size1 = input_seq_size1.map(req => {
           val byte_seq =
             mem.slice(req.paddr.litValue.toInt, req.paddr.litValue.toInt + 1)
           val data_long = test_utils.byteSeq2Uint64LittleEndian(byte_seq)
-          test_utils.long2UInt64(data_long)
+          gen_load_resp(data_long, req.trans_id.litValue)
         })
 
         dut.clock.step(4)
@@ -158,4 +176,5 @@ class LoadQueueTest extends AnyFreeSpec with ChiselScalatestTester {
 
       }
   }
+
 }

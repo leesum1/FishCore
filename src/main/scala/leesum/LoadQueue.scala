@@ -6,12 +6,18 @@ class LoadQueueIn extends Bundle {
   // 0: 1 byte, 1: 2 bytes, 2: 4 bytes, 3: 8 bytes
   val size = UInt(2.W)
   val is_mmio = Bool()
+  val trans_id = UInt(32.W)
+}
+
+class LoadWriteBack extends Bundle {
+  val rdata = UInt(64.W)
+  val tran_id = UInt(32.W)
 }
 
 class LoadQueue extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new LoadQueueIn))
-    val out = Decoupled(UInt(64.W))
+    val load_wb = Decoupled(new LoadWriteBack)
     // TODO: how to implement flush?
     val flush = Input(Bool())
     // from commit stage, when commit a mmio instruction, set mmio_commit to true
@@ -27,9 +33,9 @@ class LoadQueue extends Module {
   )
 
   // push a pipeline to the output
-  val out_pipe = Module(new PipeLine(UInt(64.W)))
-  out_pipe.io.out <> io.out
-  out_pipe.io.flush := io.flush
+  val wb_pipe = Module(new PipeLine(new LoadWriteBack))
+  wb_pipe.io.out <> io.load_wb
+  wb_pipe.io.flush := io.flush
 
   // initialize value of valid-ready io
   load_queue_out.ready := false.B
@@ -38,15 +44,21 @@ class LoadQueue extends Module {
   io.dcache_req.valid := false.B
   io.dcache_req.bits := DontCare
 
-  out_pipe.io.in.valid := false.B
-  out_pipe.io.in.bits := DontCare
+  wb_pipe.io.in.valid := false.B
+  wb_pipe.io.in.bits := DontCare
 
   io.mmio_commit.ready := false.B
 
   val sIdle :: sWaitDcacheResp :: sFlush :: Nil = Enum(3)
   val state = RegInit(sIdle)
+  val tran_id_buf = RegInit(0.U(32.W))
 
-  def sen_dcache_req(paddr: UInt, size: UInt, is_mmio: Bool): Unit = {
+  def sen_dcache_req(
+      paddr: UInt,
+      size: UInt,
+      is_mmio: Bool,
+      trans_id: UInt
+  ): Unit = {
     io.dcache_req.valid := true.B
     io.dcache_req.bits.paddr := paddr
     io.dcache_req.bits.size := size
@@ -54,6 +66,7 @@ class LoadQueue extends Module {
     when(io.dcache_req.fire) {
       assert(load_queue_out.valid, "load_queue_out should be valid")
       load_queue_out.ready := true.B
+      tran_id_buf := trans_id
       state := sWaitDcacheResp
     }.otherwise {
       state := sIdle
@@ -69,19 +82,22 @@ class LoadQueue extends Module {
           sen_dcache_req(
             load_queue_out.bits.paddr,
             load_queue_out.bits.size,
-            isMmio
+            isMmio,
+            load_queue_out.bits.trans_id
           )
         }
       }
     }
     is(sWaitDcacheResp) {
-      io.dcache_resp.ready := out_pipe.io.in.ready
+      io.dcache_resp.ready := wb_pipe.io.in.ready
       // TODO: Improve me, back by back
       when(io.dcache_resp.fire && !io.flush) {
         // 1. flush is false, and dcache_resp is fire, receive the data
-        out_pipe.io.in.valid := true.B
-        out_pipe.io.in.bits := io.dcache_resp.bits.data
-        when(out_pipe.io.in.fire) {
+        wb_pipe.io.in.valid := true.B
+        wb_pipe.io.in.bits.rdata := io.dcache_resp.bits.data
+        wb_pipe.io.in.bits.tran_id := tran_id_buf
+
+        when(wb_pipe.io.in.fire) {
           state := sIdle
         }.otherwise {
           assert(false.B, "out_pipe.io.in.fire should be true.B")

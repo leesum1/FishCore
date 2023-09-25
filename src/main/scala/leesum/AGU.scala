@@ -7,13 +7,19 @@ class AGUIn extends Bundle {
   val op_b = UInt(64.W)
   val size = UInt(2.W)
   val store_data = UInt(64.W)
+  val trans_id = UInt(32.W)
   val is_store = Bool()
 }
+
+class ExceptionQueueIn extends Bundle {
+  val trans_id = UInt(32.W)
+  val exception = new ExceptionEntry()
+}
+
 class AGUOut extends Bundle {
   val load_pipe = Decoupled(new LoadQueueIn())
   val store_pipe = Decoupled(new StoreQueueIn())
-  val exception_pipe = Decoupled(new ExceptionEntry())
-
+  val exception_pipe = Decoupled(new ExceptionQueueIn())
 }
 
 class AGU extends Module {
@@ -30,11 +36,10 @@ class AGU extends Module {
 
   val sIdle :: sWaitTLBRsp :: sWaitFifo :: sFlush :: Nil = Enum(4)
   val state = RegInit(sIdle)
-  val tlb_rsp_buf = RegInit(0.U.asTypeOf(new TLBResp))
-  val size_buf = RegInit(0.U(2.W))
-  val store_data_buf = RegInit(0.U(64.W))
+  val tlb_resp_buf = RegInit(0.U.asTypeOf(new TLBResp))
+  val agu_req_buf = RegInit(0.U.asTypeOf(new AGUIn))
 
-  val exception_pipe = Module(new PipeLine(new ExceptionEntry()))
+  val exception_pipe = Module(new PipeLine(new ExceptionQueueIn()))
 
 //  val load_pipe = Module(new PipeLine(UInt(64.W)))
 //  val store_pipe = Module(new PipeLine(UInt(64.W)))
@@ -46,7 +51,9 @@ class AGU extends Module {
 
   exception_pipe.io.in.valid := false.B
   exception_pipe.io.in.bits := DontCare
+
   exception_pipe.io.flush := io.flush
+
   io.out.store_pipe.valid := false.B
   io.out.store_pipe.bits := DontCare
   io.out.load_pipe.valid := false.B
@@ -67,8 +74,7 @@ class AGU extends Module {
     io.in.ready := true.B && !io.flush
     when(io.in.fire) {
       state := sWaitTLBRsp
-      size_buf := io.in.bits.size
-      store_data_buf := io.in.bits.store_data
+      agu_req_buf := io.in.bits
       send_tlb_req(vaddr.asUInt, io.in.bits.size)
     }.otherwise {
       state := sIdle
@@ -85,8 +91,9 @@ class AGU extends Module {
   def dispatch_to_exception(tlb_rsp: TLBResp): Unit = {
     exception_pipe.io.in.valid := true.B
     when(exception_pipe.io.in.fire) {
-      exception_pipe.io.in.bits.valid := true.B
-      exception_pipe.io.in.bits.tval := tlb_rsp.paddr
+      exception_pipe.io.in.bits.exception.valid := true.B
+      exception_pipe.io.in.bits.exception.tval := tlb_rsp.paddr
+      exception_pipe.io.in.bits.trans_id := agu_req_buf.trans_id
 
       val mis_aligned_cause = Mux(
         tlb_rsp.req_type === TLBReqType.LOAD,
@@ -94,11 +101,12 @@ class AGU extends Module {
         ExceptionCause.misaligned_store
       )
       // page fault or access fault has higher priority
-      exception_pipe.io.in.bits.cause := Mux(
+      exception_pipe.io.in.bits.exception.cause := Mux(
         tlb_rsp.exception.valid,
         tlb_rsp.exception.cause,
         mis_aligned_cause
       )
+
       receive_tlb_req()
     }.otherwise {
       state := sWaitFifo
@@ -108,7 +116,8 @@ class AGU extends Module {
     io.out.load_pipe.valid := true.B
     when(io.out.load_pipe.fire) {
       io.out.load_pipe.bits.paddr := tlb_rsp.paddr
-      io.out.load_pipe.bits.size := size_buf
+      io.out.load_pipe.bits.size := agu_req_buf.size
+      io.out.load_pipe.bits.trans_id := agu_req_buf.trans_id
       // TODO: is_mmio is not implemented
       io.out.load_pipe.bits.is_mmio := false.B
       receive_tlb_req()
@@ -120,8 +129,9 @@ class AGU extends Module {
     io.out.store_pipe.valid := true.B
     when(io.out.store_pipe.fire) {
       io.out.store_pipe.bits.paddr := tlb_rsp.paddr
-      io.out.store_pipe.bits.size := size_buf
-      io.out.store_pipe.bits.store_data := store_data_buf
+      io.out.store_pipe.bits.size := agu_req_buf.size
+      io.out.store_pipe.bits.store_data := agu_req_buf.store_data
+      io.out.store_pipe.bits.trans_id := agu_req_buf.trans_id
       io.out.store_pipe.bits.is_mmio := false.B
       receive_tlb_req()
     }.otherwise {
@@ -138,7 +148,7 @@ class AGU extends Module {
       io.tlb_resp.ready := true.B
       when(io.tlb_resp.fire && !io.flush) {
         // 1. flush is false, and tlb_resp is fire
-        tlb_rsp_buf := io.tlb_resp.bits
+        tlb_resp_buf := io.tlb_resp.bits
         when(check_privilege(io.tlb_resp.bits)) {
           dispatch_to_exception(io.tlb_resp.bits)
         }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.STORE) {
@@ -161,12 +171,12 @@ class AGU extends Module {
     }
     is(sWaitFifo) {
       when(!io.flush) {
-        when(check_privilege(tlb_rsp_buf)) {
-          dispatch_to_exception(tlb_rsp_buf)
+        when(check_privilege(tlb_resp_buf)) {
+          dispatch_to_exception(tlb_resp_buf)
         }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.STORE) {
-          dispatch_to_store(tlb_rsp_buf)
+          dispatch_to_store(tlb_resp_buf)
         }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.LOAD) {
-          dispatch_to_load(tlb_rsp_buf)
+          dispatch_to_load(tlb_resp_buf)
         }.otherwise {
           assert(false.B, "sWaitFifo error, should not reach here")
         }

@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
-import leesum.test_utils.long2UInt64
+import leesum.test_utils.{gen_rand_uint, long2UInt64}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -13,24 +13,35 @@ class StoreQueueDut extends Module {
   val io = IO(new Bundle {
     val store_req = Flipped(Decoupled(new StoreQueueIn))
     val store_commit = Flipped(Decoupled(Bool()))
-    val load_req = Flipped(Decoupled(new LoadDcacheReq))
-    val load_resp = Decoupled(new LoadDcacheResp)
 
+    val load_req = Flipped(Decoupled(new LoadQueueIn))
+    val load_resp = Decoupled(new LoadWriteBack)
+    // from commit stage, when commit a mmio instruction, set mmio_commit to true
+    val mmio_commit = Flipped(Decoupled())
+
+//    val load_req = Flipped(Decoupled(new LoadDcacheReq))
+//    val load_resp = Decoupled(new LoadDcacheResp)
     val flush = Input(Bool())
   })
   val store_queue = Module(new StoreQueue())
+  val load_queue = Module(new LoadQueue())
   val dcache = Module(new DummyDCache())
+
+  load_queue.io.in <> io.load_req
+  load_queue.io.load_wb <> io.load_resp
+  load_queue.io.mmio_commit <> io.mmio_commit
+  load_queue.io.flush := io.flush
 
   store_queue.io.in <> io.store_req
   store_queue.io.store_commit <> io.store_commit
   store_queue.io.flush := io.flush
   dcache.io.flush := io.flush
 
-  store_queue.io.dcache_req <> dcache.io.store_req
-  store_queue.io.dcache_resp <> dcache.io.store_resp
+  dcache.io.store_req <> store_queue.io.dcache_req
+  dcache.io.store_resp <> store_queue.io.dcache_resp
+  dcache.io.load_req <> load_queue.io.dcache_req
+  dcache.io.load_resp <> load_queue.io.dcache_resp
 
-  dcache.io.load_req <> io.load_req
-  io.load_resp <> dcache.io.load_resp
 }
 
 object gen_store_queue_dut_verilog extends App {
@@ -55,20 +66,27 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
       _.paddr -> paddr.U,
       _.size -> size.U,
       _.store_data -> long2UInt64(store_data),
-      _.is_mmio -> is_mmio.B
+      _.is_mmio -> is_mmio.B,
+      _.trans_id -> 0.U
     )
   }
 
-  def gen_load_req(paddr: Int, size: Int, is_mmio: Boolean = false) = {
+  def gen_load_req(
+      paddr: Int,
+      size: Int,
+      trans_id: Int,
+      is_mmio: Boolean = false
+  ) = {
     require(test_utils.check_aligned(paddr, size), "paddr must be aligned")
-    (new LoadDcacheReq).Lit(
+    (new LoadQueueIn).Lit(
       _.paddr -> paddr.U,
       _.size -> size.U,
-      _.is_mmio -> is_mmio.B
+      _.is_mmio -> is_mmio.B,
+      _.trans_id -> test_utils.int2UInt32(trans_id)
     )
   }
 
-  def gen_load_resp(addr: BigInt, data: Long, size: Int) = {
+  def gen_load_resp(addr: BigInt, data: Long, size: Int, trans_id: Int) = {
     val offset = ((addr % 8) * 8).toLong
     val data_shifted = data >> offset
 
@@ -79,15 +97,9 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         data_shifted & 0xffffffffL
       case 3 => data_shifted
     }
-
-    (new LoadDcacheResp).Lit(
-      _.data -> long2UInt64(data_masked),
-      _.exception -> (new ExceptionEntry)
-        .Lit(
-          _.tval -> 0.U,
-          _.valid -> false.B,
-          _.cause -> ExceptionCause.load_access
-        )
+    (new LoadWriteBack).Lit(
+      _.tran_id -> test_utils.int2UInt32(trans_id),
+      _.rdata -> long2UInt64(data_masked)
     )
   }
 
@@ -108,8 +120,8 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
   private def StoreQueueTestBackToBack(
       dut: StoreQueueDut,
       input_store_req_seq: Seq[StoreQueueIn],
-      input_load_req_seq: Seq[LoadDcacheReq],
-      expect_load_resp_seq: Seq[LoadDcacheResp]
+      input_load_req_seq: Seq[LoadQueueIn],
+      expect_load_resp_seq: Seq[LoadWriteBack]
   ): Unit = {
     dut.io.flush.poke(false.B)
     dut.clock.step(4)
@@ -141,8 +153,8 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
   private def StoreQueueTestWithBubble(
       dut: StoreQueueDut,
       input_store_req_seq_size8: Seq[StoreQueueIn],
-      input_load_req_seq_size8: Seq[LoadDcacheReq],
-      expect_load_resp_seq_size8: Seq[LoadDcacheResp]
+      input_load_req_seq_size8: Seq[LoadQueueIn],
+      expect_load_resp_seq_size8: Seq[LoadWriteBack]
   ): Unit = {
     fork {
       input_store_req_seq_size8.foreach(input => {
@@ -185,24 +197,22 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         WriteFstAnnotation
       )
     ) { dut =>
-      dut.io.store_commit.initSource().setSourceClock(dut.clock)
-      dut.io.store_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_resp.initSink().setSinkClock(dut.clock)
+      valid_ready_init(dut)
 
       // ----------------------------------
       // prepare input and expect sequence
       // ----------------------------------
       val input_store_req_seq = gen_store_req_input_seq(size8)
       val input_load_req_seq = input_store_req_seq.map(req => {
-        gen_load_req(req.paddr.litValue.toInt, size8)
+        gen_load_req(req.paddr.litValue.toInt, size8, req.paddr.litValue.toInt)
       })
       val expect_load_resp_seq = {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
             req.store_data.litValue.toLong,
-            req.size.litValue.toInt
+            req.size.litValue.toInt,
+            req.paddr.litValue.toInt
           )
         )
       }
@@ -218,6 +228,14 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
     }
   }
 
+  private def valid_ready_init(dut: StoreQueueDut) = {
+    dut.io.store_commit.initSource().setSourceClock(dut.clock)
+    dut.io.store_req.initSource().setSourceClock(dut.clock)
+    dut.io.load_req.initSource().setSourceClock(dut.clock)
+    dut.io.load_resp.initSink().setSinkClock(dut.clock)
+    dut.io.mmio_commit.initSource().setSourceClock(dut.clock)
+  }
+
   "StoreQueueTest_size8_with_bubble" in {
     test(
       new StoreQueueDut(
@@ -228,24 +246,22 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         WriteFstAnnotation
       )
     ) { dut =>
-      dut.io.store_commit.initSource().setSourceClock(dut.clock)
-      dut.io.store_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_resp.initSink().setSinkClock(dut.clock)
+      valid_ready_init(dut)
 
       // ----------------------------------
       // prepare input and expect sequence
       // ----------------------------------
       val input_store_req_seq = gen_store_req_input_seq(size8)
       val input_load_req_seq = input_store_req_seq.map(req => {
-        gen_load_req(req.paddr.litValue.toInt, size8)
+        gen_load_req(req.paddr.litValue.toInt, size8, req.paddr.litValue.toInt)
       })
       val expect_load_resp_seq = {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
             req.store_data.litValue.toLong,
-            req.size.litValue.toInt
+            req.size.litValue.toInt,
+            req.paddr.litValue.toInt
           )
         )
       }
@@ -272,24 +288,22 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         WriteFstAnnotation
       )
     ) { dut =>
-      dut.io.store_commit.initSource().setSourceClock(dut.clock)
-      dut.io.store_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_resp.initSink().setSinkClock(dut.clock)
+      valid_ready_init(dut)
 
       // ----------------------------------
       // prepare input and expect sequence
       // ----------------------------------
       val input_store_req_seq = gen_store_req_input_seq(size4)
       val input_load_req_seq = input_store_req_seq.map(req => {
-        gen_load_req(req.paddr.litValue.toInt, size4)
+        gen_load_req(req.paddr.litValue.toInt, size4, req.paddr.litValue.toInt)
       })
       val expect_load_resp_seq = {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
             req.store_data.litValue.toLong,
-            req.size.litValue.toInt
+            req.size.litValue.toInt,
+            req.paddr.litValue.toInt
           )
         )
       }
@@ -315,24 +329,22 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         WriteFstAnnotation
       )
     ) { dut =>
-      dut.io.store_commit.initSource().setSourceClock(dut.clock)
-      dut.io.store_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_resp.initSink().setSinkClock(dut.clock)
+      valid_ready_init(dut)
 
       // ----------------------------------
       // prepare input and expect sequence
       // ----------------------------------
       val input_store_req_seq = gen_store_req_input_seq(size4)
       val input_load_req_seq = input_store_req_seq.map(req => {
-        gen_load_req(req.paddr.litValue.toInt, size4)
+        gen_load_req(req.paddr.litValue.toInt, size4, req.paddr.litValue.toInt)
       })
       val expect_load_resp_seq = {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
             req.store_data.litValue.toLong,
-            req.size.litValue.toInt
+            req.size.litValue.toInt,
+            req.paddr.litValue.toInt
           )
         )
       }
@@ -359,24 +371,22 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         WriteFstAnnotation
       )
     ) { dut =>
-      dut.io.store_commit.initSource().setSourceClock(dut.clock)
-      dut.io.store_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_resp.initSink().setSinkClock(dut.clock)
+      valid_ready_init(dut)
 
       // ----------------------------------
       // prepare input and expect sequence
       // ----------------------------------
       val input_store_req_seq = gen_store_req_input_seq(size2)
       val input_load_req_seq = input_store_req_seq.map(req => {
-        gen_load_req(req.paddr.litValue.toInt, size2)
+        gen_load_req(req.paddr.litValue.toInt, size2, req.paddr.litValue.toInt)
       })
       val expect_load_resp_seq = {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
             req.store_data.litValue.toLong,
-            req.size.litValue.toInt
+            req.size.litValue.toInt,
+            req.paddr.litValue.toInt
           )
         )
       }
@@ -401,24 +411,22 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         WriteFstAnnotation
       )
     ) { dut =>
-      dut.io.store_commit.initSource().setSourceClock(dut.clock)
-      dut.io.store_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_resp.initSink().setSinkClock(dut.clock)
+      valid_ready_init(dut)
 
       // ----------------------------------
       // prepare input and expect sequence
       // ----------------------------------
       val input_store_req_seq = gen_store_req_input_seq(size2)
       val input_load_req_seq = input_store_req_seq.map(req => {
-        gen_load_req(req.paddr.litValue.toInt, size2)
+        gen_load_req(req.paddr.litValue.toInt, size2, req.paddr.litValue.toInt)
       })
       val expect_load_resp_seq = {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
             req.store_data.litValue.toLong,
-            req.size.litValue.toInt
+            req.size.litValue.toInt,
+            req.paddr.litValue.toInt
           )
         )
       }
@@ -444,24 +452,22 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         WriteFstAnnotation
       )
     ) { dut =>
-      dut.io.store_commit.initSource().setSourceClock(dut.clock)
-      dut.io.store_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_resp.initSink().setSinkClock(dut.clock)
+      valid_ready_init(dut)
 
       // ----------------------------------
       // prepare input and expect sequence
       // ----------------------------------
       val input_store_req_seq = gen_store_req_input_seq(size1)
       val input_load_req_seq = input_store_req_seq.map(req => {
-        gen_load_req(req.paddr.litValue.toInt, size1)
+        gen_load_req(req.paddr.litValue.toInt, size1, req.paddr.litValue.toInt)
       })
       val expect_load_resp_seq = {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
             req.store_data.litValue.toLong,
-            req.size.litValue.toInt
+            req.size.litValue.toInt,
+            req.paddr.litValue.toInt
           )
         )
       }
@@ -487,24 +493,22 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         WriteFstAnnotation
       )
     ) { dut =>
-      dut.io.store_commit.initSource().setSourceClock(dut.clock)
-      dut.io.store_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_req.initSource().setSourceClock(dut.clock)
-      dut.io.load_resp.initSink().setSinkClock(dut.clock)
+      valid_ready_init(dut)
 
       // ----------------------------------
       // prepare input and expect sequence
       // ----------------------------------
       val input_store_req_seq = gen_store_req_input_seq(size1)
       val input_load_req_seq = input_store_req_seq.map(req => {
-        gen_load_req(req.paddr.litValue.toInt, size1)
+        gen_load_req(req.paddr.litValue.toInt, size1, req.paddr.litValue.toInt)
       })
       val expect_load_resp_seq = {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
             req.store_data.litValue.toLong,
-            req.size.litValue.toInt
+            req.size.litValue.toInt,
+            req.paddr.litValue.toInt
           )
         )
       }
