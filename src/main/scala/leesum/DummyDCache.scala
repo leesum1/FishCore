@@ -59,11 +59,8 @@ class DummyDCache(memoryFIle: String = "") extends Module {
   // r
   io.load_resp.valid := axi_master.r.valid
   axi_master.r.ready := io.load_resp.ready
-  io.load_resp.bits.data := GetRdata(
-    axi_master.r.bits.data,
-    load_req_fifo.bits.paddr,
-    load_req_fifo.bits.size
-  )
+
+  io.load_resp.bits.data := axi_master.r.bits.data
 
   io.load_resp.bits.exception.valid := false.B
   io.load_resp.bits.exception.tval := 0.U

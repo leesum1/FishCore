@@ -113,7 +113,7 @@ object CheckAligned {
   }
 }
 
-object GenWdataAlign {
+object GenAxiWdata {
   def apply(wdata: UInt, addr: UInt) = {
     require(
       addr.getWidth >= 3 && wdata.getWidth == 64,
@@ -127,32 +127,32 @@ object GenWdataAlign {
         wdata_aligned := wdata
       }
       is(1.U) {
-        wdata_aligned := Cat(wdata(63, 8), 0.U(8.W))
+        wdata_aligned := Cat(wdata(63 - 8, 0), 0.U(8.W))
       }
       is(2.U) {
-        wdata_aligned := Cat(wdata(63, 16), 0.U(16.W))
+        wdata_aligned := Cat(wdata(63 - 16, 0), 0.U(16.W))
       }
       is(3.U) {
-        wdata_aligned := Cat(wdata(63, 24), 0.U(24.W))
+        wdata_aligned := Cat(wdata(63 - 24, 0), 0.U(24.W))
       }
       is(4.U) {
-        wdata_aligned := Cat(wdata(63, 32), 0.U(32.W))
+        wdata_aligned := Cat(wdata(63 - 32, 0), 0.U(32.W))
       }
       is(5.U) {
-        wdata_aligned := Cat(wdata(63, 40), 0.U(40.W))
+        wdata_aligned := Cat(wdata(63 - 40, 0), 0.U(40.W))
       }
       is(6.U) {
-        wdata_aligned := Cat(wdata(63, 48), 0.U(48.W))
+        wdata_aligned := Cat(wdata(63 - 48, 0), 0.U(48.W))
       }
       is(7.U) {
-        wdata_aligned := Cat(wdata(63, 56), 0.U(56.W))
+        wdata_aligned := Cat(wdata(63 - 56, 0), 0.U(56.W))
       }
     }
     wdata_aligned
   }
 }
 
-object GenWstrb {
+object GenAxiWstrb {
   def apply(addr: UInt, size: UInt): UInt = {
 
     require(
@@ -246,8 +246,8 @@ object GenWstrb {
 /** get rdata from axi r channel, shift it to the right position, and fill the
   * rest with 0
   */
-object GetRdata {
-  def apply(rdata: UInt, addr: UInt, size: UInt): UInt = {
+object GetAxiRdata {
+  def apply(rdata: UInt, addr: UInt, size: UInt, sign_ext: Bool): UInt = {
     require(size.getWidth == 2, "size must be 2 bits")
     require(addr.getWidth == 64, "addr must be 64 bits")
 
@@ -258,28 +258,56 @@ object GetRdata {
     switch(size) {
       is(0.U) {
         switch(offset) {
-          is(0.U) { rdata_aligned := Cat(0.U(56.W), rdata(7, 0)) }
-          is(1.U) { rdata_aligned := Cat(0.U(56.W), rdata(15, 8)) }
-          is(2.U) { rdata_aligned := Cat(0.U(56.W), rdata(23, 16)) }
-          is(3.U) { rdata_aligned := Cat(0.U(56.W), rdata(31, 24)) }
-          is(4.U) { rdata_aligned := Cat(0.U(56.W), rdata(39, 32)) }
-          is(5.U) { rdata_aligned := Cat(0.U(56.W), rdata(47, 40)) }
-          is(6.U) { rdata_aligned := Cat(0.U(56.W), rdata(55, 48)) }
-          is(7.U) { rdata_aligned := Cat(0.U(56.W), rdata(63, 56)) }
+          is(0.U) {
+            rdata_aligned := Cat(Fill(56, sign_ext & rdata(7)), rdata(7, 0))
+          }
+          is(1.U) {
+            rdata_aligned := Cat(Fill(56, sign_ext & rdata(15)), rdata(15, 8))
+          }
+          is(2.U) {
+            rdata_aligned := Cat(Fill(56, sign_ext & rdata(23)), rdata(23, 16))
+          }
+          is(3.U) {
+            rdata_aligned := Cat(Fill(56, sign_ext & rdata(31)), rdata(31, 24))
+          }
+          is(4.U) {
+            rdata_aligned := Cat(Fill(56, sign_ext & rdata(39)), rdata(39, 32))
+          }
+          is(5.U) {
+            rdata_aligned := Cat(Fill(56, sign_ext & rdata(47)), rdata(47, 40))
+          }
+          is(6.U) {
+            rdata_aligned := Cat(Fill(56, sign_ext & rdata(55)), rdata(55, 48))
+          }
+          is(7.U) {
+            rdata_aligned := Cat(Fill(56, sign_ext & rdata(63)), rdata(63, 56))
+          }
         }
       }
       is(1.U) {
         switch(offset) {
-          is(0.U) { rdata_aligned := Cat(0.U(48.W), rdata(15, 0)) }
-          is(2.U) { rdata_aligned := Cat(0.U(48.W), rdata(31, 16)) }
-          is(4.U) { rdata_aligned := Cat(0.U(48.W), rdata(47, 32)) }
-          is(6.U) { rdata_aligned := Cat(0.U(48.W), rdata(63, 48)) }
+          is(0.U) {
+            rdata_aligned := Cat(Fill(48, sign_ext & rdata(15)), rdata(15, 0))
+          }
+          is(2.U) {
+            rdata_aligned := Cat(Fill(48, sign_ext & rdata(31)), rdata(31, 16))
+          }
+          is(4.U) {
+            rdata_aligned := Cat(Fill(48, sign_ext & rdata(47)), rdata(47, 32))
+          }
+          is(6.U) {
+            rdata_aligned := Cat(Fill(48, sign_ext & rdata(63)), rdata(63, 48))
+          }
         }
       }
       is(2.U) {
         switch(offset) {
-          is(0.U) { rdata_aligned := Cat(0.U(32.W), rdata(31, 0)) }
-          is(4.U) { rdata_aligned := Cat(0.U(32.W), rdata(63, 32)) }
+          is(0.U) {
+            rdata_aligned := Cat(Fill(32, sign_ext & rdata(31)), rdata(31, 0))
+          }
+          is(4.U) {
+            rdata_aligned := Cat(Fill(32, sign_ext & rdata(63)), rdata(63, 32))
+          }
         }
       }
       is(3.U) { rdata_aligned := rdata }

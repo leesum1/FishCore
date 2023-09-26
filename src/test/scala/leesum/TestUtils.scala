@@ -1,9 +1,10 @@
 package leesum
 
 import chisel3._
+import leesum.TestUtils.gen_axi_wstrb
 import org.scalacheck.Gen
 
-object test_utils {
+object TestUtils {
   def long2UInt64(x: Long): UInt = {
     if (x < 0) {
       // because of chisel doesn't support convert a negative number to UInt
@@ -79,9 +80,22 @@ object test_utils {
       acc | ((b & 0xffL) << (i * 8))
     }
   }
+
+  def gen_axi_wdata(data: Long, addr: Long): Long = {
+    val offset = addr & 0x7
+    data << (offset * 8)
+  }
+  def gen_axi_wstrb(addr: Long, size: Int): Int = {
+    val offset = addr & 0x7
+    require(size >= 0 && size <= 3, "size must be in range [0, 3]")
+    val real_size = 1 << size
+    val mask = (1 << real_size) - 1
+    (mask << offset) & 0xff
+  }
 }
 
 object rand_test1 extends App {
-  val uint_gen = test_utils.gen_rand_uint(4)
-  println(uint_gen.sample.get)
+  val uint_gen = TestUtils.gen_rand_uint(4)
+  val wstrb = gen_axi_wstrb(0x1002, 2)
+  println(wstrb.toBinaryString)
 }

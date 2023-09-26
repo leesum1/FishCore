@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
 import chiseltest.simulator.WriteVcdAnnotation
-import leesum.test_utils.{int2UInt64, long2UInt64, long2Ulong}
+import leesum.TestUtils.{int2UInt64, long2UInt64, long2Ulong}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 

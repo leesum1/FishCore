@@ -2,7 +2,7 @@ package leesum
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
-import leesum.test_utils.gen_rand_uint
+import leesum.TestUtils.gen_rand_uint
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 

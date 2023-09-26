@@ -31,15 +31,14 @@ class LoadDcacheReq extends Bundle {
   val is_mmio = Bool()
 }
 class LoadDcacheResp extends Bundle {
+  // the valid data is indicated by the paddr, like AXI4
   val data = UInt(64.W)
   val exception = new ExceptionEntry(has_valid = true)
 }
 class StoreDcacheReq extends Bundle {
-  // must be aligned at 8 bytes
   val paddr = UInt(64.W)
-  // wdata should be aligned with wstrb
+  // wdata and wstrb indicate the valid data to be written, like AXI4
   val wdata = UInt(64.W)
-  // same as wstrb in AXI4
   val wstrb = UInt(8.W)
   val size = UInt(2.W)
   val is_mmio = Bool()
@@ -57,9 +56,9 @@ class ByteEnableGenerator extends Module {
     val wdata_aligned = Output(UInt(64.W))
     val checkAligned = Output(Bool())
   })
-  io.byteEnable := GenWstrb(io.addr, io.size)
+  io.byteEnable := GenAxiWstrb(io.addr, io.size)
   io.checkAligned := CheckAligned(io.addr, io.size)
-  io.wdata_aligned := GenWdataAlign(io.wdata, io.addr)
+  io.wdata_aligned := GenAxiWdata(io.wdata, io.addr)
 }
 
 object gen_test_verilog extends App {

@@ -3,7 +3,13 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
-import leesum.test_utils.{check_aligned, gen_rand_uint, long2UInt64}
+import leesum.TestUtils.{
+  check_aligned,
+  gen_axi_wdata,
+  gen_axi_wstrb,
+  gen_rand_uint,
+  long2UInt64
+}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -13,6 +19,7 @@ class AGU_dut extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new AGUIn))
     val out = new AGUOut
+    val store_bypass = Flipped(new StoreBypassIO)
     val flush = Input(Bool())
   })
 
@@ -23,6 +30,8 @@ class AGU_dut extends Module {
   agu.io.out <> io.out
   agu.io.tlb_req <> tlb.io.tlb_req
   agu.io.tlb_resp <> tlb.io.tlb_resp
+  agu.io.store_bypass <> io.store_bypass
+
   tlb.io.flush := io.flush
   agu.io.flush := io.flush
 }
@@ -40,6 +49,7 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
     val store_data = gen_rand_uint(64)
     val trans_id = gen_rand_uint(32)
     val is_store = Gen.oneOf(true.B, false.B)
+    val sign_ext = Gen.oneOf(true.B, false.B)
 
     val input_gen = for {
       op_a <- op_a
@@ -48,6 +58,7 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
       store_data <- store_data
       is_store <- is_store
       trans_id <- trans_id
+      sign_ext <- sign_ext
     } yield {
       (new AGUIn).Lit(
         _.op_a -> op_a,
@@ -55,13 +66,23 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
         _.size -> size,
         _.store_data -> store_data,
         _.is_store -> is_store,
-        _.trans_id -> trans_id
+        _.trans_id -> trans_id,
+        _.sign_ext -> sign_ext
       )
     }
     input_gen
   }
 
-  "AGU_test1" in {
+  def gen_store_bypass() = {
+    (new StoreBypassData).Lit(
+      _.wstrb -> 0.U,
+      _.wdata -> 0.U,
+      _.is_mmio -> false.B,
+      _.valid -> false.B
+    )
+  }
+
+  "AGU_dispatch_test" in {
     test(new AGU_dut)
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
@@ -70,6 +91,12 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
         dut.io.out.load_pipe.initSink().setSinkClock(dut.clock)
         dut.io.out.store_pipe.initSink().setSinkClock(dut.clock)
         dut.io.out.exception_pipe.initSink().setSinkClock(dut.clock)
+
+        dut.io.store_bypass.data.valid.poke(false.B)
+        dut.io.store_bypass.data.is_mmio.poke(false.B)
+        dut.io.store_bypass.data.wdata.poke(0.U)
+        dut.io.store_bypass.data.wstrb.poke(0.U)
+
         dut.clock.step(5)
 
         val input_seq = Gen.listOfN(1000, gen_agu_in_input()).sample.get
@@ -83,14 +110,7 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
             )
           })
           .map(input => {
-            (new LoadQueueIn).Lit(
-              _.paddr -> long2UInt64(
-                (input.op_a.litValue + input.op_b.litValue).toLong
-              ),
-              _.size -> input.size,
-              _.is_mmio -> false.B,
-              _.trans_id -> input.trans_id
-            )
+            gen_load_queue_entry(input)
           })
         // if addr is aligned, then generate load or store
         val output_store_seq = input_seq
@@ -101,15 +121,7 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
             )
           })
           .map(input => {
-            (new StoreQueueIn).Lit(
-              _.paddr -> long2UInt64(
-                (input.op_a.litValue + input.op_b.litValue).toLong
-              ),
-              _.store_data -> input.store_data,
-              _.size -> input.size,
-              _.is_mmio -> false.B,
-              _.trans_id -> input.trans_id
-            )
+            gen_store_queue_entry(input)
           })
 
         // if addr is not aligned, then generate exception
@@ -121,22 +133,7 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
             )
           })
           .map(input => {
-            val ex = (new ExceptionEntry).Lit(
-              _.valid -> true.B,
-              _.tval -> long2UInt64(
-                (input.op_a.litValue + input.op_b.litValue).toLong
-              ),
-              _.cause -> (if (input.is_store.litToBoolean) {
-                            ExceptionCause.misaligned_store
-                          } else {
-                            ExceptionCause.misaligned_load
-                          })
-            )
-
-            (new ExceptionQueueIn).Lit(
-              _.trans_id -> input.trans_id,
-              _.exception -> ex
-            )
+            gen_exception_queue_entry(input)
           })
 
         dut.clock.step(5)
@@ -175,5 +172,60 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
           })
         }.joinAndStep(dut.clock)
       }
+  }
+
+  private def gen_load_queue_entry(input: AGUIn) = {
+    (new LoadQueueIn).Lit(
+      _.paddr -> long2UInt64(
+        (input.op_a.litValue + input.op_b.litValue).toLong
+      ),
+      _.size -> input.size,
+      _.is_mmio -> false.B,
+      _.trans_id -> input.trans_id,
+      _.sign_ext -> input.sign_ext,
+      _.store_bypass -> gen_store_bypass()
+    )
+  }
+
+  private def gen_exception_queue_entry(input: AGUIn) = {
+    val ex = (new ExceptionEntry).Lit(
+      _.valid -> true.B,
+      _.tval -> long2UInt64(
+        (input.op_a.litValue + input.op_b.litValue).toLong
+      ),
+      _.cause -> (if (input.is_store.litToBoolean) {
+                    ExceptionCause.misaligned_store
+                  } else {
+                    ExceptionCause.misaligned_load
+                  })
+    )
+
+    (new ExceptionQueueIn).Lit(
+      _.trans_id -> input.trans_id,
+      _.exception -> ex
+    )
+  }
+
+  private def gen_store_queue_entry(input: AGUIn) = {
+    val paddr = long2UInt64(
+      (input.op_a.litValue + input.op_b.litValue).toLong
+    )
+    val wdata = long2UInt64(
+      gen_axi_wdata(
+        input.store_data.litValue.toLong,
+        paddr.litValue.toLong
+      )
+    )
+    val wstrb =
+      gen_axi_wstrb(paddr.litValue.toLong, input.size.litValue.toInt).U
+
+    (new StoreQueueIn).Lit(
+      _.paddr -> paddr,
+      _.wdata -> wdata,
+      _.size -> input.size,
+      _.wstrb -> wstrb,
+      _.is_mmio -> false.B,
+      _.trans_id -> input.trans_id
+    )
   }
 }

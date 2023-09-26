@@ -1,7 +1,7 @@
 package leesum
 import chisel3._
 import chiseltest._
-import leesum.test_utils.int2UInt32
+import leesum.TestUtils.int2UInt32
 import org.scalatest.freespec.AnyFreeSpec
 
 import scala.util.Random

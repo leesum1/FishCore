@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
-import leesum.test_utils.{gen_rand_uint, long2UInt64}
+import leesum.TestUtils.{gen_rand_uint, long2UInt64}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -17,10 +17,8 @@ class StoreQueueDut extends Module {
     val load_req = Flipped(Decoupled(new LoadQueueIn))
     val load_resp = Decoupled(new LoadWriteBack)
     // from commit stage, when commit a mmio instruction, set mmio_commit to true
-    val mmio_commit = Flipped(Decoupled())
+    val mmio_commit = Flipped(Decoupled(Bool()))
 
-//    val load_req = Flipped(Decoupled(new LoadDcacheReq))
-//    val load_resp = Decoupled(new LoadDcacheResp)
     val flush = Input(Bool())
   })
   val store_queue = Module(new StoreQueue())
@@ -35,6 +33,9 @@ class StoreQueueDut extends Module {
   store_queue.io.in <> io.store_req
   store_queue.io.store_commit <> io.store_commit
   store_queue.io.flush := io.flush
+  store_queue.io.store_bypass.paddr := io.store_req.bits.paddr
+  store_queue.io.store_bypass.valid := false.B
+
   dcache.io.flush := io.flush
 
   dcache.io.store_req <> store_queue.io.dcache_req
@@ -55,17 +56,27 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
   val size4 = 2
   val size8 = 3
 
+  def gen_store_bypass() = {
+    (new StoreBypassData).Lit(
+      _.wstrb -> 0.U,
+      _.wdata -> 0.U,
+      _.is_mmio -> false.B,
+      _.valid -> false.B
+    )
+  }
+
+  // TODO: not implement
   def gen_store_req(
       paddr: Int,
       store_data: Long,
       size: Int,
       is_mmio: Boolean = false
   ) = {
-    require(test_utils.check_aligned(paddr, size), "paddr must be aligned")
+    require(TestUtils.check_aligned(paddr, size), "paddr must be aligned")
     (new StoreQueueIn).Lit(
       _.paddr -> paddr.U,
       _.size -> size.U,
-      _.store_data -> long2UInt64(store_data),
+      _.wdata -> long2UInt64(store_data),
       _.is_mmio -> is_mmio.B,
       _.trans_id -> 0.U
     )
@@ -77,12 +88,16 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
       trans_id: Int,
       is_mmio: Boolean = false
   ) = {
-    require(test_utils.check_aligned(paddr, size), "paddr must be aligned")
+    require(TestUtils.check_aligned(paddr, size), "paddr must be aligned")
     (new LoadQueueIn).Lit(
       _.paddr -> paddr.U,
       _.size -> size.U,
       _.is_mmio -> is_mmio.B,
-      _.trans_id -> test_utils.int2UInt32(trans_id)
+      _.trans_id -> TestUtils.int2UInt32(trans_id),
+      // TODO: not implement
+      _.sign_ext -> false.B,
+      // TODO: not implement
+      _.store_bypass -> gen_store_bypass()
     )
   }
 
@@ -98,7 +113,7 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
       case 3 => data_shifted
     }
     (new LoadWriteBack).Lit(
-      _.tran_id -> test_utils.int2UInt32(trans_id),
+      _.tran_id -> TestUtils.int2UInt32(trans_id),
       _.rdata -> long2UInt64(data_masked)
     )
   }
@@ -210,7 +225,7 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
-            req.store_data.litValue.toLong,
+            req.wdata.litValue.toLong,
             req.size.litValue.toInt,
             req.paddr.litValue.toInt
           )
@@ -259,7 +274,7 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
-            req.store_data.litValue.toLong,
+            req.wdata.litValue.toLong,
             req.size.litValue.toInt,
             req.paddr.litValue.toInt
           )
@@ -301,7 +316,7 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
-            req.store_data.litValue.toLong,
+            req.wdata.litValue.toLong,
             req.size.litValue.toInt,
             req.paddr.litValue.toInt
           )
@@ -342,7 +357,7 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
-            req.store_data.litValue.toLong,
+            req.wdata.litValue.toLong,
             req.size.litValue.toInt,
             req.paddr.litValue.toInt
           )
@@ -384,7 +399,7 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
-            req.store_data.litValue.toLong,
+            req.wdata.litValue.toLong,
             req.size.litValue.toInt,
             req.paddr.litValue.toInt
           )
@@ -424,7 +439,7 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
-            req.store_data.litValue.toLong,
+            req.wdata.litValue.toLong,
             req.size.litValue.toInt,
             req.paddr.litValue.toInt
           )
@@ -465,7 +480,7 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
-            req.store_data.litValue.toLong,
+            req.wdata.litValue.toLong,
             req.size.litValue.toInt,
             req.paddr.litValue.toInt
           )
@@ -506,7 +521,7 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         input_store_req_seq.map(req =>
           gen_load_resp(
             req.paddr.litValue,
-            req.store_data.litValue.toLong,
+            req.wdata.litValue.toLong,
             req.size.litValue.toInt,
             req.paddr.litValue.toInt
           )

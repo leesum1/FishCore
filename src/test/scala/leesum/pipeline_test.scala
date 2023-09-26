@@ -1,8 +1,8 @@
 package leesum
 
 import chisel3._
-import chiseltest.{ChiselScalatestTester, _}
-import leesum.test_utils.gen_rand_uint
+import chiseltest._
+import leesum.TestUtils.gen_rand_uint
 import org.scalatest.freespec.AnyFreeSpec
 
 class pipeline_test extends AnyFreeSpec with ChiselScalatestTester {

@@ -9,6 +9,8 @@ class AGUIn extends Bundle {
   val store_data = UInt(64.W)
   val trans_id = UInt(32.W)
   val is_store = Bool()
+  // need by load
+  val sign_ext = Bool()
 }
 
 class ExceptionQueueIn extends Bundle {
@@ -30,6 +32,8 @@ class AGU extends Module {
     // tlb interface
     val tlb_req = Decoupled(new TLBReq)
     val tlb_resp = Flipped(Decoupled(new TLBResp))
+    // from store bypass
+    val store_bypass = Flipped(new StoreBypassIO)
   })
 
   val vaddr = io.in.bits.op_a.asSInt + io.in.bits.op_b.asSInt
@@ -40,9 +44,6 @@ class AGU extends Module {
   val agu_req_buf = RegInit(0.U.asTypeOf(new AGUIn))
 
   val exception_pipe = Module(new PipeLine(new ExceptionQueueIn()))
-
-//  val load_pipe = Module(new PipeLine(UInt(64.W)))
-//  val store_pipe = Module(new PipeLine(UInt(64.W)))
 
   io.tlb_req.valid := false.B
   io.tlb_resp.ready := false.B
@@ -58,6 +59,8 @@ class AGU extends Module {
   io.out.store_pipe.bits := DontCare
   io.out.load_pipe.valid := false.B
   io.out.load_pipe.bits := DontCare
+  io.store_bypass.valid := false.B
+  io.store_bypass.paddr := DontCare
 
   def send_tlb_req(virtual_addr: UInt, size: UInt): Unit = {
     io.tlb_req.valid := true.B
@@ -106,33 +109,52 @@ class AGU extends Module {
         tlb_rsp.exception.cause,
         mis_aligned_cause
       )
-
+      // back to back
       receive_tlb_req()
     }.otherwise {
       state := sWaitFifo
     }
   }
   def dispatch_to_load(tlb_rsp: TLBResp): Unit = {
-    io.out.load_pipe.valid := true.B
+    // when current load addr conflict with uncommitted store addr, and the store is a mmio operation
+    // then stall the current load.
+    val need_stall = io.store_bypass.data.valid && io.store_bypass.data.is_mmio
+    io.out.load_pipe.valid := !need_stall
     when(io.out.load_pipe.fire) {
       io.out.load_pipe.bits.paddr := tlb_rsp.paddr
       io.out.load_pipe.bits.size := agu_req_buf.size
       io.out.load_pipe.bits.trans_id := agu_req_buf.trans_id
+      io.out.load_pipe.bits.store_bypass := io.store_bypass.data
+      io.out.load_pipe.bits.sign_ext := agu_req_buf.sign_ext
       // TODO: is_mmio is not implemented
       io.out.load_pipe.bits.is_mmio := false.B
+      // back to back
       receive_tlb_req()
     }.otherwise {
       state := sWaitFifo
     }
   }
   def dispatch_to_store(tlb_rsp: TLBResp): Unit = {
-    io.out.store_pipe.valid := true.B
+    // when current store addr conflict with uncommitted store addr.
+    // than stall dispatch the current store
+    io.out.store_pipe.valid := true.B && !io.store_bypass.data.valid
     when(io.out.store_pipe.fire) {
       io.out.store_pipe.bits.paddr := tlb_rsp.paddr
       io.out.store_pipe.bits.size := agu_req_buf.size
-      io.out.store_pipe.bits.store_data := agu_req_buf.store_data
+
+      // convert store_data to axi wdata
+      io.out.store_pipe.bits.wdata := GenAxiWdata(
+        agu_req_buf.store_data,
+        tlb_rsp.paddr
+      )
+      io.out.store_pipe.bits.wstrb := GenAxiWstrb(
+        tlb_rsp.paddr,
+        agu_req_buf.size
+      )
       io.out.store_pipe.bits.trans_id := agu_req_buf.trans_id
+      // TODO: is_mmio is not implemented
       io.out.store_pipe.bits.is_mmio := false.B
+      // back to back
       receive_tlb_req()
     }.otherwise {
       state := sWaitFifo
@@ -149,6 +171,10 @@ class AGU extends Module {
       when(io.tlb_resp.fire && !io.flush) {
         // 1. flush is false, and tlb_resp is fire
         tlb_resp_buf := io.tlb_resp.bits
+        // send request to StoreQueue in order to check store bypass
+        io.store_bypass.valid := true.B
+        io.store_bypass.paddr := io.tlb_resp.bits.paddr
+
         when(check_privilege(io.tlb_resp.bits)) {
           dispatch_to_exception(io.tlb_resp.bits)
         }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.STORE) {
@@ -171,6 +197,8 @@ class AGU extends Module {
     }
     is(sWaitFifo) {
       when(!io.flush) {
+        io.store_bypass.valid := true.B
+        io.store_bypass.paddr := tlb_resp_buf.paddr
         when(check_privilege(tlb_resp_buf)) {
           dispatch_to_exception(tlb_resp_buf)
         }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.STORE) {

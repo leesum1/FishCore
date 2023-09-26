@@ -6,7 +6,9 @@ class LoadQueueIn extends Bundle {
   // 0: 1 byte, 1: 2 bytes, 2: 4 bytes, 3: 8 bytes
   val size = UInt(2.W)
   val is_mmio = Bool()
+  val sign_ext = Bool()
   val trans_id = UInt(32.W)
+  val store_bypass = new StoreBypassData
 }
 
 class LoadWriteBack extends Bundle {
@@ -21,7 +23,7 @@ class LoadQueue extends Module {
     // TODO: how to implement flush?
     val flush = Input(Bool())
     // from commit stage, when commit a mmio instruction, set mmio_commit to true
-    val mmio_commit = Flipped(Decoupled())
+    val mmio_commit = Flipped(Decoupled(Bool()))
     val dcache_req = Decoupled(new LoadDcacheReq)
     val dcache_resp = Flipped(Decoupled(new LoadDcacheResp))
   })
@@ -51,57 +53,107 @@ class LoadQueue extends Module {
 
   val sIdle :: sWaitDcacheResp :: sFlush :: Nil = Enum(3)
   val state = RegInit(sIdle)
-  val tran_id_buf = RegInit(0.U(32.W))
 
-  def sen_dcache_req(
-      paddr: UInt,
-      size: UInt,
-      is_mmio: Bool,
-      trans_id: UInt
-  ): Unit = {
-    io.dcache_req.valid := true.B
-    io.dcache_req.bits.paddr := paddr
-    io.dcache_req.bits.size := size
-    io.dcache_req.bits.is_mmio := is_mmio
-    when(io.dcache_req.fire) {
-      assert(load_queue_out.valid, "load_queue_out should be valid")
-      load_queue_out.ready := true.B
-      tran_id_buf := trans_id
-      state := sWaitDcacheResp
+  val laod_req_buf = RegInit(0.U.asTypeOf(new LoadQueueIn))
+
+  def send_dcache_req() = {
+    when(load_queue_out.valid && !io.flush) {
+      val isMmio = load_queue_out.bits.is_mmio
+      io.mmio_commit.ready := isMmio
+      when(isMmio && io.mmio_commit.fire || !isMmio) {
+        io.dcache_req.valid := true.B
+        io.dcache_req.bits.paddr := load_queue_out.bits.paddr
+        io.dcache_req.bits.size := load_queue_out.bits.size
+        io.dcache_req.bits.is_mmio := isMmio
+        when(io.dcache_req.fire) {
+          load_queue_out.ready := true.B
+          assert(load_queue_out.fire, "load_queue_out should be fire")
+          laod_req_buf := load_queue_out.bits
+          state := sWaitDcacheResp
+        }.otherwise {
+          state := sIdle
+        }
+      }
     }.otherwise {
       state := sIdle
     }
   }
 
-  switch(state) {
-    is(sIdle) {
-      when(load_queue_out.valid && !io.flush) {
-        val isMmio = load_queue_out.bits.is_mmio
-        io.mmio_commit.ready := isMmio
-        when(isMmio && io.mmio_commit.fire || !isMmio) {
-          sen_dcache_req(
-            load_queue_out.bits.paddr,
-            load_queue_out.bits.size,
-            isMmio,
-            load_queue_out.bits.trans_id
-          )
+  def compose_write_back_data(rdata: UInt, load_info: LoadQueueIn): UInt = {
+    val rdata_vec = rdata.asTypeOf(Vec(8, UInt(8.W)))
+    val wstrb_vec = load_info.store_bypass.wstrb.asBools
+    val wdata_vec = load_info.store_bypass.wdata.asTypeOf(Vec(8, UInt(8.W)))
+
+    require(
+      rdata_vec.length == wstrb_vec.length && rdata_vec.length == wdata_vec.length,
+      "rdata_vec,wstrb_vec,rdata_vec should have the same length"
+    )
+    when(load_info.store_bypass.valid) {
+      for (i <- 0 until rdata_vec.length) {
+        when(wstrb_vec(i)) {
+          rdata_vec(i) := wdata_vec(i)
         }
       }
     }
+    val right_aligned_sign_ext_rdata = GetAxiRdata(
+      rdata_vec.asUInt,
+      load_info.paddr,
+      load_info.size,
+      load_info.sign_ext
+    )
+    require(
+      right_aligned_sign_ext_rdata.getWidth == rdata.getWidth,
+      "width should be equal"
+    )
+    right_aligned_sign_ext_rdata
+  }
+
+//  def send_dcache_req_gpt4() = {
+//    val load_queue_valid_and_not_flushing = load_queue_out.valid && !io.flush
+//    val is_mmio = load_queue_out.bits.is_mmio
+//    val mmio_commit_fired = is_mmio && io.mmio_commit.fire
+//    val dcache_req_ready_to_fire =
+//      io.dcache_req.ready && load_queue_valid_and_not_flushing && (mmio_commit_fired || !is_mmio)
+//
+//    io.mmio_commit.ready := is_mmio
+//
+//    io.dcache_req.valid := dcache_req_ready_to_fire
+//    when(dcache_req_ready_to_fire) {
+//      io.dcache_req.bits.paddr := load_queue_out.bits.paddr
+//      io.dcache_req.bits.size := load_queue_out.bits.size
+//      io.dcache_req.bits.is_mmio := is_mmio
+//    }
+//
+//    when(dcache_req_ready_to_fire && io.dcache_req.fire) {
+//      load_queue_out.ready := true.B
+//      assert(load_queue_out.fire, "load_queue_out should be fire")
+//      laod_req_buf := load_queue_out.bits
+//      state := sWaitDcacheResp
+//    }.otherwise {
+//      state := sIdle
+//    }
+//  }
+
+  switch(state) {
+
+    is(sIdle) {
+      send_dcache_req()
+    }
     is(sWaitDcacheResp) {
+      // back pressure
       io.dcache_resp.ready := wb_pipe.io.in.ready
-      // TODO: Improve me, back by back
+
       when(io.dcache_resp.fire && !io.flush) {
         // 1. flush is false, and dcache_resp is fire, receive the data
         wb_pipe.io.in.valid := true.B
-        wb_pipe.io.in.bits.rdata := io.dcache_resp.bits.data
-        wb_pipe.io.in.bits.tran_id := tran_id_buf
-
-        when(wb_pipe.io.in.fire) {
-          state := sIdle
-        }.otherwise {
-          assert(false.B, "out_pipe.io.in.fire should be true.B")
-        }
+        wb_pipe.io.in.bits.rdata := compose_write_back_data(
+          io.dcache_resp.bits.data,
+          laod_req_buf
+        )
+        wb_pipe.io.in.bits.tran_id := laod_req_buf.trans_id
+        assert(wb_pipe.io.in.fire, "out_pipe.io.in.fire should be true.B")
+        // back to back
+        send_dcache_req()
       }.elsewhen(io.dcache_resp.fire && io.flush) {
         // 2. flush is true, and dcache_resp is fire, discard the data
         state := sIdle

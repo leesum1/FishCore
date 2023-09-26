@@ -1,10 +1,20 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Decoupled, Enum, is, isPow2, log2Ceil, switch}
+import chisel3.util.{
+  Decoupled,
+  Enum,
+  Mux1H,
+  PopCount,
+  is,
+  isPow2,
+  log2Ceil,
+  switch
+}
 
 class StoreQueueIn extends Bundle {
-  val store_data = UInt(64.W)
+  val wdata = UInt(64.W)
+  val wstrb = UInt(8.W)
   val paddr = UInt(64.W)
   // 0: 1 byte, 1: 2 bytes, 2: 4 bytes, 3: 8 bytes
   val size = UInt(2.W)
@@ -14,6 +24,19 @@ class StoreQueueIn extends Bundle {
 class StoreFIFOEntry extends Bundle {
   val valid = Bool()
   val bits = new StoreQueueIn
+}
+
+class StoreBypassData extends Bundle {
+  val valid = Bool()
+  val wdata = UInt(64.W)
+  val wstrb = UInt(8.W)
+  val is_mmio = Bool()
+}
+
+class StoreBypassIO extends Bundle {
+  val valid = Input(Bool())
+  val paddr = Input(UInt(64.W))
+  val data = Output(new StoreBypassData)
 }
 
 class StoreQueue(
@@ -31,6 +54,7 @@ class StoreQueue(
     val store_commit = Flipped(Decoupled(Bool()))
     val dcache_req = Decoupled(new StoreDcacheReq)
     val dcache_resp = Flipped(Decoupled(new StoreDcacheResp))
+    val store_bypass = new StoreBypassIO
   })
 
   // --------------------------
@@ -170,11 +194,8 @@ class StoreQueue(
 
       io.dcache_req.valid := true.B
       io.dcache_req.bits.paddr := entry.bits.paddr
-      io.dcache_req.bits.wdata := GenWdataAlign(
-        entry.bits.store_data,
-        entry.bits.paddr
-      )
-      io.dcache_req.bits.wstrb := GenWstrb(entry.bits.paddr, entry.bits.size)
+      io.dcache_req.bits.wdata := entry.bits.wdata
+      io.dcache_req.bits.wstrb := entry.bits.wstrb
       io.dcache_req.bits.size := entry.bits.size
       io.dcache_req.bits.is_mmio := entry.bits.is_mmio
 
@@ -196,6 +217,7 @@ class StoreQueue(
     is(sWaitDcacheResp) {
       io.dcache_resp.ready := true.B
       when(io.dcache_resp.fire) {
+        // back to back
         send_dcache_store_req()
       }
     }
@@ -204,6 +226,52 @@ class StoreQueue(
   // store commit logic
   // ----------------------
   io.store_commit.ready := !speculate_fifo_empty && !commit_fifo_full
+
+  // ----------------------
+  // store bypass logic
+  // ----------------------
+
+  def addr_match(addr1: UInt, addr2: UInt): Bool = {
+    // TODO: need optimization?
+    addr1(63, 3) === addr2(63, 3)
+  }
+
+  val all_fifo: Seq[StoreFIFOEntry] =
+    0.until(speculate_store_queue_size).indices.map { i =>
+      speculate_store_fifo(i)
+    } ++ 0.until(commit_store_queue_size).indices.map { i =>
+      commit_store_fifo(i)
+    }
+  val addr_match_mask = all_fifo.map { entry =>
+    addr_match(
+      entry.bits.paddr,
+      io.store_bypass.paddr
+    ) && entry.valid && io.store_bypass.valid
+  }
+
+  // TODO: need optimization!!!!!!
+  // wdata , size , is_mmio
+  val combined_seq = all_fifo.map { entry =>
+    val fwd_data = Wire(new StoreBypassData)
+    // TODO: need optimization!!!!!!
+    fwd_data.wdata := GenAxiWdata(entry.bits.wdata, entry.bits.paddr)
+    fwd_data.wstrb := GenAxiWstrb(entry.bits.paddr, entry.bits.size)
+    fwd_data.is_mmio := entry.bits.is_mmio
+    // first set valid to false, then set valid to true if addr match
+    fwd_data.valid := false.B
+    fwd_data
+  }
+
+  val bypass_select = Mux1H(addr_match_mask, combined_seq)
+  val bypass_valid = addr_match_mask.reduce(_ || _)
+  io.store_bypass.data := bypass_select
+  // override valid signal, if addr match
+  io.store_bypass.data.valid := bypass_valid
+
+  assert(
+    PopCount(addr_match_mask) <= 1.U,
+    "store bypass should not match more than one address"
+  )
 
   // ----------------------
   // assert
