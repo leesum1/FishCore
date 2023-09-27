@@ -4,7 +4,7 @@ import chiseltest._
 import leesum.axi4.StreamFork
 import org.scalatest.freespec.AnyFreeSpec
 
-class StreamFork_test extends AnyFreeSpec with ChiselScalatestTester {
+class StreamForkTest extends AnyFreeSpec with ChiselScalatestTester {
 
   "StreamFork_test1" in {
     test(new StreamFork(UInt(64.W), 2, synchronous = false))

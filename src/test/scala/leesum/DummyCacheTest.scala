@@ -13,16 +13,7 @@ class DummyCacheTest extends AnyFreeSpec with ChiselScalatestTester {
       _.is_mmio -> false.B
     )
   }
-//  class StoreDcacheReq extends Bundle {
-//    // must be aligned at 8 bytes
-//    val paddr = UInt(64.W)
-//    // wdata should be aligned with wstrb
-//    val wdata = UInt(64.W)
-//    // mask of wdata, same as wstrb in AXI4
-//    val wstrb = UInt(8.W)
-//    val size = UInt(2.W)
-//    val is_mmio = Bool()
-//  }
+
   def gen_store_req(
       paddr: UInt,
       wdata: UInt,
@@ -70,7 +61,7 @@ class DummyCacheTest extends AnyFreeSpec with ChiselScalatestTester {
         )
         val load_req2 = gen_load_req(0.U, size4)
         val load_resp2 = (new LoadDcacheResp).Lit(
-          _.data -> "xdeadbeef".U,
+          _.data -> "xdeadbeefdeadbeef".U,
           _.exception.valid -> false.B,
           _.exception.tval -> 0.U,
           _.exception.cause -> ExceptionCause.load_access
@@ -78,14 +69,14 @@ class DummyCacheTest extends AnyFreeSpec with ChiselScalatestTester {
 
         val load_req3 = gen_load_req(2.U, size2)
         val load_resp3 = (new LoadDcacheResp).Lit(
-          _.data -> "xdead".U,
+          _.data -> "xdeadbeefdeadbeef".U,
           _.exception.valid -> false.B,
           _.exception.tval -> 0.U,
           _.exception.cause -> ExceptionCause.load_access
         )
         val load_req4 = gen_load_req(6.U, size1)
         val load_resp4 = (new LoadDcacheResp).Lit(
-          _.data -> "xad".U,
+          _.data -> "xdeadbeefdeadbeef".U,
           _.exception.valid -> false.B,
           _.exception.tval -> 0.U,
           _.exception.cause -> ExceptionCause.load_access

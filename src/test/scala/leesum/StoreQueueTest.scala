@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
-import leesum.TestUtils.{gen_rand_uint, long2UInt64}
+import leesum.TestUtils.{gen_axi_wstrb, gen_rand_uint, long2UInt64}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -56,12 +56,22 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
   val size4 = 2
   val size8 = 3
 
-  def gen_store_bypass() = {
+  def default_store_bypass() = {
     (new StoreBypassData).Lit(
       _.wstrb -> 0.U,
       _.wdata -> 0.U,
       _.is_mmio -> false.B,
       _.valid -> false.B
+    )
+  }
+  def default_store_resp() = {
+    val ex = (new ExceptionEntry).Lit(
+      _.valid -> false.B,
+      _.tval -> 0.U,
+      _.cause -> ExceptionCause.store_access
+    )
+    (new StoreDcacheResp).Lit(
+      _.exception -> ex
     )
   }
 
@@ -73,10 +83,12 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
       is_mmio: Boolean = false
   ) = {
     require(TestUtils.check_aligned(paddr, size), "paddr must be aligned")
+    val wstrb = gen_axi_wstrb(paddr, size)
     (new StoreQueueIn).Lit(
       _.paddr -> paddr.U,
       _.size -> size.U,
       _.wdata -> long2UInt64(store_data),
+      _.wstrb -> wstrb.U(8.W),
       _.is_mmio -> is_mmio.B,
       _.trans_id -> 0.U
     )
@@ -97,14 +109,13 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
       // TODO: not implement
       _.sign_ext -> false.B,
       // TODO: not implement
-      _.store_bypass -> gen_store_bypass()
+      _.store_bypass -> default_store_bypass()
     )
   }
 
   def gen_load_resp(addr: BigInt, data: Long, size: Int, trans_id: Int) = {
     val offset = ((addr % 8) * 8).toLong
     val data_shifted = data >> offset
-
     val data_masked = size match {
       case 0 => data_shifted & 0xffL
       case 1 => data_shifted & 0xffffL
@@ -112,6 +123,7 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
         data_shifted & 0xffffffffL
       case 3 => data_shifted
     }
+    // TODO: sign_ext
     (new LoadWriteBack).Lit(
       _.tran_id -> TestUtils.int2UInt32(trans_id),
       _.rdata -> long2UInt64(data_masked)
@@ -130,6 +142,15 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
       .map(addr => {
         gen_store_req(addr, Gen.long.sample.get, size)
       })
+  }
+
+  def pop_store_queue(dut: StoreQueue): Unit = {
+    // pop one store_req from store queue
+    timescope {
+      dut.io.dcache_req.ready.poke(true.B)
+      dut.clock.step(1)
+    }
+    dut.io.dcache_resp.enqueue(default_store_resp())
   }
 
   private def StoreQueueTestBackToBack(
@@ -540,4 +561,253 @@ class StoreQueueTest extends AnyFreeSpec with ChiselScalatestTester {
     }
   }
 
+  "StoreQueueTest_bypass_test" in {
+    test(
+      new StoreQueue(
+      )
+    ).withAnnotations(
+      Seq(
+        VerilatorBackendAnnotation,
+        WriteFstAnnotation
+      )
+    ) { dut =>
+      // ----------------------
+      // port init
+      // ----------------------
+      store_queue_port_init(dut)
+
+      // -----------------------------------
+      // prepare input and expect sequence
+      // -----------------------------------
+      val store_seq = 0
+        .until(8)
+        .map(i => {
+          gen_store_req(i * 8, Gen.long.sample.get, size8)
+        })
+
+      val bypass_data_seq = store_seq.map(req => {
+        (new StoreBypassData).Lit(
+          _.wstrb -> req.wstrb,
+          _.wdata -> req.wdata,
+          _.is_mmio -> req.is_mmio,
+          _.valid -> true.B
+        )
+      })
+      val no_bypass_data = default_store_bypass()
+
+      // ----------------------
+      // start test
+      // ----------------------
+      dut.clock.step(5)
+
+      // full store queue
+      dut.io.dcache_req.ready.poke(false.B)
+      dut.io.dcache_resp.valid.poke(false.B)
+      fork {
+        dut.io.in.enqueueSeq(store_seq)
+      }.fork {
+        dut.io.store_commit.enqueueSeq(Seq.fill(4)(true.B))
+      }.joinAndStep(dut.clock)
+      dut.clock.step(5)
+
+      // all paddr should bypass
+      bypass_data_seq.zipWithIndex.foreach { case (bypass_data, i) =>
+        timescope {
+          val paddr = Gen.chooseNum(i * 8, i * 8 + 7).sample.get
+          dut.io.store_bypass.paddr.poke(paddr.U)
+          dut.io.store_bypass.valid.poke(true.B)
+          dut.io.store_bypass.data.expect(bypass_data)
+          dut.clock.step(1)
+        }
+      }
+      dut.clock.step(2)
+      // all paddr should not bypass
+      8.until(16)
+        .foreach(i => {
+          val paddr = Gen.chooseNum(i * 8, i * 8 + 7).sample.get
+          dut.io.store_bypass.paddr.poke(paddr.U)
+          dut.io.store_bypass.valid.poke(true.B)
+          dut.io.store_bypass.data.expect(no_bypass_data)
+          dut.clock.step(1)
+        })
+
+      pop_store_queue(dut)
+
+      // 0-7 should not bypass
+      timescope {
+        val paddr = Gen.chooseNum(0, 7).sample.get
+        dut.io.store_bypass.paddr.poke(paddr.U)
+        dut.io.store_bypass.valid.poke(true.B)
+        dut.io.store_bypass.data.expect(no_bypass_data)
+        dut.clock.step(1)
+      }
+      dut.clock.step(2)
+      // 8-15 should bypass
+      timescope {
+        val paddr = Gen.chooseNum(8, 15).sample.get
+        dut.io.store_bypass.paddr.poke(paddr.U)
+        dut.io.store_bypass.valid.poke(true.B)
+        dut.io.store_bypass.data.expect(bypass_data_seq(1))
+        dut.clock.step(1)
+      }
+      pop_store_queue(dut)
+      pop_store_queue(dut)
+
+      // 0-23 should not bypass
+      timescope {
+        for (i <- 0 until 24) {
+          dut.io.store_bypass.paddr.poke(i.U)
+          dut.io.store_bypass.valid.poke(true.B)
+          dut.io.store_bypass.data.expect(no_bypass_data)
+          dut.clock.step(1)
+        }
+      }
+      // 24-63 should bypass
+      timescope {
+        for (i <- 24 until 64) {
+          dut.io.store_bypass.paddr.poke(i.U)
+          dut.io.store_bypass.valid.poke(true.B)
+          dut.io.store_bypass.data.expect(bypass_data_seq(i / 8))
+          dut.clock.step(1)
+        }
+      }
+
+    }
+  }
+  "StoreQueueTest_flush_success" in {
+    test(
+      new StoreQueue(
+      )
+    ).withAnnotations(
+      Seq(
+        VerilatorBackendAnnotation,
+        WriteFstAnnotation
+      )
+    ) { dut =>
+      // ----------------------
+      // port init
+      // ----------------------
+      store_queue_port_init(dut)
+      // -----------------------------------
+      // prepare input and expect sequence
+      // -----------------------------------
+      val store_seq = 8
+        .until(16)
+        .map(i => {
+          gen_store_req(i * 8, Gen.long.sample.get, size8)
+        })
+
+      val bypass_data_seq = store_seq.map(req => {
+        (new StoreBypassData).Lit(
+          _.wstrb -> req.wstrb,
+          _.wdata -> req.wdata,
+          _.is_mmio -> req.is_mmio,
+          _.valid -> true.B
+        )
+      })
+      val no_bypass_data = default_store_bypass()
+
+      // ----------------------
+      // start test
+      // ----------------------
+      dut.clock.step(5)
+
+      // full store queue
+      dut.io.dcache_req.ready.poke(false.B)
+      dut.io.dcache_resp.valid.poke(false.B)
+      fork {
+        dut.io.in.enqueueSeq(store_seq)
+      }.fork {
+        dut.io.store_commit.enqueueSeq(Seq.fill(4)(true.B))
+      }.joinAndStep(dut.clock)
+      dut.clock.step(5)
+
+      // flush
+      timescope {
+        dut.io.flush.poke(true.B)
+        dut.clock.step(1)
+      }
+
+      // 64-95 should  bypass
+      timescope {
+        for (i <- 64 until 96) {
+          dut.io.store_bypass.paddr.poke(i.U)
+          dut.io.store_bypass.valid.poke(true.B)
+          dut.io.store_bypass.data.expect(bypass_data_seq((i - 64) / 8))
+
+          dut.clock.step(1)
+        }
+      }
+      // 96-127 should  not bypass
+      timescope {
+        for (i <- 96 until 128) {
+          dut.io.store_bypass.paddr.poke(i.U)
+          dut.io.store_bypass.valid.poke(true.B)
+          dut.io.store_bypass.data.expect(no_bypass_data)
+          dut.clock.step(1)
+        }
+      }
+
+      // flush and enqueue doing at the same time
+      // enqueue will be discard
+      fork {
+        timescope {
+          dut.io.flush.poke(true.B)
+          dut.clock.step(1)
+        }
+      }.fork {
+        dut.io.in.enqueue(gen_store_req(200, Gen.long.sample.get, size8))
+      }.joinAndStep(dut.clock)
+
+      timescope {
+        for (i <- 200 until 208) {
+          dut.io.store_bypass.paddr.poke(i.U)
+          dut.io.store_bypass.valid.poke(true.B)
+          dut.io.store_bypass.data.expect(no_bypass_data)
+          dut.clock.step(1)
+        }
+      }
+
+    }
+  }
+
+  "StoreQueueTest_flush_panic" in {
+    assertThrows[chiseltest.ChiselAssertionError] {
+      test(
+        new StoreQueue(
+        )
+      ).withAnnotations(
+        Seq(
+          VerilatorBackendAnnotation,
+          WriteFstAnnotation
+        )
+      ) { dut =>
+        // ----------------------
+        // port init
+        // ----------------------
+        store_queue_port_init(dut)
+
+        dut.clock.step(5)
+        fork {
+          timescope {
+            dut.io.flush.poke(true.B)
+            dut.clock.step(1)
+          }
+        }.fork {
+          dut.io.store_commit.enqueue(true.B)
+        }.joinAndStep(dut.clock)
+        dut.clock.step(5)
+      }
+    }
+  }
+
+  private def store_queue_port_init(dut: StoreQueue): Unit = {
+    dut.io.store_commit.initSource().setSourceClock(dut.clock)
+    dut.io.dcache_req.initSink().setSinkClock(dut.clock)
+    dut.io.dcache_resp.initSource().setSourceClock(dut.clock)
+    dut.io.in.initSource().setSourceClock(dut.clock)
+    dut.io.flush.poke(false.B)
+    dut.io.store_bypass.valid.poke(false.B)
+    dut.io.store_bypass.paddr.poke(0.U)
+  }
 }

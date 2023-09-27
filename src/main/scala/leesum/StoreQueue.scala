@@ -171,7 +171,7 @@ class StoreQueue(
 
   // when get a store commit signal, transfer speculate store queue to commit store queue
   commit_push_pop_cond(
-    io.store_commit.fire,
+    io.store_commit.fire && !io.flush,
     commit_pop_cond,
     speculate_store_fifo.read(speculate_pop_ptr).bits
   )
@@ -268,14 +268,20 @@ class StoreQueue(
   // override valid signal, if addr match
   io.store_bypass.data.valid := bypass_valid
 
+  // ----------------------
+  // assert
+  // ----------------------
+
+  when(io.dcache_resp.fire) {
+    assert(
+      io.dcache_resp.bits.exception.valid === false.B,
+      "not handle store_access exception now"
+    )
+  }
   assert(
     PopCount(addr_match_mask) <= 1.U,
     "store bypass should not match more than one address"
   )
-
-  // ----------------------
-  // assert
-  // ----------------------
   when(io.in.fire) {
     assert(!speculate_fifo_full, "speculate store queue must not be full")
   }
