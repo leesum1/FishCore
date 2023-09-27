@@ -2,7 +2,7 @@ package leesum
 import chisel3._
 import chisel3.util.{Decoupled, Enum, PopCount, is, switch}
 
-class AGUIn extends Bundle {
+class AGUReq extends Bundle {
   val op_a = UInt(64.W)
   val op_b = UInt(64.W)
   val size = UInt(2.W)
@@ -18,7 +18,7 @@ class ExceptionQueueIn extends Bundle {
   val exception = new ExceptionEntry()
 }
 
-class AGUOut extends Bundle {
+class AGUResp extends Bundle {
   val load_pipe = Decoupled(new LoadQueueIn())
   val store_pipe = Decoupled(new StoreQueueIn())
   val exception_pipe = Decoupled(new ExceptionQueueIn())
@@ -26,8 +26,8 @@ class AGUOut extends Bundle {
 
 class AGU extends Module {
   val io = IO(new Bundle {
-    val in = Flipped(Decoupled(new AGUIn))
-    val out = new AGUOut
+    val in = Flipped(Decoupled(new AGUReq))
+    val out = new AGUResp
     val flush = Input(Bool())
     // tlb interface
     val tlb_req = Decoupled(new TLBReq)
@@ -36,24 +36,24 @@ class AGU extends Module {
     val store_bypass = Flipped(new StoreBypassIO)
   })
 
+  // TODO: need optimize, use alu to calculate vaddr
   val vaddr = io.in.bits.op_a.asSInt + io.in.bits.op_b.asSInt
 
   val sIdle :: sWaitTLBRsp :: sWaitFifo :: sFlush :: Nil = Enum(4)
   val state = RegInit(sIdle)
   val tlb_resp_buf = RegInit(0.U.asTypeOf(new TLBResp))
-  val agu_req_buf = RegInit(0.U.asTypeOf(new AGUIn))
+  val agu_req_buf = RegInit(0.U.asTypeOf(new AGUReq))
 
-  val exception_pipe = Module(new PipeLine(new ExceptionQueueIn()))
+  // TODO: put exception pipe outside the Module?
+//  val exception_pipe = Module(new PipeLine(new ExceptionQueueIn()))
 
   io.tlb_req.valid := false.B
   io.tlb_resp.ready := false.B
   io.in.ready := false.B
   io.tlb_req.bits := DontCare
 
-  exception_pipe.io.in.valid := false.B
-  exception_pipe.io.in.bits := DontCare
-
-  exception_pipe.io.flush := io.flush
+  io.out.exception_pipe.valid := false.B
+  io.out.exception_pipe.bits := DontCare
 
   io.out.store_pipe.valid := false.B
   io.out.store_pipe.bits := DontCare
@@ -62,23 +62,21 @@ class AGU extends Module {
   io.store_bypass.valid := false.B
   io.store_bypass.paddr := DontCare
 
-  def send_tlb_req(virtual_addr: UInt, size: UInt): Unit = {
-    io.tlb_req.valid := true.B
-    io.tlb_req.bits.vaddr := virtual_addr
-    io.tlb_req.bits.size := size
+  // TODO: use a queue optimize timing?
+  def send_tlb_req(): Unit = {
+    io.in.ready := io.tlb_req.ready && !io.flush
+
+    io.tlb_req.valid := io.in.valid
+    io.tlb_req.bits.vaddr := vaddr.asUInt
+    io.tlb_req.bits.size := io.in.bits.size
     io.tlb_req.bits.req_type := Mux(
       io.in.bits.is_store,
       TLBReqType.STORE,
       TLBReqType.LOAD
     )
-  }
-
-  def receive_tlb_req(): Unit = {
-    io.in.ready := true.B && !io.flush
-    when(io.in.fire) {
+    when(io.in.fire && io.tlb_req.fire) {
       state := sWaitTLBRsp
       agu_req_buf := io.in.bits
-      send_tlb_req(vaddr.asUInt, io.in.bits.size)
     }.otherwise {
       state := sIdle
     }
@@ -86,17 +84,16 @@ class AGU extends Module {
   // TODO: not implemented now
   def check_privilege(tlb_rsp: TLBResp): Bool = {
     val addr_align = CheckAligned(tlb_rsp.paddr, tlb_rsp.size)
-
     tlb_rsp.exception.valid || !addr_align
   }
 
   // TODO: not implemented now
   def dispatch_to_exception(tlb_rsp: TLBResp): Unit = {
-    exception_pipe.io.in.valid := true.B
-    when(exception_pipe.io.in.fire) {
-      exception_pipe.io.in.bits.exception.valid := true.B
-      exception_pipe.io.in.bits.exception.tval := tlb_rsp.paddr
-      exception_pipe.io.in.bits.trans_id := agu_req_buf.trans_id
+    io.out.exception_pipe.valid := true.B
+    when(io.out.exception_pipe.fire) {
+      io.out.exception_pipe.bits.exception.valid := true.B
+      io.out.exception_pipe.bits.exception.tval := tlb_rsp.paddr
+      io.out.exception_pipe.bits.trans_id := agu_req_buf.trans_id
 
       val mis_aligned_cause = Mux(
         tlb_rsp.req_type === TLBReqType.LOAD,
@@ -104,13 +101,13 @@ class AGU extends Module {
         ExceptionCause.misaligned_store
       )
       // page fault or access fault has higher priority
-      exception_pipe.io.in.bits.exception.cause := Mux(
+      io.out.exception_pipe.bits.exception.cause := Mux(
         tlb_rsp.exception.valid,
         tlb_rsp.exception.cause,
         mis_aligned_cause
       )
       // back to back
-      receive_tlb_req()
+      send_tlb_req()
     }.otherwise {
       state := sWaitFifo
     }
@@ -129,7 +126,7 @@ class AGU extends Module {
       // TODO: is_mmio is not implemented
       io.out.load_pipe.bits.is_mmio := false.B
       // back to back
-      receive_tlb_req()
+      send_tlb_req()
     }.otherwise {
       state := sWaitFifo
     }
@@ -155,7 +152,7 @@ class AGU extends Module {
       // TODO: is_mmio is not implemented
       io.out.store_pipe.bits.is_mmio := false.B
       // back to back
-      receive_tlb_req()
+      send_tlb_req()
     }.otherwise {
       state := sWaitFifo
     }
@@ -163,15 +160,14 @@ class AGU extends Module {
 
   switch(state) {
     is(sIdle) {
-      receive_tlb_req()
+      send_tlb_req()
     }
-    // TODO: what if flush is true?
     is(sWaitTLBRsp) {
       io.tlb_resp.ready := true.B
       when(io.tlb_resp.fire && !io.flush) {
         // 1. flush is false, and tlb_resp is fire
         tlb_resp_buf := io.tlb_resp.bits
-        // send request to StoreQueue in order to check store bypass
+        // send request to StoreQueue in order to check addr conflict
         io.store_bypass.valid := true.B
         io.store_bypass.paddr := io.tlb_resp.bits.paddr
 
@@ -185,13 +181,13 @@ class AGU extends Module {
           assert(false.B, "sWaitTLBRsp error, should not reach here")
         }
       }.elsewhen(io.tlb_resp.fire && io.flush) {
-        // 2. flush is true, and tlb_resp is fire
+        // 2. flush is true, and tlb_resp is fire, discard the coming tlb_resp
         state := sIdle
       }.elsewhen(!io.tlb_resp.fire && io.flush) {
         // 3. flush is true, but tlb_resp is not fire
         state := sFlush
       }.otherwise {
-        // 4. flush is false, and tlb_resp is not fire
+        // 4. flush is false, and tlb_resp is not fire,continue to wait
         state := sWaitTLBRsp
       }
     }
@@ -201,9 +197,9 @@ class AGU extends Module {
         io.store_bypass.paddr := tlb_resp_buf.paddr
         when(check_privilege(tlb_resp_buf)) {
           dispatch_to_exception(tlb_resp_buf)
-        }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.STORE) {
+        }.elsewhen(tlb_resp_buf.req_type === TLBReqType.STORE) {
           dispatch_to_store(tlb_resp_buf)
-        }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.LOAD) {
+        }.elsewhen(tlb_resp_buf.req_type === TLBReqType.LOAD) {
           dispatch_to_load(tlb_resp_buf)
         }.otherwise {
           assert(false.B, "sWaitFifo error, should not reach here")
@@ -219,8 +215,6 @@ class AGU extends Module {
       }
     }
   }
-
-  io.out.exception_pipe <> exception_pipe.io.out
 
 }
 
