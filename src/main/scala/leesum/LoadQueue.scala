@@ -31,6 +31,8 @@ class LoadQueue extends Module {
   val load_queue_out = Queue(
     io.in,
     load_queue_size,
+    pipe = true,
+    flow = true,
     flush = Some(io.flush)
   )
 
@@ -73,6 +75,8 @@ class LoadQueue extends Module {
         }.otherwise {
           state := sIdle
         }
+      }.otherwise {
+        state := sIdle
       }
     }.otherwise {
       state := sIdle

@@ -1,10 +1,35 @@
 package leesum
 
 import chisel3._
-import leesum.TestUtils.gen_axi_wstrb
+import leesum.TestUtils.{gen_axi_wstrb, sign_ext}
 import org.scalacheck.Gen
 
 object TestUtils {
+
+  def sign_ext(value: Long, inputWidth: Int, en: Boolean = true): Long = {
+    require(
+      1.to(64).contains(inputWidth),
+      "inputWidth  must be in range [0, 64]"
+    )
+    if (inputWidth == 64) {
+      return value
+    }
+
+    val sign_bit = (value >> (inputWidth - 1)) & 0x1L
+    val value_mask = (1L << inputWidth) - 1L
+    val value_masked = value & value_mask
+    if (sign_bit == 0 || !en) {
+      value_masked
+    } else {
+      val sign_mask = (1L << (64 - inputWidth)) - 1L
+
+      val sign_masked = value_masked & sign_mask
+      val sign_ext = sign_masked | (sign_mask << inputWidth)
+      sign_ext
+    }
+
+  }
+
   def long2UInt64(x: Long): UInt = {
     if (x < 0) {
       // because of chisel doesn't support convert a negative number to UInt
@@ -97,5 +122,12 @@ object TestUtils {
 object rand_test1 extends App {
   val uint_gen = TestUtils.gen_rand_uint(4)
   val wstrb = gen_axi_wstrb(0x1002, 2)
+
+  val sign_test1 = sign_ext(0xf, 8)
+  val sign_test2 = sign_ext(0x7a, 7)
+
+  println(sign_test1.toHexString)
+  println(sign_test2.toHexString)
+
   println(wstrb.toBinaryString)
 }

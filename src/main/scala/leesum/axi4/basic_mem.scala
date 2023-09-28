@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util.RegEnable
 import leesum.GenVerilogHelper
 
+import java.nio.file.{Files, Paths}
 import scala.io.Source
 
 class BasicMemoryIO(ADDR_WIDTH: Int, DATA_WIDTH: Int) extends Bundle {
@@ -99,10 +100,8 @@ class BasicMemoryVec(
   // init memory from file
   // -------------------------
   val contentsDelayed = if (memoryFile.trim.nonEmpty) {
-    Source
-      .fromFile(memoryFile)
-      .map(_.toByte)
-      .toSeq
+    val byteArray = Files.readAllBytes(Paths.get(memoryFile))
+    byteArray.toSeq
   } else {
     Seq.empty[Byte]
   }
@@ -118,7 +117,9 @@ class BasicMemoryVec(
     .toSeq
 
   val vec_mem = words.map(x => {
-    val vec = VecInit(x.map(_.U(8.W)))
+    val vec = VecInit(x.map { x =>
+      (x & 0xff).U(8.W)
+    })
     vec
   })
 

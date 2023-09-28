@@ -42,10 +42,10 @@ class DummyDCache(memoryFIle: String = "") extends Module {
   // --------------------------
   // ar
 
-  val (load_req_axi_fork, load_req_fifo_fork) = StreamFork2(io.load_req)
+//  val (load_req_axi_fork, load_req_fifo_fork) = StreamFork2(io.load_req)
 
-  axi_master.ar.valid := load_req_axi_fork.valid
-  load_req_axi_fork.ready := axi_master.ar.ready
+  axi_master.ar.valid := io.load_req.valid
+  io.load_req.ready := axi_master.ar.ready
 
   axi_master.ar.bits.addr := io.load_req.bits.paddr
   axi_master.ar.bits.size := DcacheSize2AxiSize(io.load_req.bits.size)
@@ -53,8 +53,8 @@ class DummyDCache(memoryFIle: String = "") extends Module {
   axi_master.ar.bits.len := 0.U
   axi_master.ar.bits.id := 0.U
 
-  val load_req_fifo = Queue(load_req_fifo_fork, 4)
-  load_req_fifo.ready := io.load_resp.fire
+//  val load_req_fifo = Queue(load_req_fifo_fork, 4)
+//  load_req_fifo.ready := io.load_resp.fire
 
   // r
   io.load_resp.valid := axi_master.r.valid
@@ -100,9 +100,9 @@ class DummyDCache(memoryFIle: String = "") extends Module {
   // assert
   // --------------------------
 
-  when(io.load_resp.fire) {
-    assert(load_req_fifo.valid === true.B, "load_req_fifo.valid must be true")
-  }
+//  when(io.load_resp.fire) {
+//    assert(load_req_fifo.valid === true.B, "load_req_fifo.valid must be true")
+//  }
 
   when(io.load_req.fire) {
     assert(
