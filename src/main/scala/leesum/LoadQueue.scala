@@ -20,7 +20,7 @@ class LoadQueue extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new LoadQueueIn))
     val load_wb = Decoupled(new LoadWriteBack)
-    // TODO: how to implement flush?
+    // flush and mmio_commit should not be true at the same time
     val flush = Input(Bool())
     // from commit stage, when commit a mmio instruction, set mmio_commit to true
     val mmio_commit = Flipped(Decoupled(Bool()))

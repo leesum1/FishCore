@@ -121,7 +121,11 @@ class AGU extends Module {
       io.out.load_pipe.bits.paddr := tlb_rsp.paddr
       io.out.load_pipe.bits.size := agu_req_buf.size
       io.out.load_pipe.bits.trans_id := agu_req_buf.trans_id
-      io.out.load_pipe.bits.store_bypass := io.store_bypass.data
+      io.out.load_pipe.bits.store_bypass := Mux(
+        io.store_bypass.data.valid,
+        io.store_bypass.data,
+        0.U.asTypeOf(new StoreBypassData)
+      )
       io.out.load_pipe.bits.sign_ext := agu_req_buf.sign_ext
       // TODO: is_mmio is not implemented
       io.out.load_pipe.bits.is_mmio := false.B
@@ -193,6 +197,7 @@ class AGU extends Module {
     }
     is(sWaitFifo) {
       when(!io.flush) {
+        // send request to StoreQueue in order to check addr conflict
         io.store_bypass.valid := true.B
         io.store_bypass.paddr := tlb_resp_buf.paddr
         when(check_privilege(tlb_resp_buf)) {

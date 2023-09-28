@@ -35,12 +35,52 @@ class AGU_dut extends Module {
   tlb.io.flush := io.flush
   agu.io.flush := io.flush
 }
+class AGU_dut2 extends Module {
+  val io = IO(new Bundle {
+    val in = Flipped(Decoupled(new AGUReq))
+    val out = new AGUResp
+    val flush = Input(Bool())
+    // tlb interface
+    val tlb_req = Decoupled(new TLBReq)
+    val tlb_resp = Flipped(Decoupled(new TLBResp))
+    // from store bypass
+    val store_bypass = Flipped(new StoreBypassIO)
+  })
+
+  val agu = Module(new AGU)
+
+  io.out.store_pipe <> PipeLine(agu.io.out.store_pipe, io.flush)
+  io.out.load_pipe <> PipeLine(agu.io.out.load_pipe, io.flush)
+  io.out.exception_pipe <> PipeLine(agu.io.out.exception_pipe, io.flush)
+
+  agu.io.in <> io.in
+  agu.io.tlb_req <> io.tlb_req
+  agu.io.tlb_resp <> io.tlb_resp
+  agu.io.store_bypass <> io.store_bypass
+  agu.io.flush := io.flush
+}
 
 object gen_agu_dut_verilog extends App {
-  GenVerilogHelper(new AGU_dut())
+  GenVerilogHelper(new AGU_dut2())
 }
 
 class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
+  val size1 = 0
+  val size2 = 1
+  val size4 = 2
+  val size8 = 3
+
+  def gen_agu_in(addr: Long, is_store: Boolean, size: Int): AGUReq = {
+    (new AGUReq).Lit(
+      _.op_a -> long2UInt64(addr),
+      _.op_b -> 0.U,
+      _.size -> size.U,
+      _.store_data -> gen_rand_uint(64).sample.get,
+      _.is_store -> is_store.B,
+      _.trans_id -> gen_rand_uint(32).sample.get,
+      _.sign_ext -> false.B
+    )
+  }
 
   def gen_agu_in_input(): Gen[AGUReq] = {
     val op_a = gen_rand_uint(64)
@@ -73,12 +113,17 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
     input_gen
   }
 
-  def gen_store_bypass() = {
+  def gen_store_bypass(
+      valid: Boolean = false,
+      wdata: Long = 0,
+      wstrb: Int = 0,
+      is_mmio: Boolean = false
+  ) = {
     (new StoreBypassData).Lit(
-      _.wstrb -> 0.U,
-      _.wdata -> 0.U,
-      _.is_mmio -> false.B,
-      _.valid -> false.B
+      _.wstrb -> wstrb.U,
+      _.wdata -> long2UInt64(wdata),
+      _.is_mmio -> is_mmio.B,
+      _.valid -> valid.B
     )
   }
 
@@ -99,6 +144,8 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
 
         dut.clock.step(5)
 
+        val default_bypass_data = gen_store_bypass()
+
         val input_seq = Gen.listOfN(1000, gen_agu_in_input()).sample.get
 
         // if addr is aligned, then generate load or store
@@ -110,7 +157,7 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
             )
           })
           .map(input => {
-            gen_load_queue_entry(input)
+            gen_load_queue_entry(input, default_bypass_data)
           })
         // if addr is aligned, then generate load or store
         val output_store_seq = input_seq
@@ -179,7 +226,7 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   "AGU_flush_test" in {
-    test(new AGU)
+    test(new AGU_dut2)
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
@@ -197,49 +244,21 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
         dut.io.store_bypass.data.is_mmio.poke(false.B)
         dut.io.store_bypass.data.wdata.poke(0.U)
         dut.io.store_bypass.data.wstrb.poke(0.U)
+
+        val default_bypass_data = gen_store_bypass()
         // --------------------
         // prepare test data
         // --------------------
         val input_seq = Gen.listOfN(10, gen_agu_in_input()).sample.get
         val tlb_req_seq = input_seq.map(agu_req => {
-          val vaddr = agu_req.op_a.litValue + agu_req.op_b.litValue
-          val req_type =
-            if (agu_req.is_store.litToBoolean) TLBReqType.STORE
-            else TLBReqType.LOAD
-          (new TLBReq).Lit(
-            _.size -> agu_req.size,
-            _.vaddr -> TestUtils.long2UInt64(vaddr.toLong),
-            _.req_type -> req_type
-          )
+          gen_tlb_req(agu_req)
         })
         val tlb_resp_seq = tlb_req_seq.map(tlb_req => {
-          val cause = if (tlb_req.req_type == TLBReqType.STORE) {
-            ExceptionCause.store_access
-          } else {
-            ExceptionCause.load_access
-          }
-          (new TLBResp).Lit(
-            _.paddr -> tlb_req.vaddr,
-            _.req_type -> tlb_req.req_type,
-            _.size -> tlb_req.size,
-            _.exception.valid -> false.B,
-            _.exception.tval -> 0.U,
-            _.exception.cause -> cause
-          )
+          gen_tlb_resp(tlb_req)
         })
 
         val out_seq: List[Any] = input_seq.map(agu_req => {
-          val vaddr = agu_req.op_a.litValue + agu_req.op_b.litValue
-          val is_store = agu_req.is_store.litToBoolean
-          if (check_aligned(vaddr.toLong, agu_req.size.litValue.toInt)) {
-            if (is_store) {
-              gen_store_queue_entry(agu_req)
-            } else {
-              gen_load_queue_entry(agu_req)
-            }
-          } else {
-            gen_exception_queue_entry(agu_req)
-          }
+          gen_agu_out(agu_req, default_bypass_data)
         })
 
         val out_seq_type = input_seq.map(agu_req => {
@@ -358,8 +377,247 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
       }
   }
 
+  private def gen_tlb_req(agu_req: AGUReq): TLBReq = {
+    val vaddr = agu_req.op_a.litValue + agu_req.op_b.litValue
+    val req_type =
+      if (agu_req.is_store.litToBoolean) TLBReqType.STORE
+      else TLBReqType.LOAD
+    (new TLBReq).Lit(
+      _.size -> agu_req.size,
+      _.vaddr -> TestUtils.long2UInt64(vaddr.toLong),
+      _.req_type -> req_type
+    )
+  }
+
+  private def gen_agu_out(
+      agu_req: AGUReq,
+      bypass_data: StoreBypassData
+  ): Any = {
+    val vaddr = agu_req.op_a.litValue + agu_req.op_b.litValue
+    val is_store = agu_req.is_store.litToBoolean
+    if (check_aligned(vaddr.toLong, agu_req.size.litValue.toInt)) {
+      if (is_store) {
+        gen_store_queue_entry(agu_req)
+      } else {
+        gen_load_queue_entry(agu_req, bypass_data)
+      }
+    } else {
+      gen_exception_queue_entry(agu_req)
+    }
+  }
+
+  private def gen_tlb_resp(tlb_req: TLBReq) = {
+    val cause = if (tlb_req.req_type == TLBReqType.STORE) {
+      ExceptionCause.store_access
+    } else {
+      ExceptionCause.load_access
+    }
+    (new TLBResp).Lit(
+      _.paddr -> tlb_req.vaddr,
+      _.req_type -> tlb_req.req_type,
+      _.size -> tlb_req.size,
+      _.exception.valid -> false.B,
+      _.exception.tval -> 0.U,
+      _.exception.cause -> cause
+    )
+  }
+
+  "AGU_store_bypass_test" in {
+    test(new AGU_dut2)
+      .withAnnotations(
+        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+      ) { dut =>
+        // --------------------
+        // init ports
+        // --------------------
+        dut.io.in.initSource().setSourceClock(dut.clock)
+        dut.io.out.load_pipe.initSink().setSinkClock(dut.clock)
+        dut.io.out.store_pipe.initSink().setSinkClock(dut.clock)
+        dut.io.out.exception_pipe.initSink().setSinkClock(dut.clock)
+        dut.io.tlb_req.initSink().setSinkClock(dut.clock)
+        dut.io.tlb_resp.initSource().setSourceClock(dut.clock)
+        dut.io.flush.poke(false.B)
+        dut.io.store_bypass.data.valid.poke(false.B)
+        dut.io.store_bypass.data.is_mmio.poke(false.B)
+        dut.io.store_bypass.data.wdata.poke(0.U)
+        dut.io.store_bypass.data.wstrb.poke(0.U)
+
+        // --------------------
+        // prepare input data
+        // --------------------
+
+        def bypass_data(addr: Long, use_mmio: Boolean) = {
+          val wdata_seq = {
+            Seq(
+              0x1234567887654321L,
+              0x8765432144332211L,
+              0xdeadbeef43214433L,
+              0xabcdef01eef432b2L
+            )
+          }
+          val wstrb_seq = Seq(0xff, 0x0f, 0x03, 0x01)
+          val is_mmio_seq = Seq(true, true, false, false)
+
+          val mmio = if (use_mmio) {
+            is_mmio_seq((addr / 8).toInt)
+          } else {
+            false
+          }
+          if ((addr >= 0 && addr < 24)) {
+            gen_store_bypass(
+              valid = true,
+              wdata = wdata_seq((addr / 8).toInt),
+              wstrb = wstrb_seq((addr / 8).toInt),
+              is_mmio = mmio
+            )
+          } else {
+            gen_store_bypass()
+          }
+        }
+
+        val input_store_seq = 0
+          .until(32, 4)
+          .map(
+            gen_agu_in(_, is_store = true, size4)
+          )
+        val input_load_seq = 0
+          .until(32, 4)
+          .map(
+            gen_agu_in(_, is_store = false, size4)
+          )
+        val input_ex_seq = 0
+          .until(32, 2)
+          .filter(!check_aligned(_, size2))
+          .map(
+            gen_agu_in(_, Gen.oneOf(true, false).sample.get, size2)
+          )
+        val store_tlb_req_seq = input_store_seq.map(gen_tlb_req)
+        val load_tlb_req_seq = input_load_seq.map(gen_tlb_req)
+        val store_tlb_resp_seq = store_tlb_req_seq.map(gen_tlb_resp)
+        val load_tlb_resp_seq = load_tlb_req_seq.map(gen_tlb_resp)
+        val store_out_seq = input_store_seq.map(gen_store_queue_entry)
+        val load_out_seq_with_bypass = input_load_seq.map(in => {
+          gen_load_queue_entry(
+            in,
+            bypass_data(
+              (in.op_a.litValue + in.op_b.litValue).toLong,
+              use_mmio = false
+            )
+          )
+        })
+        val load_out_seq_without_bypass = input_load_seq.map(in => {
+          gen_load_queue_entry(
+            in,
+            gen_store_bypass()
+          )
+        })
+
+        // --------------------
+        // load stall test1
+        // --------------------
+        dut.clock.step(4)
+        // init store_bypass data
+        dut.io.store_bypass.data.poke(
+          bypass_data(
+            load_tlb_resp_seq.head.paddr.litValue.toLong,
+            use_mmio = true
+          )
+        )
+        // send load request and tlb request
+        fork {
+          dut.io.in.enqueue(input_load_seq.head)
+        }.fork {
+          dut.io.tlb_req.expectDequeue(load_tlb_req_seq.head)
+        }.joinAndStep(dut.clock)
+
+        // get tlb response
+        dut.clock.step(4)
+        fork {
+          dut.io.tlb_resp.enqueue(load_tlb_resp_seq.head)
+        }.joinAndStep(dut.clock)
+
+        // expect load response, when store_bypass.data.valid is true and store_bypass.data.is_mmio is true
+        // load response will be stall
+        fork {
+          dut.io.out.load_pipe.expectDequeue(load_out_seq_with_bypass.head)
+        }
+          .fork {
+            dut.clock.step(5)
+            // stall until store_bypass.data.valid is false
+            dut.io.store_bypass.data.is_mmio.poke(false.B)
+            dut.clock.step(2)
+          }
+          .joinAndStep(dut.clock)
+        dut.clock.step(4)
+
+        // --------------------
+        // load stall test2
+        // --------------------
+        dut.clock.step(4)
+        // init store_bypass data
+        dut.io.store_bypass.data.poke(
+          bypass_data(
+            load_tlb_resp_seq(1).paddr.litValue.toLong,
+            use_mmio = true
+          )
+        )
+        // send load request and tlb request
+        fork {
+          dut.io.in.enqueue(input_load_seq(1))
+        }.fork {
+          dut.io.tlb_req.expectDequeue(load_tlb_req_seq(1))
+        }.joinAndStep(dut.clock)
+
+        // get tlb response
+        dut.clock.step(4)
+        fork {
+          dut.io.tlb_resp.enqueue(load_tlb_resp_seq(1))
+        }.joinAndStep(dut.clock)
+
+        // expect load response, when store_bypass.data.valid is true and store_bypass.data.is_mmio is true
+        // load response will be stall
+        fork {
+          dut.io.out.load_pipe.expectDequeue(load_out_seq_without_bypass(1))
+        }
+          .fork {
+            dut.clock.step(5)
+            // stall until store_bypass.data.valid is false
+            dut.io.store_bypass.data.valid.poke(false.B)
+            dut.clock.step(2)
+          }
+          .joinAndStep(dut.clock)
+        dut.clock.step(4)
+
+        // --------------------
+        // store stall
+        // --------------------
+        fork {
+          dut.io.in.enqueue(input_store_seq.head)
+        }.fork {
+          dut.io.tlb_req.expectDequeue(store_tlb_req_seq.head)
+        }.joinAndStep(dut.clock)
+
+        dut.clock.step(4)
+        fork {
+          dut.io.tlb_resp.enqueue(store_tlb_resp_seq.head)
+        }.joinAndStep(dut.clock)
+
+        fork {
+          dut.io.out.store_pipe.expectDequeue(store_out_seq.head)
+        }
+          .fork {
+            dut.clock.step(5)
+            // store stall until store_bypass.data.valid is false
+            dut.io.store_bypass.data.valid.poke(false.B)
+            dut.clock.step(2)
+          }
+          .joinAndStep(dut.clock)
+        dut.clock.step(4)
+      }
+
+  }
   private def after_flush_test(
-      dut: AGU,
+      dut: AGU_dut2,
       input_seq: List[AGUReq],
       tlb_req_seq: List[TLBReq],
       tlb_resp_seq: List[TLBResp],
@@ -391,7 +649,7 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   private def expect_agu_out(
-      dut: AGU,
+      dut: AGU_dut2,
       out_data: Any,
       out_data_type: String
   ): Unit = {
@@ -410,16 +668,19 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
     }
   }
 
-  private def gen_load_queue_entry(input: AGUReq) = {
+  private def gen_load_queue_entry(
+      agu_req: AGUReq,
+      bypass_data: StoreBypassData
+  ) = {
     (new LoadQueueIn).Lit(
       _.paddr -> long2UInt64(
-        (input.op_a.litValue + input.op_b.litValue).toLong
+        (agu_req.op_a.litValue + agu_req.op_b.litValue).toLong
       ),
-      _.size -> input.size,
+      _.size -> agu_req.size,
       _.is_mmio -> false.B,
-      _.trans_id -> input.trans_id,
-      _.sign_ext -> input.sign_ext,
-      _.store_bypass -> gen_store_bypass()
+      _.trans_id -> agu_req.trans_id,
+      _.sign_ext -> agu_req.sign_ext,
+      _.store_bypass -> bypass_data
     )
   }
 
