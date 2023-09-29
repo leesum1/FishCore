@@ -7,7 +7,7 @@ import leesum.TestUtils.{check_aligned, gen_rand_uint, long2UInt64}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
-class LSUTestDut extends Module {
+class LSUTestDut(memoryFIle: String = "") extends Module {
   val io = IO(new Bundle {
     val lsu_req = Flipped(Decoupled(new LSUReq))
     val flush = Input(Bool())
@@ -19,7 +19,7 @@ class LSUTestDut extends Module {
   })
 
   val lsu = Module(new LSU)
-  val dcache = Module(new DummyDCache())
+  val dcache = Module(new DummyDCache(memoryFIle))
   val tlb = Module(new DummyTLB())
 
   // flush
@@ -42,6 +42,9 @@ class LSUTestDut extends Module {
   // lsu <> tlb
   lsu.io.tlb_req <> tlb.io.tlb_req
   lsu.io.tlb_resp <> tlb.io.tlb_resp
+
+  // lsu <> lsu_resp
+  lsu.io.lsu_resp <> io.lsu_resp
 
 }
 
@@ -100,77 +103,26 @@ object test_run1 extends App {
 
 }
 
-//class LSUTest extends AnyFreeSpec with ChiselScalatestTester {
-//  def gen_agu_in_input(): Gen[AGUIn] = {
-//    val genAB = for {
-//      a <- Gen.choose(1, 2000)
-//      b <- Gen.choose(1, 2000 - a)
-//    } yield (a, b)
-//
-//    val size = gen_rand_uint(2)
-//    val store_data = gen_rand_uint(64)
-//    val trans_id = gen_rand_uint(32)
-//    val is_store = Gen.oneOf(true.B, false.B)
-//
-//    val input_gen = for {
-//      (a, b) <- genAB
-//      size <- size
-//      store_data <- store_data
-//      is_store <- is_store
-//      trans_id <- trans_id
-//    } yield {
-//      (new AGUIn).Lit(
-//        _.op_a -> TestUtils.int2UInt64(a),
-//        _.op_b -> TestUtils.int2UInt64(b),
-//        _.size -> size,
-//        _.store_data -> store_data,
-//        _.is_store -> is_store,
-//        _.trans_id -> trans_id
-//      )
-//    }
-//    input_gen
+class LSUTest extends AnyFreeSpec with ChiselScalatestTester {
+
+//  class AGUReq extends Bundle {
+//    val op_a = UInt(64.W)
+//    val op_b = UInt(64.W)
+//    val size = UInt(2.W)
+//    val store_data = UInt(64.W)
+//    val trans_id = UInt(32.W)
+//    val is_store = Bool()
+//    // need by load
+//    val sign_ext = Bool()
 //  }
-//
-//  "LSUTest1" in {
-//    test(new LSUTestDut)
-//      .withAnnotations(Seq(VerilatorBackendAnnotation, WriteFstAnnotation)) {
-//        dut =>
-//          dut.io.lsu_req.initSource().setSourceClock(dut.clock)
-//          dut.io.lsu_resp.initSink().setSinkClock(dut.clock)
-//          dut.io.mmio_commit.initSource().setSourceClock(dut.clock)
-//          dut.io.store_commit.initSource().setSourceClock(dut.clock)
-//
-//          val lus_req_input_seq = Gen
-//            .listOfN(2000, gen_agu_in_input())
-//            .sample
-//            .get
-//
-//          // if addr is aligned, then generate load or store
-//          val dispatch_load_seq = lus_req_input_seq
-//            .filter(input => {
-//              !input.is_store.litToBoolean && check_aligned(
-//                (input.op_a.litValue + input.op_b.litValue).toLong,
-//                input.size.litValue.toInt
-//              )
-//            })
-//
-//          val dispatch_store_seq = lus_req_input_seq
-//            .filter(input => {
-//              input.is_store.litToBoolean && check_aligned(
-//                (input.op_a.litValue + input.op_b.litValue).toLong,
-//                input.size.litValue.toInt
-//              )
-//            })
-//
-//          val dispath_exception_seq = lus_req_input_seq
-//            .filter(input => {
-//              !check_aligned(
-//                (input.op_a.litValue + input.op_b.litValue).toLong,
-//                input.size.litValue.toInt
-//              )
-//            })
-//
-//      }
-//  }
-//
-//}
+  def gen_lsu_req(
+      op_a: Long,
+      op_b: Long,
+      size: Int,
+      wdata: Long,
+      trans_id: Long,
+      is_store: Boolean,
+      sign_ext: Boolean
+  ) = {}
+
+}

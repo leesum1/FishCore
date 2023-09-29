@@ -246,73 +246,97 @@ object GenAxiWstrb {
 /** get rdata from axi r channel, shift it to the right position, and fill the
   * rest with 0
   */
+class GetAxiRdata extends Module {
+  val io = IO(new Bundle {
+    val rdata = Input(UInt(64.W))
+    val addr = Input(UInt(64.W))
+    val size = Input(UInt(2.W))
+    val sign_ext = Input(Bool())
+    val rdata_aligned = Output(UInt(64.W))
+  })
+
+  val rdata = io.rdata
+  val size = io.size
+  val sign_ext = io.sign_ext
+  val offset = io.addr(2, 0)
+
+  // Define a temporary variable to hold the result
+  val rdata_aligned = WireInit(rdata)
+  switch(size) {
+    is(0.U) {
+      switch(offset) {
+        is(0.U) {
+          rdata_aligned := Cat(Fill(56, sign_ext & rdata(7)), rdata(7, 0))
+        }
+        is(1.U) {
+          rdata_aligned := Cat(Fill(56, sign_ext & rdata(15)), rdata(15, 8))
+        }
+        is(2.U) {
+          rdata_aligned := Cat(Fill(56, sign_ext & rdata(23)), rdata(23, 16))
+        }
+        is(3.U) {
+          rdata_aligned := Cat(Fill(56, sign_ext & rdata(31)), rdata(31, 24))
+        }
+        is(4.U) {
+          rdata_aligned := Cat(Fill(56, sign_ext & rdata(39)), rdata(39, 32))
+        }
+        is(5.U) {
+          rdata_aligned := Cat(Fill(56, sign_ext & rdata(47)), rdata(47, 40))
+        }
+        is(6.U) {
+          rdata_aligned := Cat(Fill(56, sign_ext & rdata(55)), rdata(55, 48))
+        }
+        is(7.U) {
+          rdata_aligned := Cat(Fill(56, sign_ext & rdata(63)), rdata(63, 56))
+        }
+      }
+    }
+    is(1.U) {
+      switch(offset) {
+        is(0.U) {
+          rdata_aligned := Cat(Fill(48, sign_ext & rdata(15)), rdata(15, 0))
+        }
+        is(2.U) {
+          rdata_aligned := Cat(Fill(48, sign_ext & rdata(31)), rdata(31, 16))
+        }
+        is(4.U) {
+          rdata_aligned := Cat(Fill(48, sign_ext & rdata(47)), rdata(47, 32))
+        }
+        is(6.U) {
+          rdata_aligned := Cat(Fill(48, sign_ext & rdata(63)), rdata(63, 48))
+        }
+      }
+    }
+    is(2.U) {
+      switch(offset) {
+        is(0.U) {
+          rdata_aligned := Cat(Fill(32, sign_ext & rdata(31)), rdata(31, 0))
+        }
+        is(4.U) {
+          rdata_aligned := Cat(Fill(32, sign_ext & rdata(63)), rdata(63, 32))
+        }
+      }
+    }
+    is(3.U) {
+      rdata_aligned := rdata
+    }
+  }
+  io.rdata_aligned := rdata_aligned
+}
+
 object GetAxiRdata {
   def apply(rdata: UInt, addr: UInt, size: UInt, sign_ext: Bool): UInt = {
     require(size.getWidth == 2, "size must be 2 bits")
     require(addr.getWidth == 64, "addr must be 64 bits")
 
-    val rdata_aligned = Wire(UInt(64.W))
-    val offset = addr(2, 0)
-
-    rdata_aligned := rdata
-    switch(size) {
-      is(0.U) {
-        switch(offset) {
-          is(0.U) {
-            rdata_aligned := Cat(Fill(56, sign_ext & rdata(7)), rdata(7, 0))
-          }
-          is(1.U) {
-            rdata_aligned := Cat(Fill(56, sign_ext & rdata(15)), rdata(15, 8))
-          }
-          is(2.U) {
-            rdata_aligned := Cat(Fill(56, sign_ext & rdata(23)), rdata(23, 16))
-          }
-          is(3.U) {
-            rdata_aligned := Cat(Fill(56, sign_ext & rdata(31)), rdata(31, 24))
-          }
-          is(4.U) {
-            rdata_aligned := Cat(Fill(56, sign_ext & rdata(39)), rdata(39, 32))
-          }
-          is(5.U) {
-            rdata_aligned := Cat(Fill(56, sign_ext & rdata(47)), rdata(47, 40))
-          }
-          is(6.U) {
-            rdata_aligned := Cat(Fill(56, sign_ext & rdata(55)), rdata(55, 48))
-          }
-          is(7.U) {
-            rdata_aligned := Cat(Fill(56, sign_ext & rdata(63)), rdata(63, 56))
-          }
-        }
-      }
-      is(1.U) {
-        switch(offset) {
-          is(0.U) {
-            rdata_aligned := Cat(Fill(48, sign_ext & rdata(15)), rdata(15, 0))
-          }
-          is(2.U) {
-            rdata_aligned := Cat(Fill(48, sign_ext & rdata(31)), rdata(31, 16))
-          }
-          is(4.U) {
-            rdata_aligned := Cat(Fill(48, sign_ext & rdata(47)), rdata(47, 32))
-          }
-          is(6.U) {
-            rdata_aligned := Cat(Fill(48, sign_ext & rdata(63)), rdata(63, 48))
-          }
-        }
-      }
-      is(2.U) {
-        switch(offset) {
-          is(0.U) {
-            rdata_aligned := Cat(Fill(32, sign_ext & rdata(31)), rdata(31, 0))
-          }
-          is(4.U) {
-            rdata_aligned := Cat(Fill(32, sign_ext & rdata(63)), rdata(63, 32))
-          }
-        }
-      }
-      is(3.U) { rdata_aligned := rdata }
-    }
-
-    rdata_aligned
+    val get_axi_rdata = Module(new GetAxiRdata)
+    get_axi_rdata.io.rdata := rdata
+    get_axi_rdata.io.addr := addr
+    get_axi_rdata.io.size := size
+    get_axi_rdata.io.sign_ext := sign_ext
+    get_axi_rdata.io.rdata_aligned
   }
+}
+object gen_GetAxiRdata_verilog extends App {
+  GenVerilogHelper(new GetAxiRdata)
 }

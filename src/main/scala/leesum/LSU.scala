@@ -2,21 +2,14 @@ package leesum
 import chisel3._
 import chisel3.util.{Arbiter, Decoupled}
 
-class LSUReq extends Bundle {
-  val op_a = UInt(64.W)
-  val op_b = UInt(64.W)
-  val size = UInt(2.W)
-  val store_data = UInt(64.W)
-  val is_store = Bool()
-  val trans_id = UInt(32.W)
-}
+class LSUReq extends AGUReq {}
 class LSUResp extends Bundle {
   val trans_id = UInt(32.W)
   val wb_data = UInt(64.W)
   val exception = new ExceptionEntry(has_valid = true)
 }
 
-class LSU extends Module {
+class LSU() extends Module {
   val io = IO(new Bundle {
     val lsu_req = Flipped(Decoupled(new LSUReq))
     val flush = Input(Bool())
@@ -44,6 +37,7 @@ class LSU extends Module {
   val store_queue = Module(new StoreQueue)
 
   val agu_write_back = Wire(Decoupled(new LSUResp))
+
   val load_write_back = Wire(Decoupled(new LSUResp))
 
   // flush
@@ -59,6 +53,7 @@ class LSU extends Module {
   agu.io.out.load_pipe <> load_queue.io.in
   // agu <> store queue
   agu.io.out.store_pipe <> store_queue.io.in
+  agu.io.store_bypass <> store_queue.io.store_bypass
   // agu <> write-back
   agu_write_back.valid := agu.io.out.exception_pipe.valid
   agu_write_back.bits.exception := agu.io.out.exception_pipe.bits.exception
@@ -92,7 +87,7 @@ class LSU extends Module {
   val arb = Module(new Arbiter(new LSUResp, 2))
   // load write-back has higher priority
   arb.io.in(0) <> load_write_back
-  arb.io.in(1) <> agu_write_back
+  arb.io.in(1) <> PipeLine(agu_write_back, io.flush)
   arb.io.out <> io.lsu_resp
 }
 
