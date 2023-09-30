@@ -249,13 +249,10 @@ class StoreQueue(
     ) && entry.valid && io.store_bypass.valid
   }
 
-  // TODO: need optimization!!!!!!
-  // wdata , size , is_mmio
   val combined_seq = all_fifo.map { entry =>
     val fwd_data = Wire(new StoreBypassData)
-    // TODO: need optimization!!!!!!
-    fwd_data.wdata := GenAxiWdata(entry.bits.wdata, entry.bits.paddr)
-    fwd_data.wstrb := GenAxiWstrb(entry.bits.paddr, entry.bits.size)
+    fwd_data.wdata := entry.bits.wdata
+    fwd_data.wstrb := entry.bits.wstrb
     fwd_data.is_mmio := entry.bits.is_mmio
     // first set valid to false, then set valid to true if addr match
     fwd_data.valid := false.B

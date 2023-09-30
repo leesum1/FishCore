@@ -26,6 +26,7 @@ class DummyTLB extends Module {
   val io = IO(new Bundle {
     val tlb_req = Flipped(Decoupled(new TLBReq))
     val tlb_resp = Decoupled(new TLBResp)
+    // TODO: need flush?
     val flush = Input(Bool())
   })
   val sIdle :: sWaitResp :: sFlush :: Nil = Enum(3)
