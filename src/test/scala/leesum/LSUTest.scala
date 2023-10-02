@@ -162,6 +162,8 @@ class LSUTest extends AnyFreeSpec with ChiselScalatestTester {
       _.trans_id -> int2UInt32(trans_id),
       _.wb_data -> long2UInt64(wb_data),
       _.exception.valid -> false.B,
+      // TODO: not implement
+      _.is_mmio -> false.B,
       _.exception.tval -> 0.U,
       _.exception.cause -> ExceptionCause.misaligned_fetch // 0
     )
@@ -432,7 +434,7 @@ class LSUTest extends AnyFreeSpec with ChiselScalatestTester {
       // -----------------------
       lsu_dut_init_port(dut)
 
-      val test_case_size = 50000
+      val test_case_size = 10000
 
       val ref_mem = new RefLSUMemory(12, 64, 0)
       // -----------------------

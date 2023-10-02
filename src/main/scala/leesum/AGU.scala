@@ -1,6 +1,7 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, Enum, PopCount, is, switch}
+import chisel3.util.{Decoupled, DecoupledIO, Enum, PopCount, is, switch}
+import leesum.axi4.{JoinBundle, StreamJoin}
 
 class AGUReq extends Bundle {
   val op_a = UInt(64.W)
@@ -15,6 +16,7 @@ class AGUReq extends Bundle {
 
 class ExceptionQueueIn extends Bundle {
   val trans_id = UInt(32.W)
+  val is_mmio = Bool()
   val exception = new ExceptionEntry()
 }
 
@@ -88,6 +90,11 @@ class AGU extends Module {
   }
 
   // TODO: not implemented now
+  def check_mmio(tlb_rsp: TLBResp): Bool = {
+    false.B
+  }
+
+  // TODO: not implemented now
   def dispatch_to_exception(tlb_rsp: TLBResp): Unit = {
     io.out.exception_pipe.valid := true.B
     when(io.out.exception_pipe.fire) {
@@ -116,19 +123,49 @@ class AGU extends Module {
     // when current load addr conflict with uncommitted store addr, and the store is a mmio operation
     // then stall the current load.
     val need_stall = io.store_bypass.data.valid && io.store_bypass.data.is_mmio
-    io.out.load_pipe.valid := !need_stall
-    when(io.out.load_pipe.fire) {
-      io.out.load_pipe.bits.paddr := tlb_rsp.paddr
-      io.out.load_pipe.bits.size := agu_req_buf.size
-      io.out.load_pipe.bits.trans_id := agu_req_buf.trans_id
-      io.out.load_pipe.bits.store_bypass := Mux(
-        io.store_bypass.data.valid,
-        io.store_bypass.data,
-        0.U.asTypeOf(new StoreBypassData)
-      )
-      io.out.load_pipe.bits.sign_ext := agu_req_buf.sign_ext
-      // TODO: is_mmio is not implemented
-      io.out.load_pipe.bits.is_mmio := false.B
+    val is_mmio = check_mmio(tlb_rsp)
+
+    val load_pipe_join = Wire(Decoupled(new LoadQueueIn))
+    val exception_pipe_join = Wire(Decoupled(new ExceptionQueueIn))
+    // -----------------------
+    // load pile join
+    // -----------------------
+    load_pipe_join.valid := !need_stall
+    load_pipe_join.bits.paddr := tlb_rsp.paddr
+    load_pipe_join.bits.size := agu_req_buf.size
+    load_pipe_join.bits.trans_id := agu_req_buf.trans_id
+    load_pipe_join.bits.store_bypass := Mux(
+      io.store_bypass.data.valid,
+      io.store_bypass.data,
+      0.U.asTypeOf(new StoreBypassData)
+    )
+    load_pipe_join.bits.sign_ext := agu_req_buf.sign_ext
+    load_pipe_join.bits.is_mmio := is_mmio
+    // -----------------------
+    // exception pile join
+    // -----------------------
+    // if the load is mmio, then write back
+    exception_pipe_join.valid := is_mmio
+    exception_pipe_join.bits.is_mmio := is_mmio
+    exception_pipe_join.bits.trans_id := agu_req_buf.trans_id
+    exception_pipe_join.bits.exception := DontCare
+    exception_pipe_join.bits.exception.valid := false.B
+
+    val join2_with_cond =
+      StreamJoin(load_pipe_join, exception_pipe_join, true.B, is_mmio)
+
+    join2_with_cond.ready := io.out.load_pipe.ready && Mux(
+      is_mmio,
+      io.out.exception_pipe.ready,
+      true.B
+    )
+
+    io.out.load_pipe.valid := join2_with_cond.valid
+    io.out.load_pipe.bits := join2_with_cond.bits.element1
+    io.out.exception_pipe.valid := join2_with_cond.valid & is_mmio
+    io.out.exception_pipe.bits := join2_with_cond.bits.element2
+
+    when(join2_with_cond.fire) {
       // back to back
       send_tlb_req()
     }.otherwise {
@@ -139,6 +176,9 @@ class AGU extends Module {
     // when current store addr conflict with uncommitted store addr.
     // than stall dispatch the current store
     io.out.store_pipe.valid := true.B && !io.store_bypass.data.valid
+
+    // mmio do not affect the store op
+
     when(io.out.store_pipe.fire) {
       io.out.store_pipe.bits.paddr := tlb_rsp.paddr
       io.out.store_pipe.bits.size := agu_req_buf.size
@@ -154,7 +194,7 @@ class AGU extends Module {
       )
       io.out.store_pipe.bits.trans_id := agu_req_buf.trans_id
       // TODO: is_mmio is not implemented
-      io.out.store_pipe.bits.is_mmio := false.B
+      io.out.store_pipe.bits.is_mmio := check_mmio(tlb_rsp)
       // back to back
       send_tlb_req()
     }.otherwise {
@@ -174,7 +214,6 @@ class AGU extends Module {
         // send request to StoreQueue in order to check addr conflict
         io.store_bypass.valid := true.B
         io.store_bypass.paddr := io.tlb_resp.bits.paddr
-
         when(check_privilege(io.tlb_resp.bits)) {
           dispatch_to_exception(io.tlb_resp.bits)
         }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.STORE) {

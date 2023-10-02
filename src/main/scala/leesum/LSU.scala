@@ -6,6 +6,7 @@ class LSUReq extends AGUReq {}
 class LSUResp extends Bundle {
   val trans_id = UInt(32.W)
   val wb_data = UInt(64.W)
+  val is_mmio = Bool()
   val exception = new ExceptionEntry(has_valid = true)
 }
 
@@ -58,6 +59,7 @@ class LSU() extends Module {
   agu_write_back.valid := agu.io.out.exception_pipe.valid
   agu_write_back.bits.exception := agu.io.out.exception_pipe.bits.exception
   agu_write_back.bits.trans_id := agu.io.out.exception_pipe.bits.trans_id
+  agu_write_back.bits.is_mmio := agu.io.out.exception_pipe.bits.is_mmio
   agu_write_back.bits.wb_data := DontCare
   agu.io.out.exception_pipe.ready := agu_write_back.ready
 
@@ -73,6 +75,7 @@ class LSU() extends Module {
   load_write_back.bits.exception.tval := DontCare
   load_write_back.bits.wb_data := load_queue.io.load_wb.bits.rdata
   load_write_back.bits.trans_id := load_queue.io.load_wb.bits.tran_id
+  load_write_back.bits.is_mmio := false.B
   load_queue.io.load_wb.ready := load_write_back.ready
 
   // store queue <> dcache

@@ -699,7 +699,8 @@ class AGUTest extends AnyFreeSpec with ChiselScalatestTester {
 
     (new ExceptionQueueIn).Lit(
       _.trans_id -> input.trans_id,
-      _.exception -> ex
+      _.exception -> ex,
+      _.is_mmio -> false.B
     )
   }
 
