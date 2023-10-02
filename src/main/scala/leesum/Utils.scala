@@ -1,7 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Cat, Fill, MuxLookup, is, switch}
+import chisel3.util.{Cat, Fill, MuxLookup, is, log2Ceil, switch}
 import circt.stage.ChiselStage
 
 import scala.sys.process._
@@ -81,6 +81,8 @@ object GenMaskOne {
     require(one_count <= width)
     if (one_count == 0) {
       Fill(width, 0.U(1.W))
+    } else if (one_count == width) {
+      Fill(width, 1.U(1.W))
     } else {
       val mask_one = Fill(one_count, true.B)
       val mask_zero = Fill(width - one_count, false.B)
@@ -91,6 +93,38 @@ object GenMaskOne {
       }
     }
   }
+}
+
+/** PopCountOrder(vec) returns the number of valid bits before the first invalid
+  */
+object PopCountOrder {
+  def apply(vec: Vec[Bool]): UInt = {
+    val order_count_width = log2Ceil(vec.size + 1)
+
+    val order_count = MuxLookup(
+      vec.asUInt,
+      0.U
+    )(
+      0
+        .to(vec.size)
+        .map(i => {
+          val mask = GenMaskOne(vec.size, i)
+          mask -> i.U(order_count_width.W)
+        })
+    )
+    require(order_count.getWidth == order_count_width)
+    order_count
+  }
+}
+
+object gen_PopCountOrder_verilog extends App {
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val in = Input(Vec(5, Bool()))
+      val out = Output(UInt(3.W))
+    })
+    io.out := PopCountOrder(io.in)
+  })
 }
 
 object CheckAligned {

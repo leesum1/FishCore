@@ -54,7 +54,7 @@ class LoadQueue extends Module {
   val sIdle :: sWaitDcacheResp :: sFlush :: Nil = Enum(3)
   val state = RegInit(sIdle)
 
-  val laod_req_buf = RegInit(0.U.asTypeOf(new LoadQueueIn))
+  val load_req_buf = RegInit(0.U.asTypeOf(new LoadQueueIn))
 
   def send_dcache_req() = {
     when(load_queue_out.valid && !io.flush) {
@@ -68,7 +68,7 @@ class LoadQueue extends Module {
         when(io.dcache_req.fire) {
           load_queue_out.ready := true.B
           assert(load_queue_out.fire, "load_queue_out should be fire")
-          laod_req_buf := load_queue_out.bits
+          load_req_buf := load_queue_out.bits
           state := sWaitDcacheResp
         }.otherwise {
           state := sIdle
@@ -150,9 +150,9 @@ class LoadQueue extends Module {
         wb_pipe.io.in.valid := true.B
         wb_pipe.io.in.bits.rdata := compose_write_back_data(
           io.dcache_resp.bits.data,
-          laod_req_buf
+          load_req_buf
         )
-        wb_pipe.io.in.bits.tran_id := laod_req_buf.trans_id
+        wb_pipe.io.in.bits.tran_id := load_req_buf.trans_id
         assert(wb_pipe.io.in.fire, "out_pipe.io.in.fire should be true.B")
         // back to back
         send_dcache_req()
