@@ -199,8 +199,9 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
           long2UInt64(res)
         })
         .map({ case (res) =>
-          (new AluOut).Lit(
-            _.res -> res
+          (new AluResp).Lit(
+            _.res -> res,
+            _.trans_id -> 0.U
           )
         })
       dut.io.in.initSource()
@@ -216,7 +217,7 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
         val (seq1, seq2) =
           input_seq
             .map({ case (op_a, op_b, op_type, is_rv32) =>
-              (new AluIn).Lit(
+              (new AluReq).Lit(
                 _.a -> op_a,
                 _.b -> op_b,
                 _.trans_id -> 0.U,

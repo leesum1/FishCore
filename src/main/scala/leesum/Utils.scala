@@ -53,6 +53,24 @@ object CheckOrder {
   }
 }
 
+/** Generate a vector of Bool, where the i-th element is true if and only if all
+  * the elements before it are true
+  */
+object GenOrderVec {
+  def apply(inputVector: Vec[Bool]): Vec[Bool] = {
+    val maskVector = Wire(Vec(inputVector.length, Bool()))
+
+    // The first element in the mask vector
+    maskVector(0) := inputVector(0)
+
+    // Generate the mask for the rest of the elements
+    for (i <- 1 until inputVector.length) {
+      maskVector(i) := maskVector(i - 1) && inputVector(i)
+    }
+    maskVector
+  }
+}
+
 object SignExt {
   def apply(x: UInt, input_width: Int, output_width: Int): UInt = {
     val sign = x(input_width - 1)

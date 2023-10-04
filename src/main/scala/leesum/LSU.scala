@@ -8,6 +8,8 @@ class LSUResp extends Bundle {
   val wb_data = UInt(64.W)
   val is_mmio = Bool()
   val exception = new ExceptionEntry(has_valid = true)
+
+  def wb_data_valid = !exception.valid && !is_mmio
 }
 
 class LSU() extends Module {

@@ -2,85 +2,122 @@ package leesum
 import chisel3._
 import chisel3.util._
 
-class IssueFifoPopIO extends Bundle {
-  val pop_valid = Output(Vec(2, Bool()))
-  val pop_data = Input(Vec(2, new ScoreBoardEntry))
-  val occupied_entries = Input(UInt((log2Ceil(8) + 1).W))
-  def inst_valid_seq(): Vec[Bool] = {
-    val valid_seq = Wire(Vec(2, Bool()))
-    valid_seq(0) := occupied_entries >= 1.U
-    valid_seq(1) := occupied_entries >= 2.U
-    valid_seq
-  }
-}
-
-class IssueStageScbIO extends Bundle {
-  val push_data = Output(Vec(2, new ScoreBoardEntry()))
-  val push_valid = Output(Vec(2, Bool()))
-  val free_entries = Input(UInt((log2Ceil(8) + 1).W))
-  val write_ptr_trans_id =
-    Input(Vec(2, UInt(log2Ceil(8).W)))
-  val operand_bypass = Vec(2, Flipped(new OperandByPassIO()))
-  val rd_occupied_gpr = Input(Vec(32, FuType()))
-}
-
 class FuIO extends Bundle {
 
-  val alu_count = 2
-  val branch_count = 1
-  val lsu_count = 1
-  val mul_div_count = 1
-  val csr_count = 1
+  val alu_0 = Decoupled(new AluReq())
+  val branch_0 = Decoupled(new FuBranchReq())
+  val lsu_0 = Decoupled(new LSUReq)
 
-  val alu_0 = Decoupled(new AluIn())
-  val alu_1 = Decoupled(new AluIn())
-  val branch_0 = Decoupled(new FuBranchIn())
   val csr_0 = Decoupled(UInt(32.W))
-  val lsu_0 = Decoupled(UInt(32.W))
   val mul_0 = Decoupled(UInt(32.W))
   val div_0 = Decoupled(UInt(32.W))
 }
 
-class IssueStage extends Module {
+class RegFileReadPort extends Bundle {
+  val rs1_addr = Output(UInt(5.W))
+  val rs2_addr = Output(UInt(5.W))
+  val rs1_data = Input(UInt(64.W))
+  val rs2_data = Input(UInt(64.W))
+}
+
+class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   val io = IO(new Bundle {
-    val issuefifo_pop_port = new IssueFifoPopIO()
-    val scb_port = new IssueStageScbIO()
+
+    val push_port =
+      Vec(num_push_port, Flipped(Decoupled(new ScoreBoardEntry())))
+    val pop_port = Vec(num_pop_port, Decoupled(new ScoreBoardEntry()))
+    val flush = Input(Bool())
+    val new_trans_id =
+      Input(Vec(num_pop_port, UInt(32.W)))
+    val gpr_read_port = Vec(num_pop_port, new RegFileReadPort())
+    val rd_occupied_gpr = Input(Vec(32, FuType()))
+    val scb_bypass = Vec(num_pop_port, Flipped(new OperandByPassIO()))
     val fu_port = new FuIO()
   })
-  // data from issue fifo
-  val fifo_valid_seq = MuxCase(
-    VecInit(false.B, false.B),
-    Seq(
-      (io.issuefifo_pop_port.occupied_entries >= 2.U) -> VecInit(
-        true.B,
-        true.B
-      ),
-      (io.issuefifo_pop_port.occupied_entries === 1.U) -> VecInit(
-        true.B,
-        false.B
-      )
-    )
+
+  require(num_pop_port == 2, "only support 2 pop port now")
+  require(num_push_port == 2, "only support 2 push port now")
+
+  // ----------------
+  // issue fifo
+  // ----------------
+
+  val issue_fifo = new MultiPortValidFIFO(
+    new ScoreBoardEntry(),
+    8,
+    name = "i_fifo",
+    num_push_port,
+    num_pop_port
   )
-  val fifo_data_seq = io.issuefifo_pop_port.pop_data
+
+  issue_fifo.push_pop_flush_cond_multi_port(
+    VecInit(io.push_port.map(_.fire)),
+    VecInit(io.pop_port.map(_.fire)),
+    io.flush,
+    VecInit(io.push_port.map(_.bits))
+  )
+
+  0.until(num_push_port)
+    .foreach({ i =>
+      io.push_port(i)
+        .ready := !issue_fifo.random_access(issue_fifo.push_ptr + i.U).valid
+    })
+
+  val fifo_data_seq = issue_fifo.peek()
+
+  // ------------------
+  // fu pipeline
+  // ------------------
+
+  val alu_0_pipe = Wire(Decoupled(new AluReq()))
+  val branch_0_pipe = Wire(Decoupled(new FuBranchReq()))
+  val lsu_0_pipe = Wire(Decoupled(new LSUReq))
+
+  val csr_0_pipe = Wire(Decoupled(UInt(32.W)))
+  val mul_0_pipe = Wire(Decoupled(UInt(32.W)))
+  val div_0_pipe = Wire(Decoupled(UInt(32.W)))
+
+  alu_0_pipe.noenq()
+  branch_0_pipe.noenq()
+  lsu_0_pipe.noenq()
+  csr_0_pipe.noenq()
+  mul_0_pipe.noenq()
+  div_0_pipe.noenq()
+
+  io.fu_port.alu_0 <> PipeLine(alu_0_pipe, io.flush)
+  io.fu_port.branch_0 <> PipeLine(branch_0_pipe, io.flush)
+  io.fu_port.lsu_0 <> PipeLine(lsu_0_pipe, io.flush)
+  io.fu_port.csr_0 <> PipeLine(csr_0_pipe, io.flush)
+  io.fu_port.mul_0 <> PipeLine(mul_0_pipe, io.flush)
+  io.fu_port.div_0 <> PipeLine(div_0_pipe, io.flush)
 
   // ----------------
   // bypass logic
   // ----------------
-  io.scb_port.operand_bypass(0).rs1_addr := fifo_data_seq(0).rs1_addr
-  io.scb_port.operand_bypass(0).rs2_addr := fifo_data_seq(0).rs2_addr
-  io.scb_port.operand_bypass(1).rs1_addr := fifo_data_seq(1).rs1_addr
-  io.scb_port.operand_bypass(1).rs2_addr := fifo_data_seq(1).rs2_addr
+  require(fifo_data_seq.length == io.scb_bypass.length)
+
+  fifo_data_seq
+    .zip(io.scb_bypass)
+    .map(
+      { case (issue_data, bypass) =>
+        bypass.rs1_addr := Mux(issue_data.valid, issue_data.bits.rs1_addr, 0.U)
+        bypass.rs2_addr := Mux(issue_data.valid, issue_data.bits.rs2_addr, 0.U)
+      }
+    )
 
   // ---------------------------------
   //  stall logic
   // ---------------------------------
 
-  val rs1_regfile = WireInit(0.U(64.W))
-  val rs2_regfile = WireInit(0.U(64.W))
-
   val inst_stall = VecInit(false.B, false.B)
-  val inst_op_a = Wire(Vec(2, UInt(64.W)))
-  val inst_op_b = Wire(Vec(2, UInt(64.W)))
+
+  class oprandBundle extends Bundle {
+    val rs1_data = UInt(64.W)
+    val rs2_data = UInt(64.W)
+    val pc = UInt(64.W)
+    val imm = UInt(64.W)
+    val immz = UInt(64.W)
+  }
 
   // when fwd_valid is false, and the rs1/rs2 is occupied by other inst, stall
   // when fwd_valid is false, and the rs1/rs2 is not occupied by other inst, read from regfile
@@ -91,31 +128,31 @@ class IssueStage extends Module {
       scb: ScoreBoardEntry,
       stall: Bool
   ): Unit = {
-
+    // when fwd_valid is true, and the rs1/rs2 is not occupied by other inst, error!!!!!!!!!
     when(
-      bypass.rs1_fwd_valid && io.scb_port.rd_occupied_gpr(
+      bypass.rs1_fwd_valid && io.rd_occupied_gpr(
         scb.rs1_addr
-      ) =/= FuType.None
+      ) === FuType.None
     ) {
       assert(false.B, "rs1 read operands logic error")
     }
     when(
-      bypass.rs2_fwd_valid && io.scb_port.rd_occupied_gpr(
+      bypass.rs2_fwd_valid && io.rd_occupied_gpr(
         scb.rs2_addr
-      ) =/= FuType.None
+      ) === FuType.None
     ) {
       assert(false.B, "rs2 read operands logic error")
     }
-
+    // when fwd_valid is false, and the rs1/rs2 is occupied by other inst, stall
     when(
-      !bypass.rs1_fwd_valid && io.scb_port.rd_occupied_gpr(
+      !bypass.rs1_fwd_valid && io.rd_occupied_gpr(
         scb.rs1_addr
       ) =/= FuType.None
     ) {
       stall := true.B
     }
     when(
-      !bypass.rs2_fwd_valid && io.scb_port.rd_occupied_gpr(
+      !bypass.rs2_fwd_valid && io.rd_occupied_gpr(
         scb.rs2_addr
       ) =/= FuType.None
     ) {
@@ -130,347 +167,431 @@ class IssueStage extends Module {
       stall: Bool
   ) = {
     when(
-      io.scb_port.rd_occupied_gpr(scb.rd_addr) =/= FuType.None
+      io.rd_occupied_gpr(scb.rd_addr) =/= FuType.None
     ) {
       stall := true.B
     }
   }
-  check_waw(fifo_data_seq(0), inst_stall(0))
-  check_waw(fifo_data_seq(1), inst_stall(1))
-  check_operands(io.scb_port.operand_bypass(0), fifo_data_seq(0), inst_stall(0))
-  check_operands(io.scb_port.operand_bypass(1), fifo_data_seq(1), inst_stall(1))
 
-  // RAW hazard between inst 0 and inst 1
-  when(
-    (fifo_data_seq(0).rd_addr === fifo_data_seq(1).rs1_addr || fifo_data_seq(
-      0
-    ).rd_addr === fifo_data_seq(1).rs2_addr) && fifo_data_seq(0).rd_addr =/= 0.U
-  ) {
-    inst_stall(1) := true.B
+  def check_raw_between_issue(
+      inst_scb_seq: Vec[ScoreBoardEntry],
+      stall_seq: Vec[Bool]
+  ) = {
+    require(inst_scb_seq.length == stall_seq.length)
+    for (i <- inst_scb_seq.length - 1 to 0 by -1) {
+      for (j <- i - 1 to 0 by -1) {
+        val cur_inst = inst_scb_seq(i)
+        val pre_inst = inst_scb_seq(j)
+        when(
+          cur_inst.rs1_addr === pre_inst.rd_addr && cur_inst.rs1_addr =/= 0.U
+        ) {
+          stall_seq(i) := true.B
+        }
+        when(
+          cur_inst.rs2_addr === pre_inst.rd_addr && cur_inst.rs2_addr =/= 0.U
+        ) {
+          stall_seq(i) := true.B
+        }
+      }
+    }
   }
-  // WAW hazard between inst 0 and inst 1
-  when(
-    (fifo_data_seq(0).rd_addr === fifo_data_seq(1).rd_addr) && fifo_data_seq(
-      0
-    ).rd_addr =/= 0.U
-  ) {
-    inst_stall(1) := true.B
+
+  def check_waw_between_issue(
+      inst_scb_seq: Vec[ScoreBoardEntry],
+      stall_seq: Vec[Bool]
+  ) = {
+    require(inst_scb_seq.length == stall_seq.length)
+    for (i <- inst_scb_seq.length - 1 to 0 by -1) {
+      for (j <- i - 1 to 0 by -1) {
+        val cur_inst = inst_scb_seq(i)
+        val pre_inst = inst_scb_seq(j)
+        when(
+          cur_inst.rd_addr === pre_inst.rd_addr && cur_inst.rd_addr =/= 0.U
+        ) {
+          stall_seq(i) := true.B
+        }
+      }
+    }
   }
+
+  def check_fu_harzad(
+      fu_seq: Vec[FuType.Type],
+      stall_seq: Vec[Bool]
+  ) = {
+    require(fu_seq.length == stall_seq.length)
+    val fu_hazard_seq = VecInit(Seq.fill(fu_seq.length)(false.B))
+
+    for (i <- 0 until stall_seq.length) {
+      fu_hazard_seq(i) := MuxLookup(fu_seq(i), false.B)(
+        Seq(
+          FuType.Alu -> false.B,
+          FuType.Br -> false.B,
+          FuType.None -> false.B,
+          FuType.Lsu -> !lsu_0_pipe.ready,
+          FuType.Mul -> !mul_0_pipe.ready,
+          FuType.Div -> !div_0_pipe.ready,
+          FuType.Csr -> !csr_0_pipe.ready
+        )
+      )
+    }
+
+    // TODO: not implemented 2 alu
+    when(fu_seq(0) === fu_seq(1) && fu_seq(0) =/= FuType.None) {
+      fu_hazard_seq(1) := true.B
+    }
+
+    fu_hazard_seq.zipWithIndex.foreach { case (fu_hazard, i) =>
+      when(fu_hazard) {
+        stall_seq(i) := true.B
+      }
+    }
+
+  }
+
+  for (i <- 0 until fifo_data_seq.length) {
+    check_waw(fifo_data_seq(i).bits, inst_stall(i))
+    check_operands(
+      io.scb_bypass(i),
+      fifo_data_seq(i).bits,
+      inst_stall(i)
+    )
+  }
+
+  check_fu_harzad(VecInit(fifo_data_seq.map(_.bits.fu_type)), inst_stall)
+  check_raw_between_issue(VecInit(fifo_data_seq.map(_.bits)), inst_stall)
+  check_waw_between_issue(VecInit(fifo_data_seq.map(_.bits)), inst_stall)
 
   // -----------------------
   // read operands logic
   // -----------------------
 
-  // TODO: not all inst need rs1 or rs2, some inst may need imm or pc
+  val inst_op = WireInit(
+    VecInit(Seq.fill(num_pop_port)(0.U.asTypeOf(new oprandBundle)))
+  )
+
+  fifo_data_seq
+    .zip(io.gpr_read_port)
+    .map(
+      { case (scb, gpr_read_port) =>
+        gpr_read_port.rs1_addr := scb.bits.rs1_addr
+        gpr_read_port.rs2_addr := scb.bits.rs2_addr
+      }
+    )
+
   def read_operands(
       bypass: OperandByPassIO,
       scb: ScoreBoardEntry,
-      op_a: UInt,
-      op_b: UInt
-  ): Unit = {
-    assert(
-      PopCount(
-        VecInit(
-          bypass.rs1_fwd_valid,
-          scb.use_pc,
-          scb.use_imm
-        )
-      ) <= 1.U,
-      "rs1 read operands logic error"
-    )
-    assert(
-      PopCount(
-        VecInit(
-          bypass.rs2_fwd_valid,
-          scb.use_imm
-        )
-      ) <= 1.U,
-      "rs2 read operands logic error"
-    )
+      gpr: RegFileReadPort
+  ): oprandBundle = {
+    val op_bundle = WireInit(0.U.asTypeOf(new oprandBundle))
+
     when(bypass.rs1_fwd_valid) {
-      op_a := bypass.rs1_data
-    }.elsewhen(scb.use_pc) {
-      op_a := scb.pc
-    }.elsewhen(scb.use_imm) {
-      op_a := scb.result
+      op_bundle.rs1_data := bypass.rs1_data
     }.otherwise {
-      op_a := rs1_regfile
+      op_bundle.rs1_data := gpr.rs1_data
     }
+
     when(bypass.rs2_fwd_valid) {
-      op_b := bypass.rs2_data
-    }.elsewhen(scb.use_imm) {
-      op_b := scb.result
+      op_bundle.rs2_data := bypass.rs2_data
     }.otherwise {
-      op_b := rs2_regfile
+      op_bundle.rs2_data := gpr.rs2_data
     }
+
+    op_bundle.pc := scb.pc
+    op_bundle.imm := scb.result
+    // TODO: not implemented immz
+    op_bundle.immz := scb.result
+
+    op_bundle
   }
-  read_operands(
-    io.scb_port.operand_bypass(0),
-    fifo_data_seq(0),
-    inst_op_a(0),
-    inst_op_b(0)
-  )
-  read_operands(
-    io.scb_port.operand_bypass(1),
-    fifo_data_seq(1),
-    inst_op_a(1),
-    inst_op_b(1)
-  )
+
+  for (i <- 0 until fifo_data_seq.length) {
+    inst_op(i) := read_operands(
+      io.scb_bypass(i),
+      fifo_data_seq(i).bits,
+      io.gpr_read_port(i)
+    )
+  }
+
   // -----------------------
   // issue logic
   // -----------------------
-  val allow_issue = VecInit(false.B, false.B)
-  val inst_valid_seq = io.issuefifo_pop_port.inst_valid_seq()
 
-  // When inst is valid, begin to issue logic. there are three conditions:
-  // 1. Inst is not stall (pass operand check)
-  // 2. Inst is stall, but exception happened
-  // 3. Inst is stall, but inst does not need operands, such as ecall, ebreak
-  when(inst_valid_seq(0)) {
-    when(!inst_stall(0)) {
-      allow_issue(0) := true.B
-    }.elsewhen(fifo_data_seq(0).exception.valid) {
-      allow_issue(0) := true.B
-    }.elsewhen(fifo_data_seq(0).fu_type === FuType.None) {
-      allow_issue(0) := true.B
+  // TODO:  need optimize
+  def check_issue(
+      inst_seq: Vec[Valid[ScoreBoardEntry]],
+      inst_stall: Vec[Bool]
+  ) = {
+    val allow_issue_tmp = WireInit(VecInit(false.B, false.B))
+    for (i <- 0 until inst_seq.length) {
+      when(inst_seq(i).valid) {
+        when(!inst_stall(i)) {
+          allow_issue_tmp(i) := true.B
+        }
+      }
     }
-  }.otherwise {
-    allow_issue(0) := false.B
+    GenOrderVec(allow_issue_tmp)
   }
 
-  when(inst_valid_seq(1)) {
-    when(!inst_stall(1)) {
-      allow_issue(1) := true.B
-    }.elsewhen(fifo_data_seq(1).exception.valid) {
-      allow_issue(1) := true.B
-    }.elsewhen(fifo_data_seq(1).fu_type === FuType.None) {
-      allow_issue(1) := true.B
-    }
-  }.otherwise {
-    allow_issue(0) := false.B
-  }
+  val allow_issue = check_issue(fifo_data_seq, inst_stall)
   // -----------------------
-  // Check fu hazard
+  // dispatch to scoreboard
   // -----------------------
-  val fu_seq = VecInit(fifo_data_seq(0).fu_type, fifo_data_seq(1).fu_type)
-  val fu_hazard = VecInit(false.B, false.B)
+  assert(CheckOrder(allow_issue), "issue should be ordered")
 
-  fu_hazard(0) := MuxLookup(fu_seq(0), false.B)(
-    Seq(
-      FuType.Alu -> !io.fu_port.alu_0.ready,
-      FuType.Br -> !io.fu_port.branch_0.ready,
-      FuType.Lsu -> !io.fu_port.lsu_0.ready,
-      FuType.Mul -> !io.fu_port.mul_0.ready,
-      FuType.Div -> !io.fu_port.div_0.ready,
-      FuType.Csr -> !io.fu_port.csr_0.ready
-    )
-  )
-  fu_hazard(1) := MuxLookup(fu_seq(1), false.B)(
-    Seq(
-      FuType.Alu -> !io.fu_port.alu_1.ready,
-      FuType.Br -> !io.fu_port.branch_0.ready,
-      FuType.Lsu -> !io.fu_port.lsu_0.ready,
-      FuType.Mul -> !io.fu_port.mul_0.ready,
-      FuType.Div -> !io.fu_port.div_0.ready,
-      FuType.Csr -> !io.fu_port.csr_0.ready
-    )
-  )
-  // when inst0 and inst1 use the same fu, and is not FuType.None
-  // 1. if the fu is alu, no hazard, because we have two alu unit
-  // 2. if the fu is not alu, inst1 should stall
-  when(fu_seq(0) === fu_seq(1) && fu_seq(0) =/= FuType.None) {
-    when(fu_seq(0) =/= FuType.Alu) {
-      fu_hazard(1) := true.B
+  for (i <- 0 until fifo_data_seq.length) {
+    when(allow_issue(i)) {
+      assert(fifo_data_seq(i).valid, "fifo_data_seq should be valid")
+      io.pop_port(i).bits := fifo_data_seq(i).bits
+      io.pop_port(i).valid := true.B
+    }.otherwise {
+      io.pop_port(i).bits := DontCare
+      io.pop_port(i).valid := false.B
     }
   }
-  // -----------------------
-  // dispatch to fu logic
-  // -----------------------
-  // TODO: how to do when exception happened?
-  val dispatch_seq = allow_issue
-    .zip(fu_hazard)
-    .map { case (allow, hazard) =>
-      allow && !hazard
-    }
-    .toVector
-
-  val scb_push_ready = VecInit(
-    io.scb_port.free_entries >= 1.U,
-    io.scb_port.free_entries >= 2.U
-  )
-
-  io.scb_port.push_valid := dispatch_seq.zip(scb_push_ready).map {
-    case (dispatch, push_ready) =>
-      dispatch && push_ready
-  }
-  io.scb_port.push_data := fifo_data_seq
-
-  io.issuefifo_pop_port.pop_valid := io.scb_port.push_valid
 
   // -------------------
   // alu logic
   // -------------------
   def dispatch_to_alu(
-      alu: DecoupledIO[AluIn],
+      alu: DecoupledIO[AluReq],
       scb: ScoreBoardEntry,
       alu_allow_dispatch: Bool,
-      op_a: UInt,
-      op_b: UInt,
+      op_bundle: oprandBundle,
       trans_id: UInt
   ): Unit = {
-    require(op_a.getWidth == 64 && op_b.getWidth == 64)
-    val alu_op = alu.bits.convert_fuop2aluop(scb.fu_op)
-    alu.valid := alu_allow_dispatch && alu_op =/= AluOP.None
-    alu.bits.a := op_a
-    alu.bits.b := op_b
-    alu.bits.op := alu_op
-    alu.bits.is_rv32 := scb.is_rv32
-    alu.bits.trans_id := trans_id
+    when(scb.fu_type === FuType.Alu && alu_allow_dispatch) {
+      val alu_op = alu.bits.convert_fuop2aluop(scb.fu_op)
+      alu.valid := alu_allow_dispatch
+      alu.bits.a := Mux(scb.use_pc, op_bundle.pc, op_bundle.rs1_data)
+      alu.bits.b := Mux(scb.use_imm, op_bundle.imm, op_bundle.rs2_data)
+      alu.bits.op := alu_op
+      alu.bits.is_rv32 := scb.is_rv32
+      alu.bits.trans_id := trans_id
+    }
   }
-  dispatch_to_alu(
-    io.fu_port.alu_0,
-    fifo_data_seq(0),
-    dispatch_seq(0) && fifo_data_seq(0).fu_type === FuType.Alu,
-    inst_op_a(0),
-    inst_op_b(0),
-    io.scb_port.write_ptr_trans_id(0)
+
+  val alu_allow_dispatch = VecInit(
+    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+      allow && scb.bits.fu_type === FuType.Alu
+    }
   )
-  dispatch_to_alu(
-    io.fu_port.alu_1,
-    fifo_data_seq(1),
-    dispatch_seq(1) && fifo_data_seq(1).fu_type === FuType.Alu,
-    inst_op_a(1),
-    inst_op_b(1),
-    io.scb_port.write_ptr_trans_id(1)
+
+  for (i <- 0.until(num_pop_port)) {
+    dispatch_to_alu(
+      alu = alu_0_pipe,
+      scb = fifo_data_seq(i).bits,
+      alu_allow_dispatch = alu_allow_dispatch(i),
+      op_bundle = inst_op(i),
+      trans_id = io.new_trans_id(i)
+    )
+  }
+  assert(
+    PopCount(alu_allow_dispatch) <= 1.U,
+    "alu unit can only dispatch one inst at one cycle"
   )
+
   // ------------------
   // br logic
   // ------------------
   val br_allow_dispatch = VecInit(
-    dispatch_seq(0) && fifo_data_seq(0).fu_type === FuType.Br,
-    dispatch_seq(1) && fifo_data_seq(1).fu_type === FuType.Br
+    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+      allow && scb.bits.fu_type === FuType.Br
+    }
   )
 
   assert(
     PopCount(br_allow_dispatch) <= 1.U,
     "branch unit can only dispatch one inst at one cycle"
   )
-  // TODO: performance optimization?
-  val br_scb = PriorityMux(br_allow_dispatch, fifo_data_seq)
-  val br_trans_id =
-    PriorityMux(br_allow_dispatch, io.scb_port.write_ptr_trans_id)
-  val br_op_a = PriorityMux(br_allow_dispatch, inst_op_a)
-  val br_op_b = PriorityMux(br_allow_dispatch, inst_op_b)
 
   def dispatch_to_br(
-      br: DecoupledIO[FuBranchIn],
+      br: DecoupledIO[FuBranchReq],
       scb: ScoreBoardEntry,
       br_allow_dispatch: Bool,
-      op_a: UInt,
-      op_b: UInt,
+      op_bundle: oprandBundle,
       trans_id: UInt
   ): Unit = {
-    br.valid := br_allow_dispatch
-    br.bits.fu_op := scb.fu_op
-    br.bits.op_a := op_a
-    br.bits.op_b := op_b
-    br.bits.pc := scb.pc
-    br.bits.imm := scb.result
-    br.bits.is_rvc := scb.is_rvc
-    br.bits.trans_id := trans_id
-    br.bits.bp := scb.bp
+    when(scb.fu_type === FuType.Br && br_allow_dispatch) {
+      br.valid := true.B
+      br.bits.fu_op := scb.fu_op
+      br.bits.rs1 := op_bundle.rs1_data
+      br.bits.rs2 := op_bundle.rs2_data
+      br.bits.pc := op_bundle.pc
+      br.bits.imm := op_bundle.imm
+      br.bits.is_rvc := scb.is_rvc
+      br.bits.trans_id := trans_id
+      br.bits.bp := scb.bp
+    }
   }
 
-  dispatch_to_br(
-    io.fu_port.branch_0,
-    br_scb,
-    br_allow_dispatch.reduce(_ || _),
-    br_op_a,
-    br_op_b,
-    br_trans_id
-  )
+  for (i <- 0.until(num_pop_port)) {
+    dispatch_to_br(
+      branch_0_pipe,
+      fifo_data_seq(i).bits,
+      br_allow_dispatch(i),
+      op_bundle = inst_op(i),
+      io.new_trans_id(i)
+    )
+  }
+
   // -------------------
   // lsu logic
   // -------------------
   val lsu_allow_dispatch = VecInit(
-    dispatch_seq(0) && fifo_data_seq(0).fu_type === FuType.Lsu,
-    dispatch_seq(1) && fifo_data_seq(1).fu_type === FuType.Lsu
+    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+      allow && scb.bits.fu_type === FuType.Lsu
+    }
   )
-
   assert(
     PopCount(lsu_allow_dispatch) <= 1.U,
     "load-store unit can only dispatch one inst at one cycle"
   )
-  // TODO: performance optimization?
-  val lsu_scb = PriorityMux(lsu_allow_dispatch, fifo_data_seq)
-  val lsu_trans_id =
-    PriorityMux(lsu_allow_dispatch, io.scb_port.write_ptr_trans_id)
-  val lsu_op_a = PriorityMux(lsu_allow_dispatch, inst_op_a)
-  val lsu_op_b = PriorityMux(lsu_allow_dispatch, inst_op_b)
 
-  io.fu_port.lsu_0.valid := lsu_allow_dispatch.reduce(_ || _)
-  io.fu_port.lsu_0.bits := 0.U
+  def dispatch_to_lsu(
+      lsu: DecoupledIO[LSUReq],
+      scb: ScoreBoardEntry,
+      lsu_allow_dispatch: Bool,
+      op_bundle: oprandBundle,
+      trans_id: UInt
+  ) = {
+    when(scb.fu_type === FuType.Lsu && lsu_allow_dispatch) {
+      lsu.valid := true.B
+      lsu.bits.op_a := op_bundle.rs1_data
+      lsu.bits.op_b := op_bundle.imm
+      lsu.bits.store_data := op_bundle.rs2_data
+      lsu.bits.is_store := FuOP.is_store(scb.fu_op)
+      lsu.bits.size := FuOP.get_lsu_size(scb.fu_op)
+      lsu.bits.sign_ext := FuOP.lsu_need_sign_ext(scb.fu_op)
+      lsu.bits.trans_id := trans_id
+    }
+  }
+
+  for (i <- 0.until(num_pop_port)) {
+    dispatch_to_lsu(
+      lsu_0_pipe,
+      fifo_data_seq(i).bits,
+      lsu_allow_dispatch(i),
+      op_bundle = inst_op(i),
+      io.new_trans_id(i)
+    )
+  }
+
   // ----------------------
   // csr logic
   // ----------------------
+  // TODO: NOT IMPLEMENTED
   val csr_allow_dispatch = VecInit(
-    dispatch_seq(0) && fifo_data_seq(0).fu_type === FuType.Csr,
-    dispatch_seq(1) && fifo_data_seq(1).fu_type === FuType.Csr
+    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+      allow && scb.bits.fu_type === FuType.Csr
+    }
   )
   assert(
     PopCount(csr_allow_dispatch) <= 1.U,
     "csr unit can only dispatch one inst at one cycle"
   )
-  // TODO: performance optimization?
-  val csr_scb = PriorityMux(csr_allow_dispatch, fifo_data_seq)
-  val csr_trans_id =
-    PriorityMux(csr_allow_dispatch, io.scb_port.write_ptr_trans_id)
-  val csr_op_a = PriorityMux(csr_allow_dispatch, inst_op_a)
-  val csr_op_b = PriorityMux(csr_allow_dispatch, inst_op_b)
 
-  io.fu_port.csr_0.valid := csr_allow_dispatch.reduce(_ || _)
-  io.fu_port.csr_0.bits := 0.U
+  // TODO: NOT IMPLEMENTED
+  def dispatch_to_csr(
+      csr: DecoupledIO[UInt],
+      scb: ScoreBoardEntry,
+      csr_allow_dispatch: Bool,
+      op_bundle: oprandBundle,
+      trans_id: UInt
+  ) = {
+    when(scb.fu_type === FuType.Csr && csr_allow_dispatch) {
+      csr.valid := true.B
+      csr.bits := op_bundle.rs1_data
+    }
+  }
+
+  for (i <- 0.until(num_pop_port)) {
+    dispatch_to_csr(
+      csr_0_pipe,
+      fifo_data_seq(i).bits,
+      csr_allow_dispatch(i),
+      op_bundle = inst_op(i),
+      io.new_trans_id(i)
+    )
+  }
+
   // -------------------
   // mul logic
   // -------------------
+  // TODO: NOT IMPLEMENTED
   val mul_allow_dispatch = VecInit(
-    dispatch_seq(0) && fifo_data_seq(0).fu_type === FuType.Mul,
-    dispatch_seq(1) && fifo_data_seq(1).fu_type === FuType.Mul
+    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+      allow && scb.bits.fu_type === FuType.Mul
+    }
   )
   assert(
     PopCount(mul_allow_dispatch) <= 1.U,
     "mul unit can only dispatch one inst at one cycle"
   )
-  // TODO: performance optimization?
-  val mul_scb = PriorityMux(mul_allow_dispatch, fifo_data_seq)
-  val mul_trans_id =
-    PriorityMux(mul_allow_dispatch, io.scb_port.write_ptr_trans_id)
-  val mul_op_a = PriorityMux(mul_allow_dispatch, inst_op_a)
-  val mul_op_b = PriorityMux(mul_allow_dispatch, inst_op_b)
-  io.fu_port.mul_0.valid := mul_allow_dispatch.reduce(_ || _)
-  io.fu_port.mul_0.bits := 0.U
+
+  // TODO: NOT IMPLEMENTED
+  def dispatch_to_mul(
+      mul: DecoupledIO[UInt],
+      scb: ScoreBoardEntry,
+      mul_allow_dispatch: Bool,
+      op_bundle: oprandBundle,
+      trans_id: UInt
+  ) = {
+    when(scb.fu_type === FuType.Mul && mul_allow_dispatch) {
+      mul.valid := true.B
+      mul.bits := op_bundle.rs1_data
+    }
+  }
+
+  for (i <- 0.until(num_pop_port)) {
+    dispatch_to_mul(
+      mul_0_pipe,
+      fifo_data_seq(i).bits,
+      mul_allow_dispatch(i),
+      op_bundle = inst_op(i),
+      io.new_trans_id(i)
+    )
+  }
+
   // ------------------
   // div logic
   // ------------------
+  // TODO: NOT IMPLEMENTED
   val div_allow_dispatch = VecInit(
-    dispatch_seq(0) && fifo_data_seq(0).fu_type === FuType.Div,
-    dispatch_seq(1) && fifo_data_seq(1).fu_type === FuType.Div
+    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+      allow && scb.bits.fu_type === FuType.Div
+    }
   )
   assert(
     PopCount(div_allow_dispatch) <= 1.U,
     "div unit can only dispatch one inst at one cycle"
   )
-  // TODO: performance optimization?
-  val div_scb = PriorityMux(div_allow_dispatch, fifo_data_seq)
-  val div_trans_id =
-    PriorityMux(div_allow_dispatch, io.scb_port.write_ptr_trans_id)
-  val div_op_a = PriorityMux(div_allow_dispatch, inst_op_a)
-  val div_op_b = PriorityMux(div_allow_dispatch, inst_op_b)
-  io.fu_port.div_0.valid := div_allow_dispatch.reduce(_ || _)
-  io.fu_port.div_0.bits := 0.U
 
+  // TODO: NOT IMPLEMENTED
+  def dispatch_to_div(
+      div: DecoupledIO[UInt],
+      scb: ScoreBoardEntry,
+      div_allow_dispatch: Bool,
+      op_bundle: oprandBundle,
+      trans_id: UInt
+  ) = {
+    when(scb.fu_type === FuType.Div && div_allow_dispatch) {
+      div.valid := true.B
+      div.bits := op_bundle.rs1_data
+    }
+  }
+
+  for (i <- 0.until(num_pop_port)) {
+    dispatch_to_div(
+      div_0_pipe,
+      fifo_data_seq(i).bits,
+      div_allow_dispatch(i),
+      op_bundle = inst_op(i),
+      io.new_trans_id(i)
+    )
+  }
 }
 
 object gen_IssueStage_verilog extends App {
-  GenVerilogHelper(new IssueStage())
+  GenVerilogHelper(new IssueStage(2, 2))
 }

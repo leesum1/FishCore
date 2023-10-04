@@ -2,32 +2,34 @@ package leesum
 import chisel3._
 import chisel3.util.{Decoupled, MuxLookup}
 
-class FuBranchIn extends Bundle {
+class FuBranchReq extends Bundle {
   val fu_op = FuOP()
   val trans_id = UInt(32.W)
   val bp = new BpEntry()
   val is_rvc = Bool()
   val pc = UInt(64.W)
   val imm = UInt(64.W)
-  val op_a = UInt(64.W)
-  val op_b = UInt(64.W)
+  val rs1 = UInt(64.W)
+  val rs2 = UInt(64.W)
 }
-class FuBranchOut extends Bundle {
+class FuBranchResp extends Bundle {
   // jal and jalr need write back to register
   val trans_id = UInt(32.W)
   val wb_data = UInt(64.W)
   // if branch is mis-predicted, redirect_pc is the correct pc
   val is_miss_predict = Bool()
   val redirect_pc = UInt(64.W)
+  def wb_valid = !is_miss_predict
 }
 
 class FuBranch extends Module {
   val io = IO(new Bundle {
-    val in = Flipped(Decoupled(new FuBranchIn))
-    val out = Decoupled(new FuBranchOut)
+    val in = Flipped(Decoupled(new FuBranchReq))
+    val out = Decoupled(new FuBranchResp)
   })
 
-  val pc_rs1 = io.in.bits.pc + io.in.bits.op_a
+  // TODO: need optimize, use alu to calculate vaddr
+  val pc_rs1 = io.in.bits.pc + io.in.bits.rs1
   val pc_imm = io.in.bits.pc + io.in.bits.imm
   val ra_target = io.in.bits.pc + Mux(io.in.bits.is_rvc, 2.U, 4.U)
 
@@ -54,12 +56,12 @@ class FuBranch extends Module {
     Seq(
       FuOP.BrJalr.asUInt -> true.B,
       FuOP.BrJal.asUInt -> true.B,
-      FuOP.BrBeq.asUInt -> (io.in.bits.op_a === io.in.bits.op_b),
-      FuOP.BrBne.asUInt -> (io.in.bits.op_a =/= io.in.bits.op_b),
-      FuOP.BrBlt.asUInt -> (io.in.bits.op_a.asSInt < io.in.bits.op_b.asSInt),
-      FuOP.BrBge.asUInt -> (io.in.bits.op_a.asSInt >= io.in.bits.op_b.asSInt),
-      FuOP.BrBltu.asUInt -> (io.in.bits.op_a < io.in.bits.op_b),
-      FuOP.BrBgeu.asUInt -> (io.in.bits.op_a >= io.in.bits.op_b)
+      FuOP.BrBeq.asUInt -> (io.in.bits.rs1 === io.in.bits.rs2),
+      FuOP.BrBne.asUInt -> (io.in.bits.rs1 =/= io.in.bits.rs2),
+      FuOP.BrBlt.asUInt -> (io.in.bits.rs1.asSInt < io.in.bits.rs2.asSInt),
+      FuOP.BrBge.asUInt -> (io.in.bits.rs1.asSInt >= io.in.bits.rs2.asSInt),
+      FuOP.BrBltu.asUInt -> (io.in.bits.rs1 < io.in.bits.rs2),
+      FuOP.BrBgeu.asUInt -> (io.in.bits.rs1 >= io.in.bits.rs2)
     )
   )
 

@@ -12,11 +12,11 @@ import chisel3.util.{
   log2Ceil
 }
 
-class AluIn extends Bundle {
+class AluReq extends Bundle {
   private val alu_width = 64
   val a = UInt(alu_width.W)
   val b = UInt(alu_width.W)
-  val trans_id = UInt(log2Ceil(8).W)
+  val trans_id = UInt(32.W)
 
   val op = AluOP()
   val is_rv32 = Bool()
@@ -41,19 +41,21 @@ class AluIn extends Bundle {
     aluop
   }
 }
-class AluOut extends Bundle {
+class AluResp extends Bundle {
   private val alu_width = 64
   val res = UInt(alu_width.W)
+  val trans_id = UInt(32.W)
 }
 
 class FuAlu extends Module {
   val io = IO(new Bundle {
-    val in = Flipped(Decoupled(new AluIn))
-    val out = Decoupled(new AluOut)
+    val in = Flipped(Decoupled(new AluReq))
+    val out = Decoupled(new AluResp)
   })
 
   io.in.ready := io.out.ready
   io.out.valid := io.in.valid
+  io.out.bits.trans_id := io.in.bits.trans_id
   /* Adder module Start */
   val adder = Module(new AluAdder())
   adder.io.sub_req := io.in.bits.op === AluOP.Sub || io.in.bits.op === AluOP.Slt || io.in.bits.op === AluOP.Sltu

@@ -2,7 +2,7 @@ package leesum
 
 import chisel3._
 import chisel3.ChiselEnum
-import chisel3.util.{BitPat, Cat, Decoupled, Enum, Fill}
+import chisel3.util.{BitPat, Cat, Decoupled, Enum, Fill, MuxLookup}
 
 import scala.annotation.unused
 
@@ -1180,7 +1180,97 @@ object FuOP extends ChiselEnum {
       LsuSb, LsuSh, LsuSw, LsuSd, BrBeq, BrBne, BrBlt, BrBge, BrBltu, BrBgeu,
       BrJal, BrJalr, MulMul, MulMulh, MulMulhsu, MulMulhu, CsrRead, CsrWrite,
       CsrSet, CsrClear, DivDiv, DivRem = Value
+
+  def is_branch(op: FuOP.Type): Bool = {
+    val branch_op = Seq(
+      FuOP.BrBeq,
+      FuOP.BrBne,
+      FuOP.BrBlt,
+      FuOP.BrBge,
+      FuOP.BrBltu,
+      FuOP.BrBgeu
+    )
+    val op_is_branch = WireInit(false.B)
+    for (x <- branch_op) {
+      when(op === x) {
+        op_is_branch := true.B
+      }
+    }
+    op_is_branch
+  }
+  def is_store(op: FuOP.Type): Bool = {
+    val store_op = Seq(FuOP.LsuSb, FuOP.LsuSh, FuOP.LsuSw, FuOP.LsuSd)
+
+    val op_is_store = WireInit(false.B)
+    for (x <- store_op) {
+      when(op === x) {
+        op_is_store := true.B
+      }
+    }
+    op_is_store
+  }
+  def is_load(op: FuOP.Type): Bool = {
+    val load_op = Seq(
+      FuOP.LsuLb,
+      FuOP.LsuLbu,
+      FuOP.LsuLh,
+      FuOP.LsuLhu,
+      FuOP.LsuLw,
+      FuOP.LsuLwu,
+      FuOP.LsuLd
+    )
+
+    val op_is_load = WireInit(false.B)
+    for (x <- load_op) {
+      when(op === x) {
+        op_is_load := true.B
+      }
+    }
+    op_is_load
+  }
+
+  def is_lsu(op: FuOP.Type): Bool = {
+    is_store(op) || is_load(op)
+  }
+
+  def lsu_need_sign_ext(op: FuOP.Type): Bool = {
+    assert(is_lsu(op), "not a load/store operation")
+    val sign_ext_op = List(FuOP.LsuLb, FuOP.LsuLh, FuOP.LsuLw, FuOP.LsuLd)
+    sign_ext_op.contains(op).B
+  }
+  def get_lsu_size(op: FuOP.Type): UInt = {
+    assert(is_lsu(op), "not a load/store operation")
+    val size_map = List(
+      FuOP.LsuLb -> 1.U,
+      FuOP.LsuLbu -> 1.U,
+      FuOP.LsuLh -> 2.U,
+      FuOP.LsuLhu -> 2.U,
+      FuOP.LsuLw -> 4.U,
+      FuOP.LsuLwu -> 4.U,
+      FuOP.LsuLd -> 8.U,
+      FuOP.LsuSb -> 1.U,
+      FuOP.LsuSh -> 2.U,
+      FuOP.LsuSw -> 4.U,
+      FuOP.LsuSd -> 8.U
+    )
+    MuxLookup(op, 0.U)(size_map)
+  }
 }
+
+object gen_fu_op_verilog extends App {
+  GenVerilogHelper(
+    (new Module {
+      val io = IO(new Bundle {
+        val fu_op = Input(FuOP())
+        val is_load = Output(Bool())
+        val is_store = Output(Bool())
+      })
+      io.is_load := FuOP.is_load(io.fu_op)
+      io.is_store := FuOP.is_store(io.fu_op)
+    })
+  )
+}
+
 object AluOP extends ChiselEnum {
   val None, Add, Sub, Xor, Or, And, Srl, Sra, Sll, Slt, Sltu = Value
 }

@@ -46,28 +46,12 @@ class ScoreBoard(
 
       // write-back port
       // alu
-      val fu_alu_valid = Input(Bool())
-      val fu_alu_id = Input(UInt(log2Ceil(entries).W))
-      val fu_alu_wb = Input(UInt(64.W))
-      val fu_alu_wb_valid = Input(Bool())
-      val fu_alu_exception =
-        Input(new ExceptionEntry()) // use for fetch exception
+      val fu_alu_wb_port = Flipped(Decoupled(new AluResp))
       // branch
-      val fu_branch_valid = Input(Bool())
-      val fu_branch_id = Input(UInt(log2Ceil(entries).W))
-      val fu_branch_wb = Input(UInt(64.W))
-      val fu_branch_wb_valid = Input(Bool())
-      val fu_branch_miss_predict = Input(Bool())
-      val fu_branch_redirect_pc = Input(UInt(64.W))
+      val fu_branch_wb_port = Flipped(Decoupled(new FuBranchResp))
       // lsu_port
-      val fu_lsu_valid = Input(Bool())
-      val fu_lsu_id = Input(UInt(log2Ceil(entries).W))
-      val fu_lsu_wb = Input(UInt(64.W))
-      val fu_lsu_wb_valid = Input(Bool())
-      val fu_lsu_is_mmio = Input(Bool()) // io space load,such as uart
-      val fu_lsu_exception = Input(new ExceptionEntry())
-
-      // mul_div
+      val fu_lsu_wb_port = Flipped(Decoupled(new LSUResp))
+      //  TODO: mul_div
       val fu_mul_div_valid = Input(Bool())
       val fu_mul_div_id = Input(UInt(log2Ceil(entries).W))
       val fu_mul_div_wb = Input(UInt(64.W))
@@ -80,20 +64,21 @@ class ScoreBoard(
   def checkWritebackConflict(): Bool = {
     val fu_valid = VecInit(
       Seq(
-        io.fu_alu_valid,
-        io.fu_branch_valid,
-        io.fu_lsu_valid,
+        io.fu_alu_wb_port.fire,
+        io.fu_branch_wb_port.fire,
+        io.fu_lsu_wb_port.fire,
         io.fu_mul_div_valid
       )
     )
     val fu_id = VecInit(
       Seq(
-        io.fu_alu_id,
-        io.fu_branch_id,
-        io.fu_lsu_id,
+        io.fu_alu_wb_port.bits.trans_id,
+        io.fu_branch_wb_port.bits.trans_id,
+        io.fu_lsu_wb_port.bits.trans_id,
         io.fu_mul_div_id
       )
     )
+
     val is_distinct = WireInit(true.B)
     for (i <- 0 until fu_id.length) {
       for (j <- i + 1 until fu_id.length) {
@@ -136,6 +121,8 @@ class ScoreBoard(
   )
 
   val pop_peek = rob.peek()
+
+  // TODO: use complete signal?
   pop_peek.zipWithIndex.foreach({ case (pop, i) =>
     io.pop_ports(i).bits := pop.bits
     io.pop_ports(i).valid := pop.valid
@@ -156,31 +143,75 @@ class ScoreBoard(
   // -------------------------
   // write-back ports logic
   // -------------------------
-  when(io.fu_alu_valid) {
-    rob.content(io.fu_alu_id).bits.complete := true.B
-    rob.content(io.fu_alu_id).bits.result := io.fu_alu_wb
-    rob.content(io.fu_alu_id).bits.result_valid := io.fu_alu_wb_valid
-    rob.content(io.fu_alu_id).bits.exception := io.fu_alu_exception
-  }
-  when(io.fu_branch_valid) {
-    rob.content(io.fu_branch_id).bits.complete := true.B
-    rob.content(io.fu_branch_id).bits.result := io.fu_branch_wb
-    rob.content(io.fu_branch_id).bits.result_valid := io.fu_branch_wb_valid
-    rob
-      .content(io.fu_branch_id)
-      .bits
-      .bp
-      .is_miss_predict := io.fu_branch_miss_predict
-    rob.content(io.fu_branch_id).bits.bp.predict_pc := io.fu_branch_redirect_pc
-  }
-  when(io.fu_lsu_valid) {
-//    rob.content(io.fu_lsu_id).bits.complete := true.B
-//    rob.content(io.fu_lsu_id).bits.result := io.fu_load_wb
-//    rob.content(io.fu_lsu_id).bits.result_valid := io.fu_load_wb_valid
-//    rob.content(io.fu_lsu_id).bits.exception := io.fu_load_exception
-//    rob.content(io.fu_lsu_id).bits.lsu_io_space := io.fu_load_io_space
+
+  // no exception for alu
+  def alu_write_back(alu_resp: AluResp, en: Bool): Unit = {
+    when(en) {
+      val rob_idx = alu_resp.trans_id
+      rob.content(rob_idx).bits.complete := true.B
+      rob.content(rob_idx).bits.result := alu_resp.res
+      rob.content(rob_idx).bits.result_valid := true.B
+
+      assert(
+        rob.random_access(rob_idx).valid,
+        "rob entry must be valid"
+      )
+    }
   }
 
+  // exception for agu
+  def lsu_write_back(lsu_resp: LSUResp, en: Bool): Unit = {
+    when(en) {
+      val rob_idx = lsu_resp.trans_id
+      when(lsu_resp.exception.valid) {
+        // 1. exception happened in AGU
+        rob.content(rob_idx).bits.complete := true.B
+        rob.content(rob_idx).bits.exception := lsu_resp.exception
+      }.elsewhen(lsu_resp.is_mmio) {
+        // 2. detect mmio access in AGU
+        rob.content(rob_idx).bits.complete := false.B
+        rob.content(rob_idx).bits.lsu_io_space := lsu_resp.is_mmio
+      }.otherwise {
+        // 3. normal write-back in LoadQueue
+        rob.content(rob_idx).bits.complete := true.B
+        rob.content(rob_idx).bits.result := lsu_resp.wb_data
+        rob.content(rob_idx).bits.result_valid := true.B
+      }
+      assert(
+        rob.random_access(rob_idx).valid,
+        "rob entry must be valid"
+      )
+    }
+  }
+
+  // TODO: exception for branch? rvc?
+  def branch_write_back(branch_resp: FuBranchResp, en: Bool): Unit = {
+    when(en) {
+      val rob_idx = branch_resp.trans_id
+      rob.content(rob_idx).bits.complete := true.B
+      rob.content(rob_idx).bits.result := branch_resp.wb_data
+      rob.content(rob_idx).bits.result_valid := branch_resp.wb_valid
+      rob
+        .content(rob_idx)
+        .bits
+        .bp
+        .is_miss_predict := branch_resp.is_miss_predict
+      rob.content(rob_idx).bits.bp.predict_pc := branch_resp.redirect_pc
+      assert(
+        rob.random_access(rob_idx).valid,
+        "rob entry must be valid"
+      )
+    }
+  }
+
+  io.fu_lsu_wb_port.ready := true.B
+  io.fu_alu_wb_port.ready := true.B
+  io.fu_branch_wb_port.ready := true.B
+  lsu_write_back(io.fu_lsu_wb_port.bits, io.fu_lsu_wb_port.fire)
+  alu_write_back(io.fu_alu_wb_port.bits, io.fu_alu_wb_port.fire)
+  branch_write_back(io.fu_branch_wb_port.bits, io.fu_branch_wb_port.fire)
+
+  // TODO: NOT IMPLEMENTED
   when(io.fu_mul_div_valid) {
     rob.content(io.fu_mul_div_id).bits.complete := true.B
     rob.content(io.fu_mul_div_id).bits.result := io.fu_mul_div_wb
@@ -192,13 +223,10 @@ class ScoreBoard(
   // rd_occupied_gpr logic
   // ---------------------
 
-  val rd_occupied_gpr = VecInit(Seq.fill(32)(FuType.None))
-
-  0.until(entries)
-    .foreach(idx => {
-      val scb_entry = rob.random_access(idx.U).bits
-      rd_occupied_gpr(scb_entry.rd_addr) := scb_entry.fu_type
-    })
+  val rd_occupied_gpr = VecInit(Seq.tabulate(32) { idx =>
+    val scb_entry = rob.random_access(idx.U)
+    Mux(scb_entry.valid, scb_entry.bits.fu_type, FuType.None)
+  })
   // x0 always be None
   rd_occupied_gpr(0) := FuType.None
 
@@ -209,193 +237,110 @@ class ScoreBoard(
   // ----------------------
   val fu_valid = VecInit(
     Seq(
-      io.fu_alu_valid,
-      io.fu_branch_valid,
-      io.fu_lsu_valid,
+      io.fu_alu_wb_port.fire,
+      io.fu_branch_wb_port.fire,
+      io.fu_lsu_wb_port.fire,
       io.fu_mul_div_valid
     )
   )
   val fu_id = VecInit(
     Seq(
-      io.fu_alu_id,
-      io.fu_branch_id,
-      io.fu_lsu_id,
+      io.fu_alu_wb_port.bits.trans_id,
+      io.fu_branch_wb_port.bits.trans_id,
+      io.fu_lsu_wb_port.bits.trans_id,
       io.fu_mul_div_id
     )
   )
   val fu_result = VecInit(
     Seq(
-      io.fu_alu_wb,
-      io.fu_branch_wb,
-      io.fu_lsu_wb,
+      io.fu_alu_wb_port.bits.res,
+      io.fu_branch_wb_port.bits.wb_data,
+      io.fu_lsu_wb_port.bits.wb_data,
       io.fu_mul_div_wb
     )
   )
   val fu_result_valid = VecInit(
     Seq(
-      io.fu_alu_wb_valid,
-      io.fu_branch_wb_valid,
-      io.fu_lsu_wb_valid,
+      io.fu_alu_wb_port.fire,
+      io.fu_branch_wb_port.bits.wb_valid,
+      io.fu_lsu_wb_port.bits.wb_data_valid,
       io.fu_mul_div_wb_valid
     )
   )
-  // fwd_req 中最多只有一个有效？
-  val op1_rs1_fwd_req = Wire(Vec(entries + fu_id.length, Bool()))
-  val op1_rs2_fwd_req = Wire(Vec(entries + fu_id.length, Bool()))
-  val op2_rs1_fwd_req = Wire(Vec(entries + fu_id.length, Bool()))
-  val op2_rs2_fwd_req = Wire(Vec(entries + fu_id.length, Bool()))
-  val rs_fwd_data = Wire(Vec(entries + fu_id.length, UInt(64.W)))
 
-  assert(
-    PopCount(op1_rs1_fwd_req) <= 1.U,
-    "fwd_req must be less than or equal to 1"
+  val fwd_valid_seq = Wire(
+    Vec(
+      num_push_ports,
+      (new Bundle {
+        val rs1_fwd_valid = Vec(entries + fu_id.length, Bool())
+        val rs2_fwd_valid = Vec(entries + fu_id.length, Bool())
+      })
+    )
   )
-  assert(
-    PopCount(op1_rs2_fwd_req) <= 1.U,
-    "fwd_req must be less than or equal to 1"
-  )
-  assert(
-    PopCount(op2_rs1_fwd_req) <= 1.U,
-    "fwd_req must be less than or equal to 1"
-  )
-  assert(
-    PopCount(op2_rs2_fwd_req) <= 1.U,
-    "fwd_req must be less than or equal to 1"
-  )
-
-  0.until(op1_rs1_fwd_req.length)
-    .foreach(i => {
-      op1_rs1_fwd_req(i) := false.B
-      op1_rs2_fwd_req(i) := false.B
-      op2_rs1_fwd_req(i) := false.B
-      op2_rs2_fwd_req(i) := false.B
-    })
-
-  0.until(fu_id.length)
-    .foreach(i => {
-      rs_fwd_data(i) := fu_result(i)
-      when(
-        fu_valid(i) && fu_result_valid(i) && (rob
-          .random_access(fu_id(i))
-          .bits
-          .rd_addr === io
-          .operand_bypass(0)
-          .rs1_addr)
-      ) {
-        op1_rs1_fwd_req(i) := true.B
-      }
-      when(
-        fu_valid(i) && fu_result_valid(i) && rob
-          .random_access(fu_id(i))
-          .bits
-          .rd_addr === io
-          .operand_bypass(0)
-          .rs2_addr
-      ) {
-        op1_rs2_fwd_req(i) := true.B
-      }
-      when(
-        fu_valid(i) && fu_result_valid(i) && rob
-          .random_access(fu_id(i))
-          .bits
-          .rd_addr === io
-          .operand_bypass(1)
-          .rs1_addr
-      ) {
-        op2_rs1_fwd_req(i) := true.B
-      }
-      when(
-        fu_valid(i) && fu_result_valid(i) && rob
-          .random_access(fu_id(i))
-          .bits
-          .rd_addr === io
-          .operand_bypass(1)
-          .rs1_addr
-      ) {
-        op2_rs1_fwd_req(i) := true.B
-      }
-      when(
-        fu_valid(i) && fu_result_valid(i) && rob
-          .random_access(fu_id(i))
-          .bits
-          .rd_addr === io
-          .operand_bypass(1)
-          .rs2_addr
-      ) {
-        op2_rs2_fwd_req(i) := true.B
-      }
-
-    })
-
-  fu_id.length
-    .until(entries + fu_id.length)
-    .foreach(i => {
-      val sbe_idx = i - fu_id.length
+  // the first entries of rs_fwd_data is the result of FU
+  // the rest entries of rs_fwd_data is the result of SBE
+  val fwd_data_vec = VecInit(Seq.tabulate(entries + fu_id.length) { idx =>
+    if (idx < fu_id.length) {
+      fu_result(idx)
+    } else {
+      val sbe_idx = idx - fu_id.length
       val sbe_data = rob.random_access(sbe_idx.U).bits
-      rs_fwd_data(i) := sbe_data.result
-      when(
-        sbe_data.rd_data_valid() && sbe_data.rd_addr === io
-          .operand_bypass(0)
-          .rs1_addr
-      ) {
-        op1_rs1_fwd_req(i) := true.B
-      }
-      when(
-        sbe_data.rd_data_valid() && sbe_data.rd_addr === io
-          .operand_bypass(0)
-          .rs2_addr
-      ) {
-        op1_rs2_fwd_req(i) := true.B
-      }
-      when(
-        sbe_data.rd_data_valid() && sbe_data.rd_addr === io
-          .operand_bypass(1)
-          .rs1_addr
-      ) {
-        op2_rs1_fwd_req(i) := true.B
-      }
-      when(
-        sbe_data.rd_data_valid() && sbe_data.rd_addr === io
-          .operand_bypass(1)
-          .rs2_addr
-      ) {
-        op2_rs2_fwd_req(i) := true.B
-      }
+      sbe_data.result
+    }
+  })
+
+  def check_rs_fwd(rs_addr: UInt): Vec[Bool] = {
+    val fwd_valid = VecInit(Seq.fill(entries + fu_id.length)(false.B))
+    0.until(fu_id.length)
+      .foreach(i => {
+        when(
+          fu_valid(i) && fu_result_valid(i) && (rob
+            .random_access(fu_id(i))
+            .bits
+            .rd_addr === rs_addr)
+        ) {
+          fwd_valid(i) := true.B
+        }
+      })
+
+    0.until(entries)
+      .foreach(i => {
+        val rob_entry = rob.random_access(i.U)
+        when(
+          rob_entry.valid && rob_entry.bits
+            .rd_data_valid() && rob_entry.bits.rd_addr === rs_addr
+        ) {
+          fwd_valid(i + fu_id.length) := true.B
+        }
+      })
+    assert(
+      PopCount(fwd_valid) <= 1.U,
+      "fwd_valid must be less than or equal to 1"
+    )
+    fwd_valid
+  }
+
+  require(fwd_valid_seq.length == io.operand_bypass.length)
+
+  fwd_valid_seq
+    .zip(io.operand_bypass)
+    .foreach({ case (fwd_valid, bypass) =>
+      fwd_valid.rs1_fwd_valid := check_rs_fwd(bypass.rs1_addr)
+      fwd_valid.rs2_fwd_valid := check_rs_fwd(bypass.rs2_addr)
     })
 
-  // ------------------------------------------------------------
-  //  val op1_rs1_fwd_req = Vec(entries + fu_id.length, Bool())
-  //  val op1_rs2_fwd_req = Vec(entries + fu_id.length, Bool())
-  //  val op2_rs1_fwd_req = Vec(entries + fu_id.length, Bool())
-  //  val op2_rs2_fwd_req = Vec(entries + fu_id.length, Bool())
-  //  val rs_fwd_data = Vec(entries + fu_id.length, UInt(64.W))
-  // ------------------------------------------------------------
+  io.operand_bypass
+    .zip(fwd_valid_seq)
+    .foreach({ case (bypass, fwd_valid) =>
+      bypass.rs1_fwd_valid := fwd_valid.rs1_fwd_valid.reduce(_ || _) && !bypass
+        .rs1_is_x0()
+      bypass.rs2_fwd_valid := fwd_valid.rs2_fwd_valid.reduce(_ || _) && !bypass
+        .rs2_is_x0()
 
-  io.operand_bypass(0).rs1_data := Mux1H(op1_rs1_fwd_req, rs_fwd_data)
-  io.operand_bypass(0).rs2_data := Mux1H(op1_rs2_fwd_req, rs_fwd_data)
-  io.operand_bypass(1).rs1_data := Mux1H(op2_rs1_fwd_req, rs_fwd_data)
-  io.operand_bypass(1).rs2_data := Mux1H(op2_rs2_fwd_req, rs_fwd_data)
-  io.operand_bypass(0).rs1_fwd_valid := Mux(
-    io.operand_bypass(0).rs1_is_x0(),
-    false.B,
-    op1_rs1_fwd_req.reduce(_ || _)
-  )
-  io.operand_bypass(0).rs2_fwd_valid := Mux(
-    io.operand_bypass(0).rs2_is_x0(),
-    false.B,
-    op1_rs2_fwd_req.reduce(_ || _)
-  )
-  io.operand_bypass(1).rs1_fwd_valid := Mux(
-    io.operand_bypass(1).rs1_is_x0(),
-    false.B,
-    op2_rs1_fwd_req.reduce(_ || _)
-  )
-  io.operand_bypass(1).rs2_fwd_valid := Mux(
-    io.operand_bypass(1).rs2_is_x0(),
-    false.B,
-    op2_rs2_fwd_req.reduce(_ || _)
-  )
+      bypass.rs1_data := Mux1H(fwd_valid.rs1_fwd_valid, fwd_data_vec)
+      bypass.rs2_data := Mux1H(fwd_valid.rs2_fwd_valid, fwd_data_vec)
 
+    })
 }
 
 object gen_ScoreBoard_verilog extends App {

@@ -6,11 +6,15 @@ import chisel3.util.{Decoupled, MuxLookup, PopCount, Valid, isPow2, log2Ceil}
 class ValidFIFO[T <: Data](
     gen: T,
     size: Int,
-    name: String
+    name: String,
+    use_mem: Boolean = false
 ) {
   require(isPow2(size), "content must have power-of-2 number of entries")
   val content =
     Mem(size, new Valid(gen)).suggestName(name + "_content")
+
+//  val content = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(new Valid(gen)))))
+
   val push_ptr = RegInit(
     0.U(log2Ceil(size).W)
   ).suggestName(name + "_push_ptr")
@@ -125,16 +129,16 @@ class MultiPortValidFIFO[T <: Data](
     // push
     for (i <- 0 until num_push_ports) {
       when(push_cond(i)) {
-        val current_ptr = push_ptr + i.U
-        content(current_ptr).valid := true.B
-        content(current_ptr).bits := entry(i)
+        val current_push_ptr = push_ptr + i.U
+        content(current_push_ptr).valid := true.B
+        content(current_push_ptr).bits := entry(i)
       }
     }
     // pop
     for (i <- 0 until num_pop_ports) {
       when(pop_cond(i)) {
-        val current_ptr = pop_ptr + i.U
-        content(current_ptr).valid := false.B
+        val current_pop_ptr = pop_ptr + i.U
+        content(current_pop_ptr).valid := false.B
       }
     }
     val push_count = PopCountOrder(push_cond)
