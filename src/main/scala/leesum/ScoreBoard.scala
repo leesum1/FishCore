@@ -56,7 +56,6 @@ class ScoreBoard(
       val fu_mul_div_id = Input(UInt(log2Ceil(entries).W))
       val fu_mul_div_wb = Input(UInt(64.W))
       val fu_mul_div_wb_valid = Input(Bool())
-      val fu_mul_div_exception = Input(new ExceptionEntry())
     }
   )
 
@@ -216,16 +215,18 @@ class ScoreBoard(
     rob.content(io.fu_mul_div_id).bits.complete := true.B
     rob.content(io.fu_mul_div_id).bits.result := io.fu_mul_div_wb
     rob.content(io.fu_mul_div_id).bits.result_valid := io.fu_mul_div_wb_valid
-    rob.content(io.fu_mul_div_id).bits.exception := io.fu_mul_div_exception
   }
 
   // ---------------------
   // rd_occupied_gpr logic
   // ---------------------
 
-  val rd_occupied_gpr = VecInit(Seq.tabulate(32) { idx =>
-    val scb_entry = rob.random_access(idx.U)
-    Mux(scb_entry.valid, scb_entry.bits.fu_type, FuType.None)
+  val rd_occupied_gpr = WireInit(VecInit(Seq.fill(32)(FuType.None)))
+
+  rob.content.foreach(entry => {
+    when(entry.valid) {
+      rd_occupied_gpr(entry.bits.rd_addr) := entry.bits.fu_type
+    }
   })
   // x0 always be None
   rd_occupied_gpr(0) := FuType.None
@@ -297,7 +298,7 @@ class ScoreBoard(
           fu_valid(i) && fu_result_valid(i) && (rob
             .random_access(fu_id(i))
             .bits
-            .rd_addr === rs_addr)
+            .rd_addr === rs_addr) && rs_addr =/= 0.U
         ) {
           fwd_valid(i) := true.B
         }
@@ -308,7 +309,7 @@ class ScoreBoard(
         val rob_entry = rob.random_access(i.U)
         when(
           rob_entry.valid && rob_entry.bits
-            .rd_data_valid() && rob_entry.bits.rd_addr === rs_addr
+            .rd_data_valid() && rob_entry.bits.rd_addr === rs_addr && rs_addr =/= 0.U
         ) {
           fwd_valid(i + fu_id.length) := true.B
         }
@@ -332,15 +333,57 @@ class ScoreBoard(
   io.operand_bypass
     .zip(fwd_valid_seq)
     .foreach({ case (bypass, fwd_valid) =>
-      bypass.rs1_fwd_valid := fwd_valid.rs1_fwd_valid.reduce(_ || _) && !bypass
-        .rs1_is_x0()
-      bypass.rs2_fwd_valid := fwd_valid.rs2_fwd_valid.reduce(_ || _) && !bypass
-        .rs2_is_x0()
+      bypass.rs1_fwd_valid := fwd_valid.rs1_fwd_valid.reduce(_ || _)
+      bypass.rs2_fwd_valid := fwd_valid.rs2_fwd_valid.reduce(_ || _)
 
       bypass.rs1_data := Mux1H(fwd_valid.rs1_fwd_valid, fwd_data_vec)
       bypass.rs2_data := Mux1H(fwd_valid.rs2_fwd_valid, fwd_data_vec)
 
     })
+
+  // ----------------------
+  // assert
+  // ----------------------
+
+  rob.content.foreach(entry => {
+
+    when(entry.valid) {
+      when(entry.bits.result_valid) {
+        assert(entry.bits.complete, "rob entry must be complete")
+      }
+
+      when(entry.bits.exception.valid) {
+        assert(entry.bits.complete, "rob entry must be complete")
+      }
+
+      assert(
+        !(entry.bits.exception.valid && entry.bits.result_valid),
+        "result and exception can't be valid at the same time"
+      )
+    }
+  })
+
+  val rd_waw = WireInit(false.B)
+
+  for (
+    i <- 0 until entries;
+    j <- i + 1 until entries
+  ) {
+    val entry_i = rob.random_access(i.U)
+    val entry_j = rob.random_access(j.U)
+    val is_x0 = entry_i.bits.rd_addr === 0.U && entry_j.bits.rd_addr === 0.U
+    when(
+      entry_i.valid && entry_j.valid && entry_i.bits.rd_addr === entry_j.bits.rd_addr && !is_x0
+    ) {
+      rd_waw := true.B
+    }
+  }
+
+  assert(
+    !rd_waw,
+    "rd_waw error!"
+  )
+
 }
 
 object gen_ScoreBoard_verilog extends App {

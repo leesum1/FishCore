@@ -1,7 +1,15 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Decoupled, MuxLookup, PopCount, Valid, isPow2, log2Ceil}
+import chisel3.util.{
+  Decoupled,
+  MuxLookup,
+  PopCount,
+  Queue,
+  Valid,
+  isPow2,
+  log2Ceil
+}
 
 class ValidFIFO[T <: Data](
     gen: T,
@@ -10,10 +18,11 @@ class ValidFIFO[T <: Data](
     use_mem: Boolean = false
 ) {
   require(isPow2(size), "content must have power-of-2 number of entries")
-  val content =
-    Mem(size, new Valid(gen)).suggestName(name + "_content")
 
-//  val content = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(new Valid(gen)))))
+//  val content =
+//    Mem(size, new Valid(gen)).suggestName(name + "_content")
+
+  val content = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(new Valid(gen)))))
 
   val push_ptr = RegInit(
     0.U(log2Ceil(size).W)

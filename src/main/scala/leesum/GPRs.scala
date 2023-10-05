@@ -23,6 +23,12 @@ class GPRsWritePort extends Bundle {
   val addr = Input(UInt(5.W))
   val wdata = Input(UInt(64.W))
   val wen = Input(Bool())
+
+  def write(addr: UInt, data: UInt) = {
+    this.addr := addr
+    this.wdata := data
+    this.wen := true.B
+  }
 }
 
 class GPRs(read_port_num: Int, write_port_num: Int) extends Module {

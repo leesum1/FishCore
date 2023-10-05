@@ -1181,6 +1181,34 @@ object FuOP extends ChiselEnum {
       BrJal, BrJalr, MulMul, MulMulh, MulMulhsu, MulMulhu, CsrRead, CsrWrite,
       CsrSet, CsrClear, DivDiv, DivRem = Value
 
+  def is_alu(op: FuOP.Type): Bool = {
+    val alu_op = Seq(
+      FuOP.AluAdd,
+      FuOP.AluSub,
+      FuOP.AluXor,
+      FuOP.AluOr,
+      FuOP.AluAnd,
+      FuOP.AluSrl,
+      FuOP.AluSra,
+      FuOP.AluSll,
+      FuOP.AluSlt,
+      FuOP.AluSltu
+    )
+    val op_is_alu = WireInit(false.B)
+    for (x <- alu_op) {
+      when(op === x) {
+        op_is_alu := true.B
+      }
+    }
+    op_is_alu
+  }
+
+  def is_jal(op: FuOP.Type): Bool = {
+    op === FuOP.BrJal
+  }
+  def is_jalr(op: FuOP.Type): Bool = {
+    op === FuOP.BrJalr
+  }
   def is_branch(op: FuOP.Type): Bool = {
     val branch_op = Seq(
       FuOP.BrBeq,
@@ -1650,7 +1678,7 @@ class ExceptionEntry(has_valid: Boolean = true) extends Bundle {
 
 class BpEntry extends Bundle {
   val bp_type = BpType()
-  val predict_pc = UInt(64.W)
+  val predict_pc = UInt(64.W) // use to store predict pc and target pc
   val is_taken: Bool = Bool()
   val is_miss_predict = Bool()
 }
