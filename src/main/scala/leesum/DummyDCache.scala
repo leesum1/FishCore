@@ -6,32 +6,36 @@ import axi4.{AXI4Memory, AXIDef, AXIMasterIO, StreamFork2, StreamFork}
 /** DummyDCache,actually there is no cache, just convert load and store req to
   * axi memory req
   */
-class DummyDCache(memoryFIle: String = "") extends Module {
+class DummyDCache extends Module {
+
+  val axi_addr_width = 32
+  val axi_data_width = 64
+
   val io = IO(new Bundle {
     val load_req = Flipped(Decoupled(new LoadDcacheReq))
     val load_resp = Decoupled(new LoadDcacheResp)
     val store_req = Flipped(Decoupled(new StoreDcacheReq))
     val store_resp = Decoupled(new StoreDcacheResp)
+
+    val axi_mem = new AXIMasterIO(axi_addr_width, axi_data_width)
     // TODO: not support flush now
     val flush = Input(Bool())
   })
-  val axi_addr_width = 32
-  val axi_data_width = 64
 
   val axi_master = Wire(new AXIMasterIO(axi_addr_width, axi_data_width))
 
-  val axi_mem = Module(
-    new AXI4Memory(
-      AXI_AW = axi_addr_width,
-      AXI_DW = axi_data_width,
-      INTERNAL_MEM_SIZE = 2048,
-      INTERNAL_MEM_DW = axi_data_width,
-      INTERNAL_MEM_BASE = 0,
-      memoryFile = memoryFIle
-    )
-  )
+//  val axi_mem = Module(
+//    new AXI4Memory(
+//      AXI_AW = axi_addr_width,
+//      AXI_DW = axi_data_width,
+//      INTERNAL_MEM_SIZE = 2048,
+//      INTERNAL_MEM_DW = axi_data_width,
+//      INTERNAL_MEM_BASE = 0,
+//      memoryFile = memoryFIle
+//    )
+//  )
 
-  axi_mem.io <> axi_master
+  io.axi_mem <> axi_master
 
   axi_master.ar.bits := DontCare
   axi_master.aw.bits := DontCare

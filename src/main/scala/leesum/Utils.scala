@@ -78,11 +78,14 @@ object SignExt {
     Cat(sign_ext, x)
   }
 }
+
 object GenMaskZero {
   def apply(width: Int, zero_count: Int, start_left: Boolean = false): UInt = {
     require(zero_count <= width)
     if (zero_count == 0) {
       Fill(width, 1.U(1.W))
+    } else if (zero_count == width) {
+      Fill(width, 0.U(1.W))
     } else {
       val mask_one = Fill(width - zero_count, true.B)
       val mask_zero = Fill(zero_count, false.B)

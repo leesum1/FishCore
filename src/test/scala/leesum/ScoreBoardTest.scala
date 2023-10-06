@@ -4,7 +4,7 @@ import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.experimental.VecLiterals.AddVecLiteralConstructor
 import chiseltest._
 import leesum.TestUtils.long2UInt64
-import leesum.axi4.skid_buffer
+import leesum.axi4.SkidBuffer
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 

@@ -1,10 +1,9 @@
 package leesum.axi4
 import chisel3._
 import chisel3.util.{Decoupled, DecoupledIO, Enum, is, switch}
-import circt.stage.ChiselStage
 import leesum.GenVerilogHelper
 
-class skid_buffer[T <: Data](gen: T, CUT_VALID: Boolean, CUT_READY: Boolean)
+class SkidBuffer[T <: Data](gen: T, CUT_VALID: Boolean, CUT_READY: Boolean)
     extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(gen))
@@ -127,7 +126,7 @@ private class skid_buffer_cut_ready[T <: Data](gen: T) extends Module {
   }
 }
 
-object skid_buffer {
+object SkidBuffer {
   def apply[T <: Data](
       in: DecoupledIO[T],
       out: DecoupledIO[T],
@@ -135,7 +134,7 @@ object skid_buffer {
       CUT_READY: Boolean
   ): Unit = {
     val buffer = Module(
-      new skid_buffer(in.bits.cloneType, CUT_VALID, CUT_READY)
+      new SkidBuffer(in.bits.cloneType, CUT_VALID, CUT_READY)
     )
     buffer.io.in.valid := in.valid
     in.ready := buffer.io.in.ready
@@ -148,5 +147,5 @@ object skid_buffer {
 }
 
 object gen_skid_buff_verilog extends App {
-  GenVerilogHelper(new skid_buffer(UInt(32.W), true, false))
+  GenVerilogHelper(new SkidBuffer(UInt(32.W), true, false))
 }

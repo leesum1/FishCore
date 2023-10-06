@@ -33,7 +33,7 @@ class AXI4Memory(
   ///////////////////////////////
 
   val axi_ar = Wire(Decoupled(new AXIAddressChannel(AXI_AW)))
-  skid_buffer(
+  SkidBuffer(
     io.ar,
     axi_ar,
     CUT_VALID = false,
@@ -41,14 +41,14 @@ class AXI4Memory(
   )
   val axi_aw = Wire(Decoupled(new AXIAddressChannel(AXI_AW)))
 
-  skid_buffer(
+  SkidBuffer(
     io.aw,
     axi_aw,
     CUT_VALID = false,
     CUT_READY = true
   )
   val axi_w = Wire(Decoupled(new AXIWriteDataChannel(AXI_DW)))
-  skid_buffer(
+  SkidBuffer(
     io.w,
     axi_w,
     CUT_VALID = false,
@@ -56,14 +56,14 @@ class AXI4Memory(
   )
 
   val axi_b = Wire(Decoupled(new AXIWriteResponseChannel))
-  skid_buffer(
+  SkidBuffer(
     axi_b,
     io.b,
     CUT_VALID = true,
     CUT_READY = false
   )
   val axi_r = Wire(Decoupled(new AXIReadDataChannel(AXI_DW)))
-  skid_buffer(
+  SkidBuffer(
     axi_r,
     io.r,
     CUT_VALID = true,

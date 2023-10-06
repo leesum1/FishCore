@@ -23,7 +23,7 @@ class StoreQueueDut extends Module {
   })
   val store_queue = Module(new StoreQueue())
   val load_queue = Module(new LoadQueue())
-  val dcache = Module(new DummyDCache())
+  val dcache = Module(new DummyDCacheDut())
 
   load_queue.io.in <> io.load_req
   load_queue.io.load_wb <> io.load_resp

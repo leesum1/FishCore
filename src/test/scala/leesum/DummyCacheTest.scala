@@ -1,8 +1,54 @@
 package leesum
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
+import chisel3.util.Decoupled
 import chiseltest._
+import leesum.axi4.AXI4Memory
 import org.scalatest.freespec.AnyFreeSpec
+
+class DummyDCacheDut(memoryFIle: String = "") extends Module {
+
+  val axi_addr_width = 32
+  val axi_data_width = 64
+
+  val io = IO(new Bundle {
+    val load_req = Flipped(Decoupled(new LoadDcacheReq))
+    val load_resp = Decoupled(new LoadDcacheResp)
+    val store_req = Flipped(Decoupled(new StoreDcacheReq))
+    val store_resp = Decoupled(new StoreDcacheResp)
+
+    // TODO: not support flush now
+    val flush = Input(Bool())
+  })
+
+  val axi_mem = Module(
+    new AXI4Memory(
+      AXI_AW = axi_addr_width,
+      AXI_DW = axi_data_width,
+      INTERNAL_MEM_SIZE = 2048,
+      INTERNAL_MEM_DW = axi_data_width,
+      INTERNAL_MEM_BASE = 0,
+      memoryFile = memoryFIle
+    )
+  )
+
+  val dcache = Module(new DummyDCache)
+
+  dcache.io.axi_mem <> axi_mem.io
+  dcache.io.flush := io.flush
+  dcache.io.load_req <> io.load_req
+  dcache.io.load_resp <> io.load_resp
+  dcache.io.store_req <> io.store_req
+  dcache.io.store_resp <> io.store_resp
+
+}
+
+object gen_dummy_dcache_dut_verilog extends App {
+  GenVerilogHelper(
+    new DummyDCacheDut()
+  )
+
+}
 
 class DummyCacheTest extends AnyFreeSpec with ChiselScalatestTester {
 
@@ -31,7 +77,7 @@ class DummyCacheTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   "DummyCacheTest1" in {
-    test(new DummyDCache)
+    test(new DummyDCacheDut)
       .withAnnotations(
         Seq(VerilatorBackendAnnotation)
       ) { dut =>

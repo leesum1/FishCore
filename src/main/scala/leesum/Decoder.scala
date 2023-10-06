@@ -1,17 +1,17 @@
 package leesum
 
-import chisel3.util.{ListLookup, MuxLookup}
+import chisel3.util.{Decoupled, ListLookup, MuxLookup}
 import chisel3.{Bundle, Input, Module, _}
 
 class InstDecoder extends Module {
   val io = IO(new Bundle {
-    val in = Input(new FetchEntry())
+    val in = Flipped(Decoupled(new FetchEntry()))
 
-    val out = Output(new ScoreBoardEntry())
+    val out = Decoupled(new ScoreBoardEntry())
   })
 
   private val decode_sig_seq: Seq[Element] =
-    ListLookup(io.in.inst, RVinst.inst_default, RVinst.inst_map)
+    ListLookup(io.in.bits.inst, RVinst.inst_default, RVinst.inst_map)
   val decode_sigs = Wire(new DecoderSignals())
 
 //  val inst_default = {
@@ -32,9 +32,9 @@ class InstDecoder extends Module {
   // -------------------
   // get decode signals
   // -------------------
-  decode_sigs.inst := io.in.inst
-  decode_sigs.inst_pc := io.in.pc
-  decode_sigs.inst_rvc := io.in.is_rvc
+  decode_sigs.inst := io.in.bits.inst
+  decode_sigs.inst_pc := io.in.bits.pc
+  decode_sigs.inst_rvc := io.in.bits.is_rvc
   // TODO: check valid signal?
   decode_sigs.inst_valid := decode_sig_seq(0)
   decode_sigs.fu_type := decode_sig_seq(1)
@@ -50,7 +50,7 @@ class InstDecoder extends Module {
 
   val scoreboard_entry = Wire(new ScoreBoardEntry())
 
-  val inst_base = Module(new InstBase(io.in.inst))
+  val inst_base = Module(new InstBase(io.in.bits.inst))
 
   scoreboard_entry.inst := decode_sigs.inst
   scoreboard_entry.pc := decode_sigs.inst_pc
@@ -92,14 +92,14 @@ class InstDecoder extends Module {
   // -----------------------------------
   // scoreboard exception information
   // -----------------------------------
-  when(io.in.exception.valid) {
+  when(io.in.bits.exception.valid) {
     // exception happened in fetch stage
-    scoreboard_entry.exception := io.in.exception
+    scoreboard_entry.exception := io.in.bits.exception
   }.elsewhen(!decode_sigs.inst_valid) {
     // exception happened in decode stage
     scoreboard_entry.exception.valid := true.B
     scoreboard_entry.exception.cause := ExceptionCause.illegal_instruction
-    scoreboard_entry.exception.tval := io.in.inst
+    scoreboard_entry.exception.tval := io.in.bits.inst
   }.otherwise {
     // no exception
     scoreboard_entry.exception.valid := false.B
@@ -109,9 +109,12 @@ class InstDecoder extends Module {
   // ------------------------------------------
   //  scoreboard branch predictor information
   // ------------------------------------------
-  scoreboard_entry.bp := io.in.bp
+  scoreboard_entry.bp := io.in.bits.bp
 
-  io.out := scoreboard_entry
+  io.out.valid := io.in.valid
+  io.in.ready := io.out.ready
+
+  io.out.bits := scoreboard_entry
 }
 
 object gen_verilog4 extends App {

@@ -23,7 +23,7 @@ class LSUTestDut(memoryFIle: String = "") extends Module {
   })
 
   val lsu = Module(new LSU)
-  val dcache = Module(new DummyDCache(memoryFIle))
+  val dcache = Module(new DummyDCacheDut(memoryFIle))
   val tlb = Module(new DummyTLB())
 
   // flush

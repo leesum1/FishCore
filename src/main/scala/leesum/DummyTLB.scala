@@ -1,7 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util.random.LFSR
-import chisel3.util.{Decoupled, Enum, is, switch}
+import chisel3.util.{Decoupled, Enum, MixedVecInit, PriorityMux, is, switch}
 
 object TLBReqType extends ChiselEnum {
   val LOAD, STORE, fetchEntry = Value
@@ -79,6 +79,74 @@ class DummyTLB extends Module {
   }
 }
 
+class TLBArbiter(num_input: Int) extends Module {
+  val io = IO(new Bundle {
+    val in_req = Vec(num_input, Flipped(Decoupled(new TLBReq)))
+    val in_resp = Vec(num_input, Decoupled(new TLBResp))
+
+    val out_req = Decoupled(new TLBReq)
+    val out_resp = Flipped(Decoupled(new TLBResp))
+  })
+  val occupied_sel = RegInit(0.U(num_input.W))
+
+  val sIdle :: sSendReq :: sWaitResp :: Nil = Enum(3)
+
+  val state = RegInit(sIdle)
+
+  val sel_idx = VecInit(io.in_req.map(_.valid)).indexWhere(_ === true.B)
+  val sel_idx_valid = io.in_req.map(_.valid).reduce(_ || _)
+
+  io.in_req.foreach(_.nodeq())
+  io.in_resp.foreach(_.noenq())
+  io.out_req.noenq()
+  io.out_resp.nodeq()
+
+  // TODO: remove bubble between two requests
+  switch(state) {
+    is(sIdle) {
+      when(sel_idx_valid) {
+        occupied_sel := sel_idx
+        state := sSendReq
+      }
+    }
+    is(sSendReq) {
+      io.out_req <> io.in_req(occupied_sel)
+      when(io.out_req.fire) {
+        state := sWaitResp
+      }
+    }
+
+    is(sWaitResp) {
+      io.in_resp(occupied_sel) <> io.out_resp
+      when(io.out_resp.fire) {
+        state := sIdle
+      }
+    }
+  }
+}
+
 object gen_DummyTLB_verilog extends App {
   GenVerilogHelper(new DummyTLB)
+}
+
+object gen_TLBArbiter_verilog extends App {
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val in = Input(Vec(15, Bool()))
+      val out_idx1 = Output(UInt(8.W))
+      val out_idx2 = Output(UInt(8.W))
+      val out_val = Output(Bool())
+    })
+
+    io.out_idx1 := io.in.indexWhere(_ === true.B)
+
+    val scalaVector = io.in.zipWithIndex
+      .map(x => MixedVecInit(x._1, x._2.U(8.W)))
+
+    val resFun2 = VecInit(scalaVector)
+      .reduceTree((x, y) => Mux(x(0).asBool, x, y))
+
+    io.out_val := resFun2(0).asBool
+    io.out_idx2 := resFun2(1)
+  })
 }

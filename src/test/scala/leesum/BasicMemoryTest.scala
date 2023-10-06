@@ -86,8 +86,7 @@ class BasicMemoryTest extends AnyFreeSpec with ChiselScalatestTester {
         ADDR_WIDTH = 12,
         DATA_WIDTH = 64,
         BASE_ADDR = 0,
-        memoryFile =
-          "/home/leesum/workhome/chisel-fish/src/main/resources/random_data_readmemh.txt"
+        memoryFile = "src/main/resources/random_file.bin"
       )
     )
       .withAnnotations(

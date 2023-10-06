@@ -18,7 +18,7 @@ class LoadQueueDut(memoryFile: String) extends Module {
     val mmio_commit = Flipped(Decoupled(Bool()))
   })
   val load_queue = Module(new LoadQueue())
-  val dcache = Module(new DummyDCache(memoryFile))
+  val dcache = Module(new DummyDCacheDut(memoryFile))
 
   load_queue.io.in <> io.load_req
   load_queue.io.load_wb <> io.load_resp

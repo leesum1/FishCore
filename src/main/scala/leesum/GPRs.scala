@@ -15,10 +15,6 @@ class RegFile {
   }
 }
 
-class GPRRreadPort extends Bundle {
-  val addr = Input(UInt(5.W))
-  val rdata = Output(UInt(64.W))
-}
 class GPRsWritePort extends Bundle {
   val addr = Input(UInt(5.W))
   val wdata = Input(UInt(64.W))
@@ -33,14 +29,15 @@ class GPRsWritePort extends Bundle {
 
 class GPRs(read_port_num: Int, write_port_num: Int) extends Module {
   val io = IO(new Bundle {
-    val read_ports = Vec(read_port_num, new GPRRreadPort)
+    val read_ports = Vec(read_port_num, Flipped(new RegFileReadPort))
     val write_ports = Vec(write_port_num, new GPRsWritePort)
   })
 
   val rf = new RegFile
 
   for (i <- 0 until read_port_num) {
-    io.read_ports(i).rdata := rf.read(io.read_ports(i).addr)
+    io.read_ports(i).rs1_data := rf.read(io.read_ports(i).rs1_addr)
+    io.read_ports(i).rs2_data := rf.read(io.read_ports(i).rs2_addr)
   }
   for (i <- 0 until write_port_num) {
     when(io.write_ports(i).wen) {
@@ -51,6 +48,6 @@ class GPRs(read_port_num: Int, write_port_num: Int) extends Module {
 
 object gen_gprs_verilog extends App {
   GenVerilogHelper(
-    new GPRs(read_port_num = 2, write_port_num = 1)
+    new GPRs(read_port_num = 2, write_port_num = 2)
   )
 }

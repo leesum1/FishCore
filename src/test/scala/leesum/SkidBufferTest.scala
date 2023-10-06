@@ -1,13 +1,13 @@
 package leesum
 import chisel3._
 import chiseltest._
-import leesum.axi4.skid_buffer
+import leesum.axi4.SkidBuffer
 import org.scalatest.freespec.AnyFreeSpec
 
 class SkidBufferTest extends AnyFreeSpec with ChiselScalatestTester {
 
   "skid_buffer_test" in {
-    test(new skid_buffer(UInt(32.W), CUT_VALID = true, CUT_READY = true))
+    test(new SkidBuffer(UInt(32.W), CUT_VALID = true, CUT_READY = true))
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
@@ -36,7 +36,7 @@ class SkidBufferTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   "skid_buffer_test_on_stop" in {
-    test(new skid_buffer(UInt(32.W), CUT_VALID = true, CUT_READY = false))
+    test(new SkidBuffer(UInt(32.W), CUT_VALID = true, CUT_READY = false))
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
