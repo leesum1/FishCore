@@ -87,39 +87,45 @@ class TLBArbiter(num_input: Int) extends Module {
     val out_req = Decoupled(new TLBReq)
     val out_resp = Flipped(Decoupled(new TLBResp))
   })
-  val occupied_sel = RegInit(0.U(num_input.W))
+  val occupied_sel_buf = RegInit(0.U(num_input.W))
 
-  val sIdle :: sSendReq :: sWaitResp :: Nil = Enum(3)
+  val sIdle :: sWaitResp :: Nil = Enum(2)
 
   val state = RegInit(sIdle)
 
   val sel_idx = VecInit(io.in_req.map(_.valid)).indexWhere(_ === true.B)
   val sel_idx_valid = io.in_req.map(_.valid).reduce(_ || _)
 
+  def sen_tlb_req(idx: UInt): Unit = {
+
+    when(sel_idx_valid) {
+      assert(idx < num_input.U, "idx must less than num_input")
+      assert(io.in_req(idx).valid, "in_req(idx) must be valid")
+      io.out_req <> io.in_req(idx)
+      when(io.out_req.fire) {
+        occupied_sel_buf := idx
+        state := sWaitResp
+      }.otherwise {
+        state := sIdle
+      }
+    }.otherwise {
+      state := sIdle
+    }
+  }
+
   io.in_req.foreach(_.nodeq())
   io.in_resp.foreach(_.noenq())
   io.out_req.noenq()
   io.out_resp.nodeq()
 
-  // TODO: remove bubble between two requests
   switch(state) {
     is(sIdle) {
-      when(sel_idx_valid) {
-        occupied_sel := sel_idx
-        state := sSendReq
-      }
+      sen_tlb_req(sel_idx)
     }
-    is(sSendReq) {
-      io.out_req <> io.in_req(occupied_sel)
-      when(io.out_req.fire) {
-        state := sWaitResp
-      }
-    }
-
     is(sWaitResp) {
-      io.in_resp(occupied_sel) <> io.out_resp
+      io.in_resp(occupied_sel_buf) <> io.out_resp
       when(io.out_resp.fire) {
-        state := sIdle
+        sen_tlb_req(sel_idx)
       }
     }
   }
