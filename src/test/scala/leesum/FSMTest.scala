@@ -9,7 +9,7 @@ import org.scalatest.freespec.AnyFreeSpec
 class FSMTest extends AnyFreeSpec with ChiselScalatestTester {
   "fsm_test" in {
     test(new fsm_test)
-      .withAnnotations(Seq(IcarusBackendAnnotation, WriteVcdAnnotation)) {
+      .withAnnotations(Seq(VerilatorBackendAnnotation, WriteVcdAnnotation)) {
         dut =>
           {
             dut.clock.step(5)

@@ -3,7 +3,7 @@ package leesum
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
-import chiseltest.simulator.WriteVcdAnnotation
+import chiseltest.simulator.WriteFstAnnotation
 import leesum.TestUtils.{int2UInt64, long2UInt64, long2Ulong}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
@@ -36,7 +36,7 @@ class AluAdderTest extends AnyFreeSpec with ChiselScalatestTester {
 
   "ADDER SUB TEST" in {
     test(new AluAdder).withAnnotations(
-      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       val input_gen = adder_input_gen()
       val input_seq = Gen
@@ -184,7 +184,7 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
 
   "ALU TEST" in {
     test(new FuAlu).withAnnotations(
-      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       val alu_gen = alu_input_gen()
 
@@ -259,7 +259,7 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
 
   "SLL64 TEST" in {
     test(new AluShift).withAnnotations(
-      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       val sll64_gen = shift_input_gen()
 
@@ -298,7 +298,7 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
   }
   "SLL32 TEST" in {
     test(new AluShift).withAnnotations(
-      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       val sll32_gen = shift_input_gen()
 
@@ -341,7 +341,7 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
   }
   "SRL64 TEST" in {
     test(new AluShift).withAnnotations(
-      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       val srl64_gen = shift_input_gen()
 
@@ -382,7 +382,7 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
   }
   "SRL32 TEST" in {
     test(new AluShift).withAnnotations(
-      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       val srl32_gen = shift_input_gen()
 
@@ -423,7 +423,7 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
   }
   "SRA64 TEST" in {
     test(new AluShift).withAnnotations(
-      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       val sra64_gen = shift_input_gen()
 
@@ -464,7 +464,7 @@ class AluShiftTest extends AnyFreeSpec with ChiselScalatestTester {
   }
   "SRA32 TEST" in {
     test(new AluShift).withAnnotations(
-      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       val sra32_gen = shift_input_gen()
 

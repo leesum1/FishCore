@@ -13,7 +13,7 @@ class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
 
   "RspPacket2Insts_test" in {
     test(new RspPacket2Insts).withAnnotations(
-      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteVcdAnnotation)
     ) { dut =>
       {
         dut.input.initSource()

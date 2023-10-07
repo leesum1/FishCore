@@ -35,6 +35,19 @@ object GenVerilogHelper {
   }
 }
 
+object CheckUnique {
+  def apply[T <: Data](vec: Vec[T], exclude: T): Bool = {
+    val conflict = vec
+      .combinations(2)
+      .map { case Seq(a, b) =>
+        (a === b) && !(a === exclude)
+      }
+      .reduce(_ || _)
+
+    !conflict
+  }
+}
+
 /** only if vec(i-1) is valid, vec(i) can be valid. 0000 -> pass check 0001 ->
   * pass check 0011 -> pass check 0111 -> pass check 1111 -> pass check 1000 ->
   * fail check 1001 -> fail check 1100 -> fail check

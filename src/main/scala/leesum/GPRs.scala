@@ -44,10 +44,21 @@ class GPRs(read_port_num: Int, write_port_num: Int) extends Module {
       rf.write(io.write_ports(i).addr, io.write_ports(i).wdata)
     }
   }
+  // -----------------------
+  // assert
+  // -----------------------
+
+  assert(
+    CheckUnique(
+      VecInit(io.write_ports.map(wp => Mux(wp.wen, wp.addr, 0.U))),
+      0.U
+    ),
+    "write address conflict"
+  )
 }
 
 object gen_gprs_verilog extends App {
   GenVerilogHelper(
-    new GPRs(read_port_num = 2, write_port_num = 2)
+    new GPRs(read_port_num = 2, write_port_num = 4)
   )
 }

@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.experimental.VecLiterals.AddObjectLiteralConstructor
 import chiseltest._
-import chiseltest.simulator.WriteVcdAnnotation
+import chiseltest.simulator.WriteFstAnnotation
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -55,7 +55,7 @@ class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
   }
   "flush_test" in {
     test(new InstsFifo)
-      .withAnnotations(Seq(IcarusBackendAnnotation, WriteVcdAnnotation)) {
+      .withAnnotations(Seq(VerilatorBackendAnnotation, WriteFstAnnotation)) {
         dut =>
           {
             dut.io.in.initSource()
@@ -105,7 +105,7 @@ class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
 
   "fifo_push_test" in {
     test(new InstsFifo).withAnnotations(
-      Seq(IcarusBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       {
         dut.io.in.initSource()
@@ -150,7 +150,7 @@ class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
 
   "InstFIFO2_flush_test" in {
     test(new InstsFIFO2).withAnnotations(
-      Seq(VerilatorBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       dut.io.push.initSource()
       dut.io.push.setSourceClock(dut.clock)
@@ -225,7 +225,7 @@ class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
 
   "InstsFIFO2_push_pop_test" in {
     test(new InstsFIFO2).withAnnotations(
-      Seq(VerilatorBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       dut.io.push.initSource()
       dut.io.push.setSourceClock(dut.clock)
@@ -286,7 +286,7 @@ class InistFifo_test extends AnyFreeSpec with ChiselScalatestTester {
 
   "CompressInstsItem_test" in {
     test(new CompressInstsItem()).withAnnotations(
-      Seq(VerilatorBackendAnnotation, WriteVcdAnnotation)
+      Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
     ) { dut =>
       val insts_item_gen =
         gen_rand()
