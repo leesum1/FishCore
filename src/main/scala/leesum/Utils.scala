@@ -1,9 +1,22 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Cat, Fill, MuxLookup, is, log2Ceil, switch}
+import chisel3.util.{
+  BitPat,
+  Cat,
+  Fill,
+  ListLookup,
+  Lookup,
+  MuxLookup,
+  Valid,
+  ValidIO,
+  is,
+  log2Ceil,
+  switch
+}
 import circt.stage.ChiselStage
 
+import scala.reflect.ClassTag
 import scala.sys.process._
 
 object GenVerilogHelper {
@@ -407,4 +420,30 @@ object GetAxiRdata {
 }
 object gen_GetAxiRdata_verilog extends App {
   GenVerilogHelper(new GetAxiRdata)
+}
+
+object GenSizeByAddr {
+  def apply(addr: UInt): UInt = {
+    val size = Lookup(
+      addr(2, 0),
+      0.U,
+      List(
+        BitPat("b000") -> 3.U, // 8 bytes
+        BitPat("b100") -> 2.U, // 4 bytes
+        BitPat("b?10") -> 1.U, // 2 bytes
+        BitPat("b??1") -> 0.U // 1 byte
+      )
+    )
+    size
+  }
+}
+
+object gen_GenSizeByAddr_verilog extends App {
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val addr = Input(UInt(64.W))
+      val size = Output(UInt(2.W))
+    })
+    io.size := GenSizeByAddr(io.addr)
+  })
 }

@@ -4,7 +4,7 @@ import chisel3.util.random.LFSR
 import chisel3.util.{Decoupled, Enum, MixedVecInit, PriorityMux, is, switch}
 
 object TLBReqType extends ChiselEnum {
-  val LOAD, STORE, fetchEntry = Value
+  val LOAD, STORE, Fetch = Value
 
 }
 
@@ -22,7 +22,7 @@ class TLBResp extends Bundle {
   val exception = new ExceptionEntry(has_valid = true)
 }
 
-class DummyTLB extends Module {
+class DummyTLB(random_latency: Boolean = true) extends Module {
   val io = IO(new Bundle {
     val tlb_req = Flipped(Decoupled(new TLBReq))
     val tlb_resp = Decoupled(new TLBResp)
@@ -33,7 +33,11 @@ class DummyTLB extends Module {
   val state = RegInit(sIdle)
   val latency_cnt = RegInit(0.U(4.W))
   val req_buf = RegInit(0.U.asTypeOf(new TLBReq))
-  val new_latency = LFSR(4, io.tlb_req.fire)
+  val new_latency = if (random_latency) {
+    LFSR(4, io.tlb_req.fire)
+  } else {
+    0.U
+  }
 
   io.tlb_req.ready := false.B
   io.tlb_resp.valid := false.B

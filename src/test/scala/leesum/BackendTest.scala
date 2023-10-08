@@ -9,6 +9,7 @@ import leesum.TestUtils.{
   gen_axi_wdata,
   gen_axi_wstrb,
   gen_rand_uint,
+  int2UInt32,
   long2UInt64
 }
 import leesum.axi4.AXI4Memory
@@ -119,4 +120,61 @@ object gen_backendDut_verilog extends App {
   GenVerilogHelper(new BackendTestDut)
 }
 
-class BackendTest extends AnyFreeSpec with ChiselScalatestTester {}
+class BackendTest extends AnyFreeSpec with ChiselScalatestTester {
+
+  // class FetchEntry extends Bundle {
+  //  val pc = UInt(64.W)
+  //  val inst = UInt(32.W)
+  //  val is_rvc = Bool()
+  //  val is_valid = Bool()
+  //  val exception = new ExceptionEntry(has_valid = true)
+  //  val bp = new BpEntry()
+  // }
+
+  def gen_fetch_entry(pc: Long, inst: Int) = {
+    (new FetchEntry).Lit(
+      _.is_rvc -> false.B,
+      _.is_valid -> true.B,
+      _.pc -> long2UInt64(pc),
+      _.inst -> int2UInt32(inst),
+      _.exception.valid -> false.B,
+      _.exception.tval -> 0.U,
+      _.exception.cause -> ExceptionCause.misaligned_fetch,
+      _.bp.is_miss_predict -> false.B,
+      _.bp.is_taken -> false.B,
+      _.bp.predict_pc -> 0.U,
+      _.bp.bp_type -> BpType.None
+    )
+  }
+
+  "BackendTest_ALU" in {
+    test(new BackendTestDut)
+      .withAnnotations(
+        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+      ) { dut =>
+        dut.io.inst_fetch.initSource().setSourceClock(dut.clock)
+        dut.io.inst_fetch1.initSource().setSourceClock(dut.clock)
+        dut.clock.step(5)
+
+        //    80000054:	00000797          	auipc	a5,0x0
+        //    80000058:	2c478793          	addi	a5,a5,708 # 80000318 <test_data>
+        //    8000005c:	00349713          	slli	a4,s1,0x3
+        //    80000060:	00e78733          	add	a4,a5,a4
+        //    80000064:	00391693          	slli	a3,s2,0x3
+        //    80000068:	00d787b3          	add	a5,a5,a3
+        val inst_seq =
+          Seq(0x00000797, 0x2c478793, 0x00349713, 0x00e78733, 0x00391693,
+            0x00d787b3)
+
+        val inst_fetch_seq =
+          inst_seq.zipWithIndex.map { case (inst, idx) =>
+            gen_fetch_entry(0x80000054 + idx * 4, inst)
+          }
+
+        dut.io.inst_fetch.enqueueSeq(inst_fetch_seq)
+
+        dut.clock.step(5)
+      }
+  }
+
+}

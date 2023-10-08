@@ -3,6 +3,29 @@ import chisel3._
 import chisel3.util.{Decoupled, Queue}
 import axi4.{AXI4Memory, AXIDef, AXIMasterIO, StreamFork2, StreamFork}
 
+class DummyICache extends Module {
+  val axi_addr_width = 32
+  val axi_data_width = 64
+
+  val io = IO(new Bundle {
+    val load_req = Flipped(Decoupled(new LoadDcacheReq))
+    val load_resp = Decoupled(new LoadDcacheResp)
+
+    val axi_mem = new AXIMasterIO(axi_addr_width, axi_data_width)
+    // TODO: not support flush now
+    val flush = Input(Bool())
+  })
+
+  val icache = Module(new DummyDCache)
+  icache.io.load_resp <> io.load_resp
+  icache.io.load_req <> io.load_req
+  icache.io.axi_mem <> io.axi_mem
+  icache.io.flush := io.flush
+  icache.io.store_resp.nodeq()
+  icache.io.store_req.noenq()
+
+}
+
 /** DummyDCache,actually there is no cache, just convert load and store req to
   * axi memory req
   */
@@ -139,4 +162,8 @@ class DummyDCache extends Module {
 
 object gen_dummy_dcache_verilog extends App {
   GenVerilogHelper(new DummyDCache)
+}
+
+object gen_dummy_icache_verilog extends App {
+  GenVerilogHelper(new DummyICache)
 }

@@ -12,7 +12,7 @@ import java.nio.file.{Files, Paths}
 class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
 
   "RspPacket2Insts_test" in {
-    test(new RspPacket2Insts).withAnnotations(
+    test(new InstReAlign).withAnnotations(
       Seq(VerilatorBackendAnnotation, WriteVcdAnnotation)
     ) { dut =>
       {

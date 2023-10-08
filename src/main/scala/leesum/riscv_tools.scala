@@ -1371,7 +1371,7 @@ object RVinst {
       FuType.Alu,
       FuOP.AluAdd,
       false.B,
-      InstType.R
+      InstType.I
     ) ::: reg_imm_op),
     // x[rd] = x[rs1] & x[rs2]
     Instructions.IType("AND") -> (List(
@@ -1636,6 +1636,18 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluXor,
+      false.B,
+      InstType.I
+    ) ::: reg_imm_op)
+  )
+
+  val i64_map: Array[(BitPat, List[Element])] = Array(
+    // slli rd, rs1, shamt
+    // x[rd] = x[rs1] << shamt
+    Instructions.I64Type("SLLI") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluSll,
       false.B,
       InstType.I
     ) ::: reg_imm_op)

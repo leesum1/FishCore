@@ -136,7 +136,7 @@ class CommitStage(num_commit_port: Int) extends Module {
     port.ready := ack
   }
 
-  when(rob_valid_seq.head) {
+  when(rob_valid_seq.head && rob_data_seq.head.complete) {
     when(rob_data_seq.head.exception.valid) {
       assert(
         rob_data_seq.head.complete === true.B,

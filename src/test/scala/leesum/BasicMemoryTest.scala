@@ -18,13 +18,13 @@ class RefMemory(ADDR_WIDTH: Int, DATA_WIDTH: Int, BASE_ADDR: Int) {
   }
 
   def mem_addr(addr: Int): Int = {
-    ((addr - BASE_ADDR) >> 3)
+    ((addr - BASE_ADDR) >>> 3)
   }
   def write(addr: Int, data: Long, wstrb: Int): Unit = {
     val addrIndex = mem_addr(addr)
 
     val dataBytes =
-      (0 until (DATA_WIDTH / 8)).map(i => ((data >> (i * 8)) & 0xff).toByte)
+      (0 until (DATA_WIDTH / 8)).map(i => ((data >>> (i * 8)) & 0xff).toByte)
     // little endian
     dataBytes.zipWithIndex
       .foreach { case (dataByte, index) =>
@@ -85,8 +85,7 @@ class BasicMemoryTest extends AnyFreeSpec with ChiselScalatestTester {
       new BasicMemory(
         ADDR_WIDTH = 12,
         DATA_WIDTH = 64,
-        BASE_ADDR = 0,
-        memoryFile = "src/main/resources/random_file.bin"
+        BASE_ADDR = 0
       )
     )
       .withAnnotations(

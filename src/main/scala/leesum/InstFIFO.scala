@@ -1,7 +1,22 @@
 package leesum
 
 import chisel3._
+import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util._
+
+class INSTEntry extends Bundle {
+  val pc = UInt(64.W)
+  val inst = UInt(32.W)
+  val rvc = Bool()
+  val valid = Bool()
+
+  def clear() = {
+    pc := 0.U
+    inst := 0.U
+    rvc := false.B
+    valid := false.B
+  }
+}
 
 /** This module is used to convert a InstsItem to a stream of INSTEntry
   * InstsItem is a bundle of 4 INSTEntry, and all InstEntry may be valid or not.
@@ -12,8 +27,7 @@ import chisel3.util._
 class CompressInstsItem extends Module {
   val io = IO(new Bundle {
     val in = Input(new InstsItem)
-    val out_valid = Output(Vec(4, Bool()))
-    val out_data = Output(Vec(4, new INSTEntry))
+    val out = Output(new InstsItem)
   })
 
   val validSeq = VecInit(io.in.insts_vec.map(_.valid))
@@ -49,12 +63,7 @@ class CompressInstsItem extends Module {
     )
   )
 
-  io.out_data(0) := out_data_0
-  io.out_data(1) := out_data_1
-  io.out_data(2) := out_data_2
-  io.out_data(3) := out_data_3
-
-  val out_valid = Mux1H(
+  val out_valid_seq = Mux1H(
     Seq(
       (validSeq_count === 0.U) -> VecInit(
         false.B,
@@ -73,36 +82,51 @@ class CompressInstsItem extends Module {
       (validSeq_count === 4.U) -> VecInit(true.B, true.B, true.B, true.B)
     )
   )
+  val out_data_seq = Seq(out_data_0, out_data_1, out_data_2, out_data_3)
 
-  io.out_valid := out_valid
+  for (i <- 0 until 4) {
+    io.out.insts_vec(i).valid := out_valid_seq(i)
+    io.out.insts_vec(i).inst := out_data_seq(i).inst
+    io.out.insts_vec(i).rvc := out_data_seq(i).rvc
+    io.out.insts_vec(i).pc := out_data_seq(i).pc
+  }
 
-  assert(CheckOrder(out_valid), "out_valid must be ordered")
+  assert(CheckOrder(out_valid_seq), "out_valid must be ordered")
 
 }
 
-class InstsFIFO2 extends Module {
+class InstsFIFO extends Module {
   val io = IO(new Bundle {
     val push = Flipped(Decoupled(new InstsItem))
-    val pop = Decoupled(Vec(2, new INSTEntry))
-
+    val pop = Vec(2, Decoupled(new INSTEntry))
     val flush = Input(Bool())
   })
 
   val compress = Module(new CompressInstsItem)
   compress.io.in := io.push.bits
 
-  val inst_fifo = Module(new MultiportFIFO(new INSTEntry, 8, 4, 2))
+  val inst_fifo = new MultiPortValidFIFO(
+    gen = new INSTEntry,
+    size = 16,
+    name = "inst_fifo",
+    num_push_ports = 4,
+    num_pop_ports = 2
+  )
+  val push_cond = compress.io.out.insts_vec.map(_.valid & io.push.fire)
+  inst_fifo.push_pop_flush_cond_multi_port(
+    push_cond = VecInit(push_cond),
+    pop_cond = VecInit(io.pop.map(_.fire)),
+    flush_cond = io.flush,
+    entry = compress.io.out.insts_vec
+  )
 
-  io.push.ready := inst_fifo.io.free_entries >= 4.U
+  io.push.ready := inst_fifo.free_entries >= 4.U
 
-  inst_fifo.io.push_valid := compress.io.out_valid.map(_ && io.push.fire)
-  inst_fifo.io.push_data := compress.io.out_data
-
-  io.pop.valid := inst_fifo.io.occupied_entries >= 2.U
-  io.pop.bits := inst_fifo.io.pop_data
-  inst_fifo.io.pop_valid := VecInit(Seq.fill(2)(io.pop.fire))
-
-  inst_fifo.io.flush := io.flush
+  val fifo_peek = inst_fifo.peek()
+  fifo_peek.zip(io.pop).foreach { case (peek, io_pop) =>
+    io_pop.bits := peek.bits
+    io_pop.valid := peek.valid
+  }
 
 }
 
@@ -111,5 +135,5 @@ object gen_InstFIFO_test extends App {
 }
 
 object gen_InstFIFO_test2 extends App {
-  GenVerilogHelper(new InstsFIFO2)
+  GenVerilogHelper(new InstsFIFO)
 }

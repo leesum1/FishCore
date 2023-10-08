@@ -1,6 +1,8 @@
 package leesum
 
 import chisel3._
+import chisel3.util.BitPat
+import chisel3.util.experimental.decode.{TruthTable, decoder}
 import leesum.TestUtils.{gen_axi_wstrb, sign_ext}
 import org.scalacheck.Gen
 
