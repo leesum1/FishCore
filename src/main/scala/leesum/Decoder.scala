@@ -14,7 +14,7 @@ class InstDecoder extends Module {
     ListLookup(
       io.in.bits.inst,
       RVinst.inst_default,
-      RVinst.inst_map ++ RVinst.i64_map
+      RVinst.i_common_map ++ RVinst.i64_map
     )
   val decode_sigs = Wire(new DecoderSignals())
 
@@ -76,7 +76,6 @@ class InstDecoder extends Module {
   scoreboard_entry.complete := false.B
   scoreboard_entry.lsu_io_space := false.B
 
-  // TODO: imm not implemented
   val imm = MuxLookup(
     decode_sigs.inst_type.asUInt,
     0.U

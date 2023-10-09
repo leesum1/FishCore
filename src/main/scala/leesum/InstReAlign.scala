@@ -3,7 +3,7 @@ package leesum
 import chisel3._
 import chisel3.util.{Cat, Decoupled}
 
-// TODO: make RspPacket configurable
+// TODO: exception
 class RspPacket extends Bundle {
   // config
   private val pc_width = 64
@@ -67,7 +67,7 @@ class InstReAlign extends Module {
   val input = IO(Flipped(Decoupled(new RspPacket)))
 
   val output = IO(
-    new InstsItem
+    Decoupled(new InstsItem)
   )
 
   val last_half_inst = RegInit(0.U(16.W));
@@ -147,7 +147,7 @@ class InstReAlign extends Module {
     aligned_inst
   }
 
-  output.insts_vec(0) := realign_inst(
+  output.bits.insts_vec(0) := realign_inst(
     input.bits.pc,
     last_half_inst,
     input.bits.inst_packet(0),
@@ -155,7 +155,7 @@ class InstReAlign extends Module {
     is_occupied(0)
   )
 
-  output.insts_vec(1) := realign_inst(
+  output.bits.insts_vec(1) := realign_inst(
     input.bits.pc + 2.U,
     input.bits.inst_packet(0),
     input.bits.inst_packet(1),
@@ -163,7 +163,7 @@ class InstReAlign extends Module {
     is_occupied(1)
   )
 
-  output.insts_vec(2) := realign_inst(
+  output.bits.insts_vec(2) := realign_inst(
     input.bits.pc + 4.U,
     input.bits.inst_packet(1),
     input.bits.inst_packet(2),
@@ -171,7 +171,7 @@ class InstReAlign extends Module {
     is_occupied(2)
   )
 
-  output.insts_vec(3) := realign_inst(
+  output.bits.insts_vec(3) := realign_inst(
     input.bits.pc + 6.U,
     input.bits.inst_packet(2),
     input.bits.inst_packet(3),
@@ -179,7 +179,8 @@ class InstReAlign extends Module {
     is_occupied(3)
   )
 
-  input.ready := true.B
+  input.ready := output.ready
+  output.valid := input.valid
 }
 
 object gen_verilog extends App {

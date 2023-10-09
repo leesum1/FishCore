@@ -1,7 +1,7 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, DecoupledIO, Enum, PopCount, is, switch}
-import leesum.axi4.{JoinBundle, StreamJoin}
+import chisel3.util.{Decoupled, Enum, is, switch}
+import leesum.axi4.StreamJoin
 
 class AGUReq extends Bundle {
   val op_a = UInt(64.W)

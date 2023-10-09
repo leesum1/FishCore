@@ -1,7 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util.random.LFSR
-import chisel3.util.{Decoupled, Enum, MixedVecInit, PriorityMux, is, switch}
+import chisel3.util.{Decoupled, Enum, MixedVecInit, is, switch}
 
 object TLBReqType extends ChiselEnum {
   val LOAD, STORE, Fetch = Value
@@ -129,7 +129,8 @@ class TLBArbiter(num_input: Int) extends Module {
     is(sWaitResp) {
       io.in_resp(occupied_sel_buf) <> io.out_resp
       when(io.out_resp.fire) {
-        sen_tlb_req(sel_idx)
+//        sen_tlb_req(sel_idx)
+        state := sIdle
       }
     }
   }

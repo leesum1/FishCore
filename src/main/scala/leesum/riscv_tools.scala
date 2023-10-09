@@ -1,10 +1,7 @@
 package leesum
 
-import chisel3._
-import chisel3.ChiselEnum
-import chisel3.util.{BitPat, Cat, Decoupled, Enum, Fill, MuxLookup}
-
-import scala.annotation.unused
+import chisel3.{ChiselEnum, _}
+import chisel3.util.{BitPat, Cat, Fill, MuxLookup}
 
 object RiscvTools {
 
@@ -217,50 +214,7 @@ object Instructions {
   )
 
 }
-object Causes {
-  val misaligned_fetch = 0x0
-  val fetch_access = 0x1
-  val illegal_instruction = 0x2
-  val breakpoint = 0x3
-  val misaligned_load = 0x4
-  val load_access = 0x5
-  val misaligned_store = 0x6
-  val store_access = 0x7
-  val user_ecall = 0x8
-  val supervisor_ecall = 0x9
-  val virtual_supervisor_ecall = 0xa
-  val machine_ecall = 0xb
-  val fetch_page_fault = 0xc
-  val load_page_fault = 0xd
-  val store_page_fault = 0xf
-  val fetch_guest_page_fault = 0x14
-  val load_guest_page_fault = 0x15
-  val virtual_instruction = 0x16
-  val store_guest_page_fault = 0x17
-  val all = {
-    val res = collection.mutable.ArrayBuffer[Int]()
-    res += misaligned_fetch
-    res += fetch_access
-    res += illegal_instruction
-    res += breakpoint
-    res += misaligned_load
-    res += load_access
-    res += misaligned_store
-    res += store_access
-    res += user_ecall
-    res += supervisor_ecall
-    res += virtual_supervisor_ecall
-    res += machine_ecall
-    res += fetch_page_fault
-    res += load_page_fault
-    res += store_page_fault
-    res += fetch_guest_page_fault
-    res += load_guest_page_fault
-    res += virtual_instruction
-    res += store_guest_page_fault
-    res.toArray
-  }
-}
+
 object CSRs {
   val fflags = 0x1
   val frm = 0x2
@@ -1356,7 +1310,7 @@ object RVinst {
   val load_op = List(true.B, false.B, true.B, true.B, false.B, false.B)
   val store_op = List(true.B, true.B, false.B, true.B, false.B, false.B)
 
-  val inst_map: Array[(BitPat, List[Element])] = Array(
+  val i_common_map: Array[(BitPat, List[Element])] = Array(
     // x[rd] = x[rs1] + x[rs2]
     Instructions.IType("ADD") -> (List(
       true.B,
@@ -1641,7 +1595,61 @@ object RVinst {
     ) ::: reg_imm_op)
   )
 
+  // TODO: ecall ebreak scall
+  val i_special_map: Array[(BitPat, List[Element])] = Array(
+  )
+
   val i64_map: Array[(BitPat, List[Element])] = Array(
+    // addiw rd, rs1, immediate
+    // x[rd] = sext((x[rs1] + sext(immediate))[31:0])
+    Instructions.I64Type("ADDIW") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluAdd,
+      true.B,
+      InstType.I
+    ) ::: reg_imm_op),
+
+    // addw rd, rs1, rs2
+    //  x[rd] = sext((x[rs1] + x[rs2])[31:0])
+    Instructions.I64Type("ADDIW") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluAdd,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+
+    // ld rd, offset(rs1)
+    // x[rd] = M[x[rs1] + sext(offset)][63:0]
+    Instructions.I64Type("LD") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuLd,
+      false.B,
+      InstType.I
+    ) ::: load_op),
+
+    // lwu rd, offset(rs1)
+    //  x[rd] = M[x[rs1] + sext(offset)][31:0]
+    Instructions.I64Type("LWU") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuLwu,
+      false.B,
+      InstType.I
+    ) ::: load_op),
+
+    // sd rs2, offset(rs1)
+    // M[x[rs1] + sext(offset)] = x[rs2][63:0]
+    Instructions.I64Type("SD") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuSd,
+      false.B,
+      InstType.I
+    ) ::: store_op),
+
     // slli rd, rs1, shamt
     // x[rd] = x[rs1] << shamt
     Instructions.I64Type("SLLI") -> (List(
@@ -1650,9 +1658,89 @@ object RVinst {
       FuOP.AluSll,
       false.B,
       InstType.I
-    ) ::: reg_imm_op)
+    ) ::: reg_imm_op),
+    // slliw rd, rs1, shamt
+    // x[rd] = sext((x[rs1] << shamt)[31:0])
+    Instructions.I64Type("SLLIW") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluSll,
+      true.B,
+      InstType.I
+    ) ::: reg_imm_op),
+    // sllw rd, rs1, rs2
+    // x[rd] = sext((x[rs1] << x[rs2][4:0])[31:0])
+    Instructions.I64Type("SLLW") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluSll,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    // srai rd, rs1, shamt
+    // x[rd] = x[rs1] >>s shamt
+    Instructions.I64Type("SRAI") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluSra,
+      false.B,
+      InstType.I
+    ) ::: reg_imm_op),
+    // sraiw rd, rs1, shamt
+    // x[rd] = x[rs1] >>s shamt
+    Instructions.I64Type("SRAIW") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluSra,
+      true.B,
+      InstType.I
+    ) ::: reg_imm_op),
+    // sraw rd, rs1, rs2
+    // x[rd] = sext(x[rs1][31:0] >>s x[rs2][4:0])
+    Instructions.I64Type("SRAW") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluSra,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    // srli rd, rs1, shamt
+    // x[rd] = x[rs1] >>u shamt
+    Instructions.I64Type("SRLI") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluSrl,
+      false.B,
+      InstType.I
+    ) ::: reg_imm_op),
+    // srliw rd, rs1, shamt
+    // x[rd] = sext(x[rs1][31:0] >>u shamt)
+    Instructions.I64Type("SRLIW") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluSrl,
+      true.B,
+      InstType.I
+    ) ::: reg_imm_op),
+    // srlw rd, rs1, rs2
+    // x[rd] = sext(x[rs1][31:0] >>u x[rs2][4:0])
+    Instructions.I64Type("SRLW") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluSrl,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    // sub rd, rs1, rs2
+    // x[rd] = sext((x[rs1] - x[rs2])[31:0])
+    Instructions.I64Type("SUBW") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluSub,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op)
   )
-
 }
 
 object ExceptionCause extends ChiselEnum {
@@ -1750,11 +1838,17 @@ class InstBase(inst: UInt) extends Module {
   def rs1 = inst(19, 15)
   def rs2 = inst(24, 20)
   def funct7 = inst(31, 25)
-  def imm_i = inst(31, 20)
-  def imm_s = Cat(inst(31, 25), inst(11, 7))
-  def imm_b = Cat(inst(31), inst(7), inst(30, 25), inst(11, 8))
-  def imm_u = inst(31, 12)
-  def imm_j = Cat(inst(31), inst(19, 12), inst(20), inst(30, 21))
+  def imm_i = SignExt(inst(31, 20), 12, 64)
+  def imm_s = SignExt(Cat(inst(31, 25), inst(11, 7)), 12, 64)
+  def imm_b =
+    SignExt(Cat(inst(31), inst(7), inst(30, 25), inst(11, 8), 0.U(1.W)), 13, 64)
+  def imm_u = SignExt(Cat(inst(31, 12), 0.U(12.W)), 32, 64)
+  def imm_j =
+    SignExt(
+      Cat(inst(31), inst(19, 12), inst(20), inst(30, 21), 0.U(1.W)),
+      20,
+      64
+    )
   def imm_z = Cat(Fill(27, 0.U), inst(19, 15))
 
   def is_rvc = inst(1, 0) =/= 0.U

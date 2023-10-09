@@ -3,15 +3,17 @@ import chisel3._
 import chisel3.util.{Decoupled, Valid, isPow2, log2Ceil}
 
 class RegFile {
-  val rf = Mem(32, UInt(64.W))
-//  val rf = RegInit(VecInit(Seq.fill(32)(0.U(64.W))))
+//  val rf = Mem(32, UInt(64.W))
+  val rf = RegInit(VecInit(Seq.fill(32)(0.U(64.W))))
   def read(addr: UInt): UInt = {
     require(addr.getWidth == 5)
-    Mux(addr === 0.U, 0.U, rf(addr))
+    rf(addr)
   }
   def write(addr: UInt, data: UInt) = {
     require(addr.getWidth == 5)
-    rf(addr) := data
+    when(addr =/= 0.U) {
+      rf(addr) := data
+    }
   }
 }
 
@@ -59,6 +61,6 @@ class GPRs(read_port_num: Int, write_port_num: Int) extends Module {
 
 object gen_gprs_verilog extends App {
   GenVerilogHelper(
-    new GPRs(read_port_num = 2, write_port_num = 4)
+    new GPRs(read_port_num = 2, write_port_num = 2)
   )
 }

@@ -77,7 +77,9 @@ class AXI4Memory(
   /// internal memory
   ////////////////////////////
   val mem =
-    Module(new BasicMemory(ADDR_WIDTH, DATA_WIDTH, BASE_ADDR, memoryFile))
+    Module(
+      new BasicMemory(DATA_WIDTH, BASE_ADDR, INTERNAL_MEM_SIZE, memoryFile)
+    )
 
   val x = WireInit
   val i_we = WireInit(Bool(), false.B)

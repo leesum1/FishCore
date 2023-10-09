@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util._
 
+// TODO: exception
 class INSTEntry extends Bundle {
   val pc = UInt(64.W)
   val inst = UInt(32.W)

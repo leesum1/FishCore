@@ -83,9 +83,9 @@ class BasicMemoryTest extends AnyFreeSpec with ChiselScalatestTester {
   "read_after_write" in {
     test(
       new BasicMemory(
-        ADDR_WIDTH = 12,
         DATA_WIDTH = 64,
-        BASE_ADDR = 0
+        BASE_ADDR = 0,
+        MEM_SIZE = 4096
       )
     )
       .withAnnotations(
@@ -96,7 +96,7 @@ class BasicMemoryTest extends AnyFreeSpec with ChiselScalatestTester {
         val write_seq = Gen.listOfN(10000, write_gen).sample.get
         val read_seq = Gen.listOfN(20000, read_gen).sample.get
 
-        var ref_mem =
+        val ref_mem =
           new RefMemory(ADDR_WIDTH = 12, DATA_WIDTH = 64, BASE_ADDR = 0)
 
         dut.clock.step(10)

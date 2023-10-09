@@ -38,6 +38,14 @@ class CommitStage(num_commit_port: Int) extends Module {
   val rob_data_seq = io.rob_commit_ports.map(_.bits)
   val pop_ack = WireInit(VecInit(Seq.fill(num_commit_port)(false.B)))
 
+  val flush_next = RegInit(false.B)
+
+  when(flush_next) {
+    flush_next := false.B
+  }
+
+  io.flush := flush_next
+
   assert(
     CheckOrder(pop_ack),
     "rob_commit_ports must be ordered"
@@ -66,9 +74,11 @@ class CommitStage(num_commit_port: Int) extends Module {
     assert(entry.exception.valid === false.B)
     when(FuOP.is_load(entry.fu_op)) {
       when(entry.lsu_io_space && !entry.complete) {
+
+        mmio_commit.valid := true.B
         when(io.mmio_commit.ready) {
-          mmio_commit.valid := true.B
           mmio_commit.bits := true.B
+          ack := true.B
         }
       }.elsewhen(entry.complete) {
         gpr_commit_port.write(entry.rd_addr, entry.result)
@@ -87,8 +97,8 @@ class CommitStage(num_commit_port: Int) extends Module {
     assert(entry.complete === true.B, "store must be complete")
     when(FuOP.is_store(entry.fu_op)) {
       // valid rely on store_commit.ready
-      when(store_commit.ready) {
-        store_commit.valid := true.B
+      store_commit.valid := true.B
+      when(store_commit.fire) {
         store_commit.bits := true.B
         ack := true.B
       }
@@ -104,14 +114,14 @@ class CommitStage(num_commit_port: Int) extends Module {
     assert(entry.exception.valid === false.B)
     val mis_predict = entry.bp.is_miss_predict
     when(mis_predict) {
-      when(io.branch_commit.ready) {
-        io.branch_commit.valid := true.B
+      io.branch_commit.valid := true.B
+      when(io.branch_commit.fire) {
         io.branch_commit.bits.target := entry.bp.predict_pc
-        io.flush := true.B
+        flush_next := true.B
+        ack := true.B
         when(FuOP.is_jal(entry.fu_op) || FuOP.is_jalr(entry.fu_op)) {
           gpr_commit_port.write(entry.rd_addr, entry.result)
         }
-        ack := true.B
       }
     }.otherwise {
       when(FuOP.is_jal(entry.fu_op) || FuOP.is_jalr(entry.fu_op)) {
@@ -130,13 +140,12 @@ class CommitStage(num_commit_port: Int) extends Module {
   })
   io.branch_commit.noenq()
   io.rob_commit_ports.foreach(_.nodeq())
-  io.flush := false.B
 
   io.rob_commit_ports.zip(pop_ack).foreach { case (port, ack) =>
     port.ready := ack
   }
 
-  when(rob_valid_seq.head && rob_data_seq.head.complete) {
+  when(rob_valid_seq.head && rob_data_seq.head.complete && !flush_next) {
     when(rob_data_seq.head.exception.valid) {
       assert(
         rob_data_seq.head.complete === true.B,

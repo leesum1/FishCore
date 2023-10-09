@@ -1,7 +1,6 @@
 package leesum.axi4
 import chisel3._
 import chisel3.util.{HasBlackBoxResource, MuxLookup}
-import circt.stage.ChiselStage
 import leesum.{GenMaskZero, GenVerilogHelper}
 import leesum.axi4.AXIDef._
 

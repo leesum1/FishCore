@@ -48,7 +48,7 @@ class FetchStage extends Module {
   val tlb_state = RegInit(sIdle)
 
   def send_tlb_req() = {
-    io.pc_in.ready := io.tlb_req.ready && !io.flush
+    io.pc_in.ready := io.tlb_req.ready
     io.tlb_req.valid := io.pc_in.valid && !io.flush
 
     io.tlb_req.bits.req_type := TLBReqType.Fetch

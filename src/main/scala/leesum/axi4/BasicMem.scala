@@ -1,7 +1,8 @@
 package leesum.axi4
 
 import chisel3._
-import chisel3.util.RegEnable
+import chisel3.util.{RegEnable, log2Ceil}
+import chisel3.util.experimental.loadMemoryFromFileInline
 import leesum.GenVerilogHelper
 
 import java.nio.file.{Files, Paths}
@@ -29,12 +30,15 @@ class BasicMemoryIO(ADDR_WIDTH: Int, DATA_WIDTH: Int) extends Bundle {
   *   binary file to load into memory(not support)
   */
 class BasicMemorySyncReadMem(
-    ADDR_WIDTH: Int,
     DATA_WIDTH: Int,
     BASE_ADDR: Long,
+    MEM_SIZE: Long = 2048,
     memoryFile: String = ""
 ) extends Module {
-  val io = IO(new BasicMemoryIO(ADDR_WIDTH, DATA_WIDTH))
+
+  val addr_width = log2Ceil(BASE_ADDR + MEM_SIZE)
+
+  val io = IO(new BasicMemoryIO(addr_width, DATA_WIDTH))
 
   require(DATA_WIDTH % 8 == 0, "DATA_WIDTH must be a multiple of 8")
   require(memoryFile.trim.isEmpty, "not support initial memoryFile now")
@@ -44,7 +48,7 @@ class BasicMemorySyncReadMem(
   }
 
   val mem = SyncReadMem(
-    ((1 << ADDR_WIDTH) >> 3),
+    MEM_SIZE / 8,
     Vec(DATA_WIDTH / 8, UInt(8.W))
   )
 
@@ -84,12 +88,14 @@ class BasicMemorySyncReadMem(
   *   binary file to load into memory
   */
 class BasicMemoryVec(
-    ADDR_WIDTH: Int,
     DATA_WIDTH: Int,
     BASE_ADDR: Long,
+    MEM_SIZE: Long = 2048,
     memoryFile: String = ""
 ) extends Module {
-  val io = IO(new BasicMemoryIO(ADDR_WIDTH, DATA_WIDTH))
+  val addr_width = log2Ceil(BASE_ADDR + MEM_SIZE)
+
+  val io = IO(new BasicMemoryIO(addr_width, DATA_WIDTH))
 
   require(DATA_WIDTH % 8 == 0, "DATA_WIDTH must be a multiple of 8")
 
@@ -107,12 +113,11 @@ class BasicMemoryVec(
   }
   // reference: https://github.com/chipsalliance/rocket-chip/blob/master/src/main/scala/devices/tilelink/BootROM.scala#L44
   val contents = contentsDelayed
-  val addrSize = 1 << ADDR_WIDTH
   val beatBytes = DATA_WIDTH / 8
-  require(contents.size <= addrSize)
+  require(contents.size <= MEM_SIZE)
 
   // pad unused space with zeros
-  val words = (contents ++ Seq.fill(addrSize - contents.size)(0.toByte))
+  val words = (contents ++ Seq.fill(MEM_SIZE.toInt - contents.size)(0.toByte))
     .grouped(beatBytes)
     .toSeq
 
@@ -124,8 +129,8 @@ class BasicMemoryVec(
   })
 
   val mem = RegInit(VecInit(vec_mem))
-  require(mem.size == addrSize / beatBytes, "memory size mismatch")
-  println("BasicMemoryVec Size: " + addrSize)
+  require(mem.size == MEM_SIZE / beatBytes, "memory size mismatch")
+  println("BasicMemoryVec Size: " + MEM_SIZE)
 
   // -------------------------
   // Read logic
@@ -171,26 +176,28 @@ class BasicMemoryVec(
   * @param memoryFile
   */
 class BasicMemory(
-    ADDR_WIDTH: Int,
     DATA_WIDTH: Int,
     BASE_ADDR: Long,
+    MEM_SIZE: Long,
     memoryFile: String = ""
 ) extends Module {
-  val io = IO(new BasicMemoryIO(ADDR_WIDTH, DATA_WIDTH))
+  val addr_width = log2Ceil(BASE_ADDR + MEM_SIZE)
+
+  val io = IO(new BasicMemoryIO(addr_width, DATA_WIDTH))
   if (memoryFile.trim.isEmpty) {
     val mem =
       Module(
         new BasicMemorySyncReadMem(
-          ADDR_WIDTH,
           DATA_WIDTH,
           BASE_ADDR,
+          MEM_SIZE,
           memoryFile
         )
       )
     io <> mem.io
   } else {
     val memVec = Module(
-      new BasicMemoryVec(ADDR_WIDTH, DATA_WIDTH, BASE_ADDR, memoryFile)
+      new BasicMemoryVec(DATA_WIDTH, BASE_ADDR, MEM_SIZE, memoryFile)
     )
     io <> memVec.io
   }
@@ -199,9 +206,9 @@ class BasicMemory(
 object gen_basic_mem_verilog extends App {
   GenVerilogHelper(
     new BasicMemory(
-      ADDR_WIDTH = 12,
       DATA_WIDTH = 64,
-      BASE_ADDR = 0,
+      BASE_ADDR = 0x80000000L,
+      MEM_SIZE = 2048,
       memoryFile = "src/main/resources/random_data_readmemh.txt"
     )
   )

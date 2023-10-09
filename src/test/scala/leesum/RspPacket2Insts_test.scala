@@ -1,23 +1,40 @@
 package leesum
 
 import chisel3._
+import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
 import chiseltest.simulator.WriteVcdAnnotation
+import leesum.TestUtils.{byteSeq2Uint64LittleEndian, long2UInt64, long2Ulong}
 import net.fornwall.jelf
 import org.scalatest.freespec.AnyFreeSpec
 
 import java.math.BigInteger
 import java.nio.file.{Files, Paths}
+import scala.collection.mutable
 
 class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
+
+  def gen_RspPacket(pc: BigInt, insts: BigInt): RspPacket = {
+    (new RspPacket).Lit(
+      _.pc -> long2UInt64(pc.toLong),
+      _.payload -> long2UInt64(insts.toLong)
+    )
+  }
 
   "RspPacket2Insts_test" in {
     test(new InstReAlign).withAnnotations(
       Seq(VerilatorBackendAnnotation, WriteVcdAnnotation)
     ) { dut =>
       {
-        dut.input.initSource()
-        dut.input.setSourceClock(dut.clock)
+        // -----------------------
+        // init port
+        // -----------------------
+        dut.input.initSource().setSourceClock(dut.clock)
+        dut.output.initSink().setSinkClock(dut.clock)
+
+        // -----------------------
+        // prepare test data
+        // -----------------------
 
         /** In this test, we read a elf file, then get the function's data get
           * insts from the function's data, then compare the insts with dut's
@@ -32,8 +49,6 @@ class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
         val symbol = elfFile.getELFSymbol("sbi_init");
 
         val entry_point = symbol.st_value;
-
-//        elfFile.e_phnum
 
         val segment = (0 until elfFile.e_phnum)
           .map(elfFile.getProgramHeader)
@@ -60,8 +75,8 @@ class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
         var last_valid = false
         var last_inst = 0
 
-        var ref_inst_list = List[UInt]()
-        var ref_pc_list = List[UInt]()
+        var ref_inst_list = mutable.Queue[UInt]()
+        var ref_pc_list = mutable.Queue[UInt]()
         while (idx < inst_pak.size) {
           // 32 bit inst
           if (last_valid) {
@@ -90,60 +105,45 @@ class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
         dut.clock.step(10)
 
         // all data is ready, start to test
-        func_data
+        val input_seq = func_data
           .grouped(8)
           .toList
           .dropRight(
             1
-          ) // drop the last 8 group, because it may less than 8 byte
-          .map((group: Array[Byte]) => {
-            // convert 8 byte array to long(8 bytes), then to hex string
-            var hex_string: String =
-              "x" + new BigInteger(1, group.reverse).longValue().toHexString
-            hex_string
-          })
+          )
+          .map(byteSeq2Uint64LittleEndian(_))
           .zipWithIndex
-          .foreach {
-            case (hex_string, foreach_idx) => {
-              // the 8 byte data is ready, poke it to dut
-//              println("---%s---".format(hex_string))
+          .map({ case (data, idx) =>
+            gen_RspPacket(entry_point + idx * 8, data)
+          })
 
-              dut.input.valid.poke(true.B)
+        // -----------------------
+        // start test
+        // -----------------------
+        dut.output.ready.poke(true.B)
+        input_seq.foreach(in => {
+          dut.input.enqueue(in)
 
-              // because of chisel doesn't support convert a negative number to UInt
-              // so we first convert Long to hex string(with prefix x)
-              // then convert hex string to UInt(64.W) to avoid error
-              dut.input.bits.payload.poke(hex_string.U)
-              // poke pc
-              dut.input.bits.pc.poke((entry_point + foreach_idx * 8).U)
-
-              // check dut outputs
-              for (i <- 0 until dut.input.bits.max_inst_packet) {
-                val out = dut.output.insts_vec(i).peek();
-                if (out.valid.litToBoolean) {
-//
-//                  println(
-//                    "dut: pc:%x, inst:%08x".format(
-//                      out.pc.litValue.toLong,
-//                      out.inst.litValue.toLong
-//                    )
-//                  )
-//                  println(
-//                    "ref: pc:%x, inst:%08x".format(
-//                      ref_pc_list.head.litValue.toLong,
-//                      ref_inst_list.head.litValue.toLong
-//                    )
-//                  )
-                  dut.output.insts_vec(i).inst.expect(ref_inst_list.head)
-                  dut.output.insts_vec(i).pc.expect(ref_pc_list.head)
-                  ref_inst_list = ref_inst_list.drop(1)
-                  ref_pc_list = ref_pc_list.drop(1)
+          val out = dut.output.peek()
+          if (out.valid.litToBoolean) {
+            out.bits.insts_vec.zipWithIndex.foreach(
+              { case (inst, idx) =>
+                if (inst.valid.litToBoolean) {
+                  dut.output.bits
+                    .insts_vec(idx)
+                    .pc
+                    .expect(ref_pc_list.dequeue)
+                  dut.output.bits
+                    .insts_vec(idx)
+                    .inst
+                    .expect(ref_inst_list.dequeue)
                 }
               }
-
-              dut.clock.step()
-            }
+            )
           }
+        })
+
+        dut.clock.step()
       }
     }
   }
