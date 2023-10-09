@@ -343,3 +343,12 @@ hs_err_pid*
 .*/
 gen_verilog
 *.anno.json
+/src/main/resources/BasicMemorySyncReadMemInit_0.txt
+/src/main/resources/BasicMemorySyncReadMemInit_1.txt
+/src/main/resources/BasicMemorySyncReadMemInit_6.txt
+/src/main/resources/BasicMemorySyncReadMemInit_7.txt
+/src/main/resources/BasicMemorySyncReadMemInit_5.txt
+/src/main/resources/BasicMemorySyncReadMemInit_4.txt
+/src/main/resources/BasicMemorySyncReadMemInit_3.txt
+/src/main/resources/BasicMemorySyncReadMemInit_2.txt
+/src/main/resources/random_data_readmemh.txt

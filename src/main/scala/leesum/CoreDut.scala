@@ -1,7 +1,9 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, DecoupledIO, Enum, Queue, is, switch}
 import leesum.axi4.{AXI4Memory, AxiReadArbiter}
+import chiseltest._
+import org.scalatest.freespec.AnyFreeSpec
+
 class CoreTestDut(memFile: String) extends Module {
 
   // pipeline stage
@@ -17,8 +19,8 @@ class CoreTestDut(memFile: String) extends Module {
   val commit_stage = Module(new CommitStage(2))
   val reg_file = Module(new GPRs(2, 2))
 
-  val fetch_tlb = Module(new DummyTLB)
-  val lsu_tlb = Module(new DummyTLB)
+  val fetch_tlb = Module(new DummyTLB(random_latency = false))
+  val lsu_tlb = Module(new DummyTLB(random_latency = false))
 
   val dcache = Module(new DummyDCache)
   val icache = Module(new DummyICache)
@@ -27,7 +29,7 @@ class CoreTestDut(memFile: String) extends Module {
     new AXI4Memory(
       AXI_AW = 32,
       AXI_DW = 64,
-      INTERNAL_MEM_SIZE = 1024,
+      INTERNAL_MEM_SIZE = 0x100000,
       INTERNAL_MEM_DW = 64,
       INTERNAL_MEM_BASE = 0x80000000L,
       memoryFile = memFile
@@ -44,14 +46,14 @@ class CoreTestDut(memFile: String) extends Module {
   axi_r_arb.io.out.w.nodeq()
   axi_r_arb.io.out.b.noenq()
 
-  icache.io.axi_mem.ar <> axi_r_arb.io.in(0).ar
-  icache.io.axi_mem.r <> axi_r_arb.io.in(0).r
+  icache.io.axi_mem.ar <> axi_r_arb.io.in(1).ar
+  icache.io.axi_mem.r <> axi_r_arb.io.in(1).r
   icache.io.axi_mem.aw.nodeq()
   icache.io.axi_mem.w.nodeq()
   icache.io.axi_mem.b.noenq()
 
-  dcache.io.axi_mem.ar <> axi_r_arb.io.in(1).ar
-  dcache.io.axi_mem.r <> axi_r_arb.io.in(1).r
+  dcache.io.axi_mem.ar <> axi_r_arb.io.in(0).ar
+  dcache.io.axi_mem.r <> axi_r_arb.io.in(0).r
 
   axi_mem.io.ar <> axi_r_arb.io.out.ar
   axi_mem.io.r <> axi_r_arb.io.out.r
@@ -175,5 +177,30 @@ class CoreTestDut(memFile: String) extends Module {
 }
 
 object gen_CoreTestDut_verilog extends App {
-  GenVerilogHelper(new CoreTestDut("src/main/resources/random_file.bin"))
+//  GenVerilogHelper(new CoreTestDut("src/main/resources/random_file.bin"))
+  GenVerilogHelper(new CoreTestDut(""))
+}
+
+class CoreTest extends AnyFreeSpec with ChiselScalatestTester {
+
+  val dummy_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/dummy-riscv64-nemu.bin"
+
+  val add_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/add-riscv64-nemu.bin"
+
+  val switch_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/switch-riscv64-nemu.bin"
+
+//  "CoreTest1" in {
+//    test(new CoreTestDut(switch_bin))
+//      .withAnnotations(
+//        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+//      ) { dut =>
+//        while (true) {
+//          dut.clock.step(1)
+//        }
+//      }
+//  }
+
 }

@@ -112,7 +112,7 @@ class AxiReadArbTest extends AnyFreeSpec with ChiselScalatestTester {
       // prepare test data
       // -----------------------
 
-      val ar_seq1 = Seq.tabulate(100) { i =>
+      val ar_seq1 = Seq.tabulate(1000) { i =>
         addr_channel_gen(32, false)
       }
       val ar_seq2 = Seq.tabulate(100) { i =>

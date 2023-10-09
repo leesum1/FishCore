@@ -1,7 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Cat, Decoupled}
+import chisel3.util.{Cat, Decoupled, ListLookup, MuxLookup}
 
 // TODO: exception
 class RspPacket extends Bundle {
@@ -73,6 +73,8 @@ class InstReAlign extends Module {
   val last_half_inst = RegInit(0.U(16.W));
   val last_half_valid = RegInit(false.B)
 
+  val aligned_pc = Cat(input.bits.pc(63, 3), 0.U(3.W))
+
   def is_occupied(idx: Int): Bool = {
     val ret = idx match {
       case -1 => !last_half_valid;
@@ -119,6 +121,21 @@ class InstReAlign extends Module {
     }
   }
 
+  def inst_mask(pc: UInt): Vec[Bool] = {
+    val ret = MuxLookup(
+      pc(2, 0),
+      VecInit(Seq.fill(4)(false.B))
+    )(
+      Seq(
+        0.U -> VecInit(Seq(true.B, true.B, true.B, true.B)),
+        2.U -> VecInit(Seq(false.B, true.B, true.B, true.B)),
+        4.U -> VecInit(Seq(false.B, false.B, true.B, true.B)),
+        6.U -> VecInit(Seq(false.B, false.B, false.B, true.B))
+      )
+    )
+    ret
+  }
+
   def realign_inst(
       cur_pc: UInt,
       pre_packet: UInt,
@@ -147,8 +164,10 @@ class InstReAlign extends Module {
     aligned_inst
   }
 
+  val inst_mask_vec = inst_mask(input.bits.pc)
+
   output.bits.insts_vec(0) := realign_inst(
-    input.bits.pc,
+    aligned_pc,
     last_half_inst,
     input.bits.inst_packet(0),
     is_occupied(-1),
@@ -156,7 +175,7 @@ class InstReAlign extends Module {
   )
 
   output.bits.insts_vec(1) := realign_inst(
-    input.bits.pc + 2.U,
+    aligned_pc + 2.U,
     input.bits.inst_packet(0),
     input.bits.inst_packet(1),
     is_occupied(0),
@@ -164,7 +183,7 @@ class InstReAlign extends Module {
   )
 
   output.bits.insts_vec(2) := realign_inst(
-    input.bits.pc + 4.U,
+    aligned_pc + 4.U,
     input.bits.inst_packet(1),
     input.bits.inst_packet(2),
     is_occupied(1),
@@ -172,12 +191,19 @@ class InstReAlign extends Module {
   )
 
   output.bits.insts_vec(3) := realign_inst(
-    input.bits.pc + 6.U,
+    aligned_pc + 6.U,
     input.bits.inst_packet(2),
     input.bits.inst_packet(3),
     is_occupied(2),
     is_occupied(3)
   )
+
+  // override invalid insts
+  output.bits.insts_vec.zip(inst_mask_vec).foreach { case (inst, mask) =>
+    when(!mask) {
+      inst.valid := false.B
+    }
+  }
 
   input.ready := output.ready
   output.valid := input.valid

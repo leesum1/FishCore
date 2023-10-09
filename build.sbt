@@ -1,3 +1,5 @@
+import sbt.Keys.parallelExecution
+import sbt.Test
 // See README.md for license details.
 
 ThisBuild / scalaVersion := "2.13.8"
@@ -9,6 +11,7 @@ val chiselVersion = "5.0.0"
 lazy val root = (project in file("."))
   .settings(
     name := "chisel-fish",
+    Test / parallelExecution := false,
     libraryDependencies ++= Seq(
       "org.chipsalliance" %% "chisel" % chiselVersion,
       "edu.berkeley.cs" %% "firrtl" % chiselVersion,

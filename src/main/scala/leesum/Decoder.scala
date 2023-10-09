@@ -72,8 +72,7 @@ class InstDecoder extends Module {
 
   scoreboard_entry.fu_op := decode_sigs.fu_op
   scoreboard_entry.fu_type := decode_sigs.fu_type
-  // TODO : if a exception happened, complete should be true?
-  scoreboard_entry.complete := false.B
+
   scoreboard_entry.lsu_io_space := false.B
 
   val imm = MuxLookup(
@@ -95,9 +94,15 @@ class InstDecoder extends Module {
   // -----------------------------------
   // scoreboard exception information
   // -----------------------------------
+
   when(io.in.bits.exception.valid) {
     // exception happened in fetch stage
     scoreboard_entry.exception := io.in.bits.exception
+  }.elsewhen(decode_sigs.fu_op === FuOP.Ebreak) {
+    // ebreak
+    scoreboard_entry.exception.valid := true.B
+    scoreboard_entry.exception.cause := ExceptionCause.breakpoint
+    scoreboard_entry.exception.tval := io.in.bits.pc
   }.elsewhen(!decode_sigs.inst_valid) {
     // exception happened in decode stage
     scoreboard_entry.exception.valid := true.B
@@ -109,6 +114,13 @@ class InstDecoder extends Module {
     scoreboard_entry.exception.cause := DontCare
     scoreboard_entry.exception.tval := 0.U
   }
+
+  val exception_valid = scoreboard_entry.exception.valid
+  val is_store = FuOP.is_store(scoreboard_entry.fu_op)
+
+  // TODO : if a exception happened, complete should be true?
+  scoreboard_entry.complete := exception_valid | is_store
+
   // ------------------------------------------
   //  scoreboard branch predictor information
   // ------------------------------------------

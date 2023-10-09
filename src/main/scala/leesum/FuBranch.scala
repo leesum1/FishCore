@@ -31,6 +31,7 @@ class FuBranch extends Module {
   // TODO: need optimize, use alu to calculate vaddr
   val pc_rs1 = io.in.bits.pc + io.in.bits.rs1
   val pc_imm = io.in.bits.pc + io.in.bits.imm
+  val rs1_imm = io.in.bits.rs1 + io.in.bits.imm
   val ra_target = io.in.bits.pc + Mux(io.in.bits.is_rvc, 2.U, 4.U)
 
   val taraget_pc = MuxLookup(
@@ -38,7 +39,7 @@ class FuBranch extends Module {
     0.U
   )(
     Seq(
-      FuOP.BrJalr.asUInt -> pc_rs1,
+      FuOP.BrJalr.asUInt -> rs1_imm,
       FuOP.BrJal.asUInt -> pc_imm,
       FuOP.BrBeq.asUInt -> pc_imm,
       FuOP.BrBne.asUInt -> pc_imm,

@@ -1133,7 +1133,7 @@ object FuOP extends ChiselEnum {
       AluSlt, AluSltu, LsuLb, LsuLbu, LsuLh, LsuLhu, LsuLw, LsuLwu, LsuLd,
       LsuSb, LsuSh, LsuSw, LsuSd, BrBeq, BrBne, BrBlt, BrBge, BrBltu, BrBgeu,
       BrJal, BrJalr, MulMul, MulMulh, MulMulhsu, MulMulhu, CsrRead, CsrWrite,
-      CsrSet, CsrClear, DivDiv, DivRem = Value
+      CsrSet, CsrClear, DivDiv, DivRem, Ebreak = Value
 
   def is_alu(op: FuOP.Type): Bool = {
     val alu_op = Seq(
@@ -1309,6 +1309,8 @@ object RVinst {
   val jalr_op = List(true.B, false.B, true.B, true.B, false.B, false.B)
   val load_op = List(true.B, false.B, true.B, true.B, false.B, false.B)
   val store_op = List(true.B, true.B, false.B, true.B, false.B, false.B)
+
+  val none_op = List(false.B, false.B, false.B, false.B, false.B, false.B)
 
   val i_common_map: Array[(BitPat, List[Element])] = Array(
     // x[rd] = x[rs1] + x[rs2]
@@ -1597,6 +1599,14 @@ object RVinst {
 
   // TODO: ecall ebreak scall
   val i_special_map: Array[(BitPat, List[Element])] = Array(
+    // RaiseException(Breakpoint)
+    Instructions.IType("EBREAK") -> (List(
+      true.B,
+      FuType.None,
+      FuOP.Ebreak,
+      false.B,
+      InstType.I
+    ) ::: none_op)
   )
 
   val i64_map: Array[(BitPat, List[Element])] = Array(
@@ -1612,7 +1622,7 @@ object RVinst {
 
     // addw rd, rs1, rs2
     //  x[rd] = sext((x[rs1] + x[rs2])[31:0])
-    Instructions.I64Type("ADDIW") -> (List(
+    Instructions.I64Type("ADDW") -> (List(
       true.B,
       FuType.Alu,
       FuOP.AluAdd,
@@ -1828,7 +1838,6 @@ class ScoreBoardEntry extends Bundle {
   def rd_data_valid(): Bool = {
     complete && result_valid && !exception.valid && !lsu_io_space
   }
-
 }
 
 class InstBase(inst: UInt) extends Module {

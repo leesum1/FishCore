@@ -16,6 +16,7 @@ import chisel3.util.{
 }
 import circt.stage.ChiselStage
 
+import java.io.{File, FileOutputStream, PrintWriter}
 import scala.reflect.ClassTag
 import scala.sys.process._
 
@@ -446,4 +447,45 @@ object gen_GenSizeByAddr_verilog extends App {
     })
     io.size := GenSizeByAddr(io.addr)
   })
+}
+
+object writeByteArrayToFile {
+  def apply(filePath: String, data: Array[Byte]): Unit = {
+    val file = new File(filePath)
+
+    if (file.exists()) {
+      file.delete()
+    }
+
+    val fos = new FileOutputStream(file)
+    try {
+      fos.write(data)
+    } finally {
+      fos.close()
+    }
+  }
+}
+
+object writeByteArrayToStringsToFile {
+  def apply(filePath: String, data: Array[Byte]): Unit = {
+    val file = new File(filePath)
+    if (file.exists()) {
+      file.delete()
+    }
+
+    val fos = new FileOutputStream(file)
+    val pw = new PrintWriter(fos)
+
+    try {
+      data.foreach { byte =>
+        val unsignedByte = byte.toInt & 0xff
+        pw.println(
+          Integer.toHexString(unsignedByte).toUpperCase
+        )
+      }
+    } finally {
+      pw.close()
+      fos.close()
+    }
+  }
 }

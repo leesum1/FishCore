@@ -110,7 +110,12 @@ class CommitStage(num_commit_port: Int) extends Module {
       gpr_commit_port: GPRsWritePort,
       ack: Bool
   ): Unit = {
-    assert(FuOP.is_branch(entry.fu_op), "fu_op must be branch")
+    assert(
+      FuOP.is_branch(entry.fu_op) || FuOP.is_jalr(entry.fu_op) || FuOP.is_jal(
+        entry.fu_op
+      ),
+      "fu_op must be branch"
+    )
     assert(entry.exception.valid === false.B)
     val mis_predict = entry.bp.is_miss_predict
     when(mis_predict) {
@@ -151,6 +156,9 @@ class CommitStage(num_commit_port: Int) extends Module {
         rob_data_seq.head.complete === true.B,
         "rob entry must be complete"
       )
+
+      stop("exception happened")
+
     }.otherwise {
       switch(rob_data_seq.head.fu_type) {
         is(FuType.Alu) {
@@ -189,6 +197,15 @@ class CommitStage(num_commit_port: Int) extends Module {
     CheckOrder(VecInit(rob_valid_seq)),
     "rob_commit_ports must be ordered"
   )
+
+  when(
+    rob_valid_seq.head && rob_data_seq.head.complete
+  ) {
+    assert(
+      rob_data_seq.head.pc =/= 0.U
+    )
+  }
+
 }
 
 object gen_commit_stage_verilog extends App {

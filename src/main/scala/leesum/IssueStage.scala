@@ -98,7 +98,7 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
 
   fifo_data_seq
     .zip(io.scb_bypass)
-    .map(
+    .foreach(
       { case (issue_data, bypass) =>
         bypass.rs1_addr := Mux(issue_data.valid, issue_data.bits.rs1_addr, 0.U)
         bypass.rs2_addr := Mux(issue_data.valid, issue_data.bits.rs2_addr, 0.U)
