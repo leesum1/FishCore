@@ -181,7 +181,7 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
 
     res
   }
-
+  // TODO: add more test case such as 0xffffffffffffffff + 1, 0 + 0,0-0
   "ALU TEST" in {
     test(new FuAlu).withAnnotations(
       Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
@@ -189,7 +189,7 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
       val alu_gen = alu_input_gen()
 
       val input_seq = Gen
-        .listOfN(20000, alu_gen)
+        .listOfN(200000, alu_gen)
         .sample
         .get
 

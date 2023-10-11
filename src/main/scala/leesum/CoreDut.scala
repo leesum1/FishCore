@@ -1,10 +1,22 @@
 package leesum
 import chisel3._
+import chisel3.util.Valid
 import leesum.axi4.{AXI4Memory, AxiReadArbiter}
 import chiseltest._
+import leesum.moniter.{DifftestPort, MonitorTop}
 import org.scalatest.freespec.AnyFreeSpec
 
 class CoreTestDut(memFile: String) extends Module {
+
+  val monitor_en = true
+
+  val io = IO(new Bundle {
+    val difftest = Output(Valid(new DifftestPort))
+  })
+
+  // monitor
+  val monitor = Module(new MonitorTop(2))
+  io.difftest <> monitor.io.difftest
 
   // pipeline stage
   val pc_gen_stage = Module(new PCGenStage(0x80000000L))
@@ -16,8 +28,8 @@ class CoreTestDut(memFile: String) extends Module {
   val decode_stage1 = Module(new InstDecoder)
   val issue_stage = Module(new IssueStage(2, 2))
   val score_board = Module(new ScoreBoard(8, 2, 2))
-  val commit_stage = Module(new CommitStage(2))
-  val reg_file = Module(new GPRs(2, 2))
+  val commit_stage = Module(new CommitStage(2, monitor_en))
+  val reg_file = Module(new GPRs(2, 2, monitor_en))
 
   val fetch_tlb = Module(new DummyTLB(random_latency = false))
   val lsu_tlb = Module(new DummyTLB(random_latency = false))
@@ -76,6 +88,7 @@ class CoreTestDut(memFile: String) extends Module {
   lsu_tlb.io.flush := commit_stage.io.flush
   dcache.io.flush := commit_stage.io.flush
   icache.io.flush := commit_stage.io.flush
+  inst_realign.flush := commit_stage.io.flush
 
   // pc_gen_stage <> fetch_stage
   pc_gen_stage.io.pc <> fetch_stage.io.pc_in
@@ -164,6 +177,12 @@ class CoreTestDut(memFile: String) extends Module {
   // commit stage <> pc gen
   pc_gen_stage.io.redirect_pc <> commit_stage.io.branch_commit
 
+  // commit stage <> monitor
+  commit_stage.io.commit_monitor.get <> monitor.io.commit_monitor
+
+  // regfile <> monitor
+  reg_file.io.gpr_monitor.get <> monitor.io.gpr_monitor
+
   // lsu <> tlb
   lsu.io.tlb_req <> lsu_tlb.io.tlb_req
   lsu.io.tlb_resp <> lsu_tlb.io.tlb_resp
@@ -192,15 +211,168 @@ class CoreTest extends AnyFreeSpec with ChiselScalatestTester {
   val switch_bin =
     "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/switch-riscv64-nemu.bin"
 
-//  "CoreTest1" in {
-//    test(new CoreTestDut(switch_bin))
-//      .withAnnotations(
-//        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
-//      ) { dut =>
-//        while (true) {
-//          dut.clock.step(1)
-//        }
-//      }
-//  }
+  val bit_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/bit-riscv64-nemu.bin"
+  val select_sort_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/select-sort-riscv64-nemu.bin"
 
+  val quick_sort_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/quick-sort-riscv64-nemu.bin"
+  val fib_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/fib-riscv64-nemu.bin"
+
+  val md5_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/md5-riscv64-nemu.bin"
+
+  val movsx_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/movsx-riscv64-nemu.bin"
+
+  val recursion_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/recursion-riscv64-nemu.bin"
+
+  val bubble_sort_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/bubble-sort-riscv64-nemu.bin"
+
+  val load_store_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/load-store-riscv64-nemu.bin"
+
+  val shift_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/shift-riscv64-nemu.bin"
+
+  val add_long_bin =
+    "/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build/add-longlong-riscv64-nemu.bin"
+
+  val select_bin = add_long_bin
+
+  def difftest_print(diff_port: DifftestPort): Unit = {
+    println(
+      "pc:%08x,inst:%08x".format(diff_port.pc.litValue, diff_port.inst.litValue)
+    )
+
+    val gpr_seq = diff_port.gpr.map(gpr => {
+      gpr.litValue
+    })
+    gpr_seq.zipWithIndex
+      .grouped(4)
+      .foreach(gpr_group => {
+        gpr_group.foreach(gpr => {
+          print("x%02d:%016x  ".format(gpr._2, gpr._1))
+        })
+        println()
+      })
+
+    println()
+  }
+
+  def assertEquals(exp: Long, act: Long, msg: String) = {
+    val expHex = f"${exp}%x"
+    val actHex = f"${act}%x"
+
+    assume(exp == act, s"$msg, expect=$expHex actual=$actHex")
+  }
+
+  def regs_printf(pc: Long, gprs: Seq[Long]): Unit = {
+    println(
+      "ref pc:%08x,inst:%08x".format(pc, 0)
+    )
+    gprs.zipWithIndex
+      .grouped(4)
+      .foreach(gpr_group => {
+        gpr_group.foreach(gpr => {
+          print("x%02d:%016x  ".format(gpr._2, gpr._1))
+        })
+        println()
+      })
+    println()
+  }
+
+  "CoreTest1" in {
+    test(new CoreTestDut(select_bin))
+      .withAnnotations(
+        Seq(VerilatorBackendAnnotation)
+      ) { dut =>
+        val rv64emu = Rv64emuBridge.INSTANCE.create_rv64emu(
+          "rv64im",
+          "bare",
+          0x80000000L,
+          0x100000,
+          0x80000000L,
+          0,
+          false
+        )
+
+        Rv64emuBridge.INSTANCE.load_file(rv64emu, select_bin)
+
+        dut.clock.setTimeout(100000)
+
+        var count_commit: Long = 0L
+        var count_clock: Long = 0L
+
+        while (true) {
+          dut.clock.step(1)
+          count_clock += 1L
+          if (dut.io.difftest.valid.peek().litToBoolean) {
+            count_commit += 1L
+            println(
+              s"count_clock:$count_clock, count_commit:$count_commit,ipc:${count_commit / count_clock.toDouble}"
+            )
+            Rv64emuBridge.INSTANCE.step(rv64emu, 1)
+
+            val ref_pc = Rv64emuBridge.INSTANCE.get_pc(rv64emu)
+            val ref_gprs = (0 until 32).map(idx => {
+              Rv64emuBridge.INSTANCE.get_reg(rv64emu, idx)
+            })
+
+            val difftest_data = dut.io.difftest.bits.peek()
+
+            difftest_print(difftest_data)
+            regs_printf(ref_pc, ref_gprs)
+
+            val dut_pc = difftest_data.pc.litValue.toLong
+            val dut_gprs = difftest_data.gpr.map(gpr => {
+              gpr.litValue.toLong
+            })
+
+            assertEquals(ref_pc, dut_pc, "pc not match")
+            for (idx <- 0 until 32) {
+              assertEquals(ref_gprs(idx), dut_gprs(idx), "gpr not match")
+            }
+          }
+        }
+      }
+  }
+}
+
+import com.sun.jna._
+
+trait Rv64emuBridge extends Library {
+  def create_rv64emu(
+      isa: String,
+      mmu_type: String,
+      boot_pc: Long,
+      memory_size: Long,
+      memory_base: Long,
+      hartid: Long,
+      smode_enable: Boolean
+  ): Pointer
+
+  def destroy_my_struct(rv64emu: Pointer): Unit
+
+  def load_file(rv64emu: Pointer, file_name: String): Unit
+
+  def step(rv64emu: Pointer, steps: Long): Unit
+
+  def get_pc(rv64emu: Pointer): Long
+
+  def set_pc(rv64emu: Pointer, pc: Long): Unit
+
+  def get_reg(rv64emu: Pointer, idx: Long): Long
+
+  def set_reg(rv64emu: Pointer, idx: Long, value: Long): Unit
+
+}
+import com.sun.jna.Native
+
+object Rv64emuBridge {
+  val INSTANCE = Native.load("rv64emu_cbinding", classOf[Rv64emuBridge])
 }

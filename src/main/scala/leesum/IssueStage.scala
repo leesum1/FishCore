@@ -271,7 +271,7 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
 
   fifo_data_seq
     .zip(io.gpr_read_port)
-    .map(
+    .foreach(
       { case (scb, gpr_read_port) =>
         gpr_read_port.rs1_addr := scb.bits.rs1_addr
         gpr_read_port.rs2_addr := scb.bits.rs2_addr
@@ -350,6 +350,8 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
     }
   }
 
+  val allow_issue_fire = io.pop_port.map(_.fire)
+
   // -------------------
   // alu logic
   // -------------------
@@ -372,7 +374,7 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   }
 
   val alu_allow_dispatch = VecInit(
-    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+    allow_issue_fire.zip(fifo_data_seq).map { case (allow, scb) =>
       allow && scb.bits.fu_type === FuType.Alu
     }
   )
@@ -395,7 +397,7 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   // br logic
   // ------------------
   val br_allow_dispatch = VecInit(
-    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+    allow_issue_fire.zip(fifo_data_seq).map { case (allow, scb) =>
       allow && scb.bits.fu_type === FuType.Br
     }
   )
@@ -439,7 +441,7 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   // lsu logic
   // -------------------
   val lsu_allow_dispatch = VecInit(
-    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+    allow_issue_fire.zip(fifo_data_seq).map { case (allow, scb) =>
       allow && scb.bits.fu_type === FuType.Lsu
     }
   )
@@ -482,7 +484,7 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   // ----------------------
   // TODO: NOT IMPLEMENTED
   val csr_allow_dispatch = VecInit(
-    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+    allow_issue_fire.zip(fifo_data_seq).map { case (allow, scb) =>
       allow && scb.bits.fu_type === FuType.Csr
     }
   )
@@ -520,7 +522,7 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   // -------------------
   // TODO: NOT IMPLEMENTED
   val mul_allow_dispatch = VecInit(
-    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+    allow_issue_fire.zip(fifo_data_seq).map { case (allow, scb) =>
       allow && scb.bits.fu_type === FuType.Mul
     }
   )
@@ -558,7 +560,7 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   // ------------------
   // TODO: NOT IMPLEMENTED
   val div_allow_dispatch = VecInit(
-    allow_issue.zip(fifo_data_seq).map { case (allow, scb) =>
+    allow_issue_fire.zip(fifo_data_seq).map { case (allow, scb) =>
       allow && scb.bits.fu_type === FuType.Div
     }
   )

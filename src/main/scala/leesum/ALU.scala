@@ -123,7 +123,7 @@ class AluAdder extends Module {
     val eq = Output(Bool())
   })
   val adder_in2_inv =
-    Mux(io.sub_req, (~io.adder_in2).asUInt + 1.U, io.adder_in2)
+    Mux(io.sub_req, (~io.adder_in2).asUInt, io.adder_in2)
 
   // use two's complement to do subtraction and addition
   // https://en.wikipedia.org/wiki/Two%27s_complement
@@ -131,7 +131,11 @@ class AluAdder extends Module {
   // https://blog.csdn.net/mariodf/article/details/125334271/
 
   val add_res =
-    Cat(io.adder_in1(63), io.adder_in1) +& Cat(adder_in2_inv(63), adder_in2_inv)
+    Cat(io.adder_in1(63), io.adder_in1) +& Cat(
+      adder_in2_inv(63),
+      adder_in2_inv
+    ) +& io.sub_req
+  // https://en.wikipedia.org/wiki/Carry_flag
   val flag_cf = add_res(65) ^ io.sub_req
   // https://electronics.stackexchange.com/questions/476250/signed-overflow-detection
   val flag_of = add_res(63) ^ add_res(64)

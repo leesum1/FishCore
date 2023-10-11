@@ -59,16 +59,17 @@ class InstsItem extends Bundle {
   }
 }
 
+// TODO: NEED CHECK!!!!!!!!!!!!
 /** This module convert a RspPacket(8 byte size) to InstsItem. The InstsItem may
   * contain 1 to 4 insts, and the insts may be 16 bits or 32 bits. This module
   * is combination logic,Return the InstsItem at the same cycle when input fire.
   */
 class InstReAlign extends Module {
   val input = IO(Flipped(Decoupled(new RspPacket)))
-
   val output = IO(
     Decoupled(new InstsItem)
   )
+  val flush = IO(Input(Bool()))
 
   val last_half_inst = RegInit(0.U(16.W));
   val last_half_valid = RegInit(false.B)
@@ -121,6 +122,10 @@ class InstReAlign extends Module {
     }
   }
 
+  when(flush) {
+    last_half_valid := false.B
+  }
+
   def inst_mask(pc: UInt): Vec[Bool] = {
     val ret = MuxLookup(
       pc(2, 0),
@@ -153,12 +158,20 @@ class InstReAlign extends Module {
         aligned_inst.inst := RiscvTools.expand_rvc(cur_packet)
         aligned_inst.rvc := true.B
         aligned_inst.pc := cur_pc
+
+        assert(RiscvTools.is_rvc(cur_packet), "cur_packet must be rvc")
+
       }.otherwise {
         // 32 bits inst
         aligned_inst.valid := true.B
         aligned_inst.inst := Cat(cur_packet(15, 0), pre_packet(15, 0))
         aligned_inst.rvc := false.B
         aligned_inst.pc := cur_pc - 2.U
+
+        assert(
+          !RiscvTools.is_rvc(Cat(cur_packet(15, 0), pre_packet(15, 0))),
+          "inst must be 32 bits"
+        )
       }
     }
     aligned_inst

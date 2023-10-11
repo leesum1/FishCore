@@ -44,7 +44,7 @@ class DummyTLB(random_latency: Boolean = true) extends Module {
   io.tlb_resp.bits := DontCare
 
   def recv_tlb_req(): Unit = {
-    io.tlb_req.ready := true.B
+    io.tlb_req.ready := true.B && !io.flush
     when(io.tlb_req.fire) {
       req_buf := io.tlb_req.bits
       state := sWaitResp

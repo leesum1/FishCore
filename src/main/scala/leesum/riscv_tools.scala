@@ -2,6 +2,7 @@ package leesum
 
 import chisel3.{ChiselEnum, _}
 import chisel3.util.{BitPat, Cat, Fill, MuxLookup}
+import leesum.DcacheConst.SIZE1
 
 object RiscvTools {
 
@@ -1217,23 +1218,30 @@ object FuOP extends ChiselEnum {
 
   def lsu_need_sign_ext(op: FuOP.Type): Bool = {
     assert(is_lsu(op), "not a load/store operation")
-    val sign_ext_op = List(FuOP.LsuLb, FuOP.LsuLh, FuOP.LsuLw, FuOP.LsuLd)
-    sign_ext_op.contains(op).B
+    val sign_ext_op = List(FuOP.LsuLb, FuOP.LsuLh, FuOP.LsuLw)
+
+    val lsu_need_sign_ext = WireInit(false.B)
+    for (x <- sign_ext_op) {
+      when(op === x) {
+        lsu_need_sign_ext := true.B
+      }
+    }
+    lsu_need_sign_ext
   }
   def get_lsu_size(op: FuOP.Type): UInt = {
     assert(is_lsu(op), "not a load/store operation")
     val size_map = List(
-      FuOP.LsuLb -> 1.U,
-      FuOP.LsuLbu -> 1.U,
-      FuOP.LsuLh -> 2.U,
-      FuOP.LsuLhu -> 2.U,
-      FuOP.LsuLw -> 4.U,
-      FuOP.LsuLwu -> 4.U,
-      FuOP.LsuLd -> 8.U,
-      FuOP.LsuSb -> 1.U,
-      FuOP.LsuSh -> 2.U,
-      FuOP.LsuSw -> 4.U,
-      FuOP.LsuSd -> 8.U
+      FuOP.LsuLb -> DcacheConst.SIZE1,
+      FuOP.LsuLbu -> DcacheConst.SIZE1,
+      FuOP.LsuSb -> DcacheConst.SIZE1,
+      FuOP.LsuLh -> DcacheConst.SIZE2,
+      FuOP.LsuLhu -> DcacheConst.SIZE2,
+      FuOP.LsuSh -> DcacheConst.SIZE2,
+      FuOP.LsuLw -> DcacheConst.SIZE4,
+      FuOP.LsuLwu -> DcacheConst.SIZE4,
+      FuOP.LsuSw -> DcacheConst.SIZE4,
+      FuOP.LsuLd -> DcacheConst.SIZE8,
+      FuOP.LsuSd -> DcacheConst.SIZE8
     )
     MuxLookup(op, 0.U)(size_map)
   }
@@ -1304,6 +1312,7 @@ object RVinst {
   val reg_reg_op = List(true.B, true.B, true.B, false.B, false.B, false.B)
   val reg_imm_op = List(true.B, false.B, true.B, true.B, false.B, false.B)
   val pc_imm_op = List(false.B, false.B, true.B, true.B, true.B, false.B)
+  val lui_op = List(false.B, false.B, true.B, true.B, false.B, false.B)
   val branch_op = List(true.B, true.B, false.B, true.B, false.B, false.B)
   val jal_op = List(false.B, false.B, true.B, true.B, false.B, false.B)
   val jalr_op = List(true.B, false.B, true.B, true.B, false.B, false.B)
@@ -1333,7 +1342,7 @@ object RVinst {
     Instructions.IType("AND") -> (List(
       true.B,
       FuType.Alu,
-      FuOP.AluAdd,
+      FuOP.AluAnd,
       false.B,
       InstType.R
     ) ::: reg_reg_op),
@@ -1341,9 +1350,9 @@ object RVinst {
     Instructions.IType("ANDI") -> (List(
       true.B,
       FuType.Alu,
-      FuOP.AluAdd,
+      FuOP.AluAnd,
       false.B,
-      InstType.R
+      InstType.I
     ) ::: reg_imm_op),
     // x[rd] = pc + sext(immediate[31:12] << 12)
     Instructions.IType("AUIPC") -> (List(
@@ -1453,6 +1462,15 @@ object RVinst {
       false.B,
       InstType.I
     ) ::: load_op),
+    // lui rd, immediate
+    // x[rd] = sext(immediate[31:12] << 12)
+    Instructions.IType("LUI") -> (List(
+      true.B,
+      FuType.Alu,
+      FuOP.AluAdd,
+      false.B,
+      InstType.U
+    ) ::: lui_op),
     // lw rd, offset(rs1)
     // x[rd] = sext(M[x[rs1] + sext(offset)][31:0])
     Instructions.IType("LW") -> (List(
@@ -1657,7 +1675,7 @@ object RVinst {
       FuType.Lsu,
       FuOP.LsuSd,
       false.B,
-      InstType.I
+      InstType.S
     ) ::: store_op),
 
     // slli rd, rs1, shamt
@@ -1773,6 +1791,32 @@ object ExceptionCause extends ChiselEnum {
   val load_guest_page_fault = Value(0x15.U)
   val virtual_instruction = Value(0x16.U)
   val store_guest_page_fault = Value(0x17.U)
+
+  def toString(cause: ExceptionCause.Type): String = {
+    cause match {
+      case `misaligned_fetch`         => "Misaligned Fetch"
+      case `fetch_access`             => "Fetch Access"
+      case `illegal_instruction`      => "Illegal Instruction"
+      case `breakpoint`               => "Breakpoint"
+      case `misaligned_load`          => "Misaligned Load"
+      case `load_access`              => "Load Access"
+      case `misaligned_store`         => "Misaligned Store"
+      case `store_access`             => "Store Access"
+      case `user_ecall`               => "User Ecall"
+      case `supervisor_ecall`         => "Supervisor Ecall"
+      case `virtual_supervisor_ecall` => "Virtual Supervisor Ecall"
+      case `machine_ecall`            => "Machine Ecall"
+      case `fetch_page_fault`         => "Fetch Page Fault"
+      case `load_page_fault`          => "Load Page Fault"
+      case `store_page_fault`         => "Store Page Fault"
+      case `fetch_guest_page_fault`   => "Fetch Guest Page Fault"
+      case `load_guest_page_fault`    => "Load Guest Page Fault"
+      case `virtual_instruction`      => "Virtual Instruction"
+      case `store_guest_page_fault`   => "Store Guest Page Fault"
+      case _                          => "Unknown Cause"
+    }
+  }
+
 }
 
 object BpType extends ChiselEnum {

@@ -11,12 +11,14 @@ import chisel3.util.{
   log2Ceil,
   switch
 }
+import leesum.moniter.CommitMonitorPort
 
 class RedirectPC extends Bundle {
   val target = UInt(64.W)
 }
 
-class CommitStage(num_commit_port: Int) extends Module {
+class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
+    extends Module {
   val io = IO(new Bundle {
 
     val rob_commit_ports =
@@ -31,6 +33,12 @@ class CommitStage(num_commit_port: Int) extends Module {
     val store_commit = Decoupled(Bool())
     // branch
     val branch_commit = Decoupled(new RedirectPC())
+
+    val commit_monitor = if (monitor_en) {
+      Some(Output(Vec(num_commit_port, Valid(new CommitMonitorPort))))
+    } else {
+      None
+    }
   })
 
   val rob_valid_seq = io.rob_commit_ports.map(_.valid)
@@ -156,8 +164,14 @@ class CommitStage(num_commit_port: Int) extends Module {
         rob_data_seq.head.complete === true.B,
         "rob entry must be complete"
       )
-
-      stop("exception happened")
+      val pc = rob_data_seq.head.pc
+      assert(
+        false.B,
+        "Exception: %d, PC:%x, tval: %x",
+        rob_data_seq.head.exception.cause.asUInt,
+        pc,
+        rob_data_seq.head.exception.tval
+      )
 
     }.otherwise {
       switch(rob_data_seq.head.fu_type) {
@@ -189,9 +203,33 @@ class CommitStage(num_commit_port: Int) extends Module {
           )
         }
       }
-
     }
   }
+  // -----------------------
+  // commit monitor
+  // -----------------------
+
+  if (monitor_en) {
+    val commitMonitorSignals = io.commit_monitor.get
+
+    commitMonitorSignals(0).valid := io.rob_commit_ports(0).fire
+    commitMonitorSignals(0).bits.pc := rob_data_seq(0).pc
+    commitMonitorSignals(0).bits.inst := rob_data_seq(0).inst
+    commitMonitorSignals(0).bits.fu_type := rob_data_seq(0).fu_type
+    commitMonitorSignals(0).bits.fu_op := rob_data_seq(0).fu_op
+    commitMonitorSignals(0).bits.exception := rob_data_seq(0).exception
+
+    commitMonitorSignals(1).valid := io.rob_commit_ports(1).fire
+    commitMonitorSignals(1).bits.pc := rob_data_seq(1).pc
+    commitMonitorSignals(1).bits.inst := rob_data_seq(1).inst
+    commitMonitorSignals(1).bits.fu_type := rob_data_seq(1).fu_type
+    commitMonitorSignals(1).bits.fu_op := rob_data_seq(1).fu_op
+    commitMonitorSignals(1).bits.exception := rob_data_seq(1).exception
+  }
+
+  // -----------------------
+  // assert
+  // -----------------------
 
   assert(
     CheckOrder(VecInit(rob_valid_seq)),
@@ -210,6 +248,6 @@ class CommitStage(num_commit_port: Int) extends Module {
 
 object gen_commit_stage_verilog extends App {
   GenVerilogHelper(
-    new CommitStage(num_commit_port = 2)
+    new CommitStage(num_commit_port = 2, monitor_en = true)
   )
 }

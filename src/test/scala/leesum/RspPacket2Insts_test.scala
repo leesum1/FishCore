@@ -31,6 +31,7 @@ class RspPacket2Insts_test extends AnyFreeSpec with ChiselScalatestTester {
         // -----------------------
         dut.input.initSource().setSourceClock(dut.clock)
         dut.output.initSink().setSinkClock(dut.clock)
+        dut.flush.poke(false.B)
 
         // -----------------------
         // prepare test data
