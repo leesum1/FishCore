@@ -17,6 +17,7 @@ class DifftestPort extends Bundle {
   val pc = UInt(64.W)
   val inst = UInt(32.W)
   val gpr = Vec(32, UInt(64.W))
+  val exception = new ExceptionEntry()
   val commited_num = UInt(8.W)
 }
 class MonitorTop(commit_port_num: Int) extends Module {
@@ -34,10 +35,15 @@ class MonitorTop(commit_port_num: Int) extends Module {
     commit_monitor_next.map(_.valid).reverse,
     commit_monitor_next.map(_.bits).reverse
   )
+  val last_exception = PriorityMux(
+    commit_monitor_next.map(_.valid).reverse,
+    commit_monitor_next.map(_.bits.exception).reverse
+  )
 
   io.difftest.valid := commit_monitor_count > 0.U
   io.difftest.bits.gpr := io.gpr_monitor.gpr
   io.difftest.bits.commited_num := commit_monitor_count
   io.difftest.bits.pc := last_commit_inst.pc
   io.difftest.bits.inst := last_commit_inst.inst
+  io.difftest.bits.exception := last_exception
 }

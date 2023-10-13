@@ -158,6 +158,9 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     port.ready := ack
   }
 
+  // -----------------------
+  // retire logic
+  // -----------------------
   when(rob_valid_seq.head && rob_data_seq.head.complete && !flush_next) {
     when(rob_data_seq.head.exception.valid) {
       assert(
@@ -165,13 +168,14 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
         "rob entry must be complete"
       )
       val pc = rob_data_seq.head.pc
-      assert(
-        false.B,
-        "Exception: %d, PC:%x, tval: %x",
+
+      printf(
+        "Exception: %d, PC:%x, tval: %x\n",
         rob_data_seq.head.exception.cause.asUInt,
         pc,
         rob_data_seq.head.exception.tval
       )
+      pop_ack.head := true.B
 
     }.otherwise {
       switch(rob_data_seq.head.fu_type) {
