@@ -1,6 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, Enum, is, switch}
+import chisel3.util.{Decoupled, Enum, PriorityMux, is, switch}
 import leesum.axi4.StreamJoin
 
 class AGUReq extends Bundle {
@@ -83,10 +83,27 @@ class AGU extends Module {
       state := sIdle
     }
   }
+
+  def check_addr_range(addr: UInt): Bool = {
+    val ranges = Seq(
+//        (0x00000000.U, 0x00010000.U), // 第一个地址范围
+      (0x80000000L.U, 0x88000000L.U) // 第二个地址范围
+    )
+
+    val in_range = ranges
+      .map { case (start, end) =>
+        addr >= start && addr <= end
+      }
+      .reduce(_ || _)
+
+    in_range
+  }
+
   // TODO: not implemented now
   def check_privilege(tlb_rsp: TLBResp): Bool = {
     val addr_align = CheckAligned(tlb_rsp.paddr, tlb_rsp.size)
-    tlb_rsp.exception.valid || !addr_align
+    val addr_in_range = check_addr_range(tlb_rsp.paddr)
+    Seq(tlb_rsp.exception.valid, !addr_align, !addr_in_range).reduce(_ || _)
   }
 
   // TODO: not implemented now
@@ -99,20 +116,29 @@ class AGU extends Module {
     io.out.exception_pipe.valid := true.B
     when(io.out.exception_pipe.fire) {
       io.out.exception_pipe.bits.exception.valid := true.B
-      io.out.exception_pipe.bits.exception.tval := tlb_rsp.paddr
       io.out.exception_pipe.bits.trans_id := agu_req_buf.trans_id
 
-      val mis_aligned_cause = Mux(
-        tlb_rsp.req_type === TLBReqType.LOAD,
-        ExceptionCause.misaligned_load,
-        ExceptionCause.misaligned_store
+      val is_misaligned = !CheckAligned(tlb_rsp.paddr, tlb_rsp.size)
+      val out_of_range = !check_addr_range(tlb_rsp.paddr)
+      // priority order: high -> low
+      // 1. misaligned
+      // 2. tlb exception
+      // 3. out of range
+      // 4. defeat unknown
+      io.out.exception_pipe.bits.exception.cause := PriorityMux(
+        Seq(
+          is_misaligned -> ExceptionCause.misaligned_load,
+          tlb_rsp.exception.valid -> tlb_rsp.exception.cause,
+          out_of_range -> ExceptionCause.get_access_cause(tlb_rsp.req_type),
+          true.B -> ExceptionCause.unknown
+        )
       )
-      // page fault or access fault has higher priority
-      io.out.exception_pipe.bits.exception.cause := Mux(
-        tlb_rsp.exception.valid,
-        tlb_rsp.exception.cause,
-        mis_aligned_cause
-      )
+      // TODO: not implemented now
+      // If mtval is written with a nonzero value when a misaligned load or store causes an access-fault or
+      // page-fault exception, then mtval will contain the virtual address of the portion of the access that
+      // caused the fault.
+      io.out.exception_pipe.bits.exception.tval := tlb_rsp.paddr
+
       // back to back
       send_tlb_req()
     }.otherwise {

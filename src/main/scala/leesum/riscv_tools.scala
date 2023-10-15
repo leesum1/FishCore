@@ -1134,7 +1134,7 @@ object FuOP extends ChiselEnum {
       AluSlt, AluSltu, LsuLb, LsuLbu, LsuLh, LsuLhu, LsuLw, LsuLwu, LsuLd,
       LsuSb, LsuSh, LsuSw, LsuSd, BrBeq, BrBne, BrBlt, BrBge, BrBltu, BrBgeu,
       BrJal, BrJalr, MulMul, MulMulh, MulMulhsu, MulMulhu, CsrRead, CsrWrite,
-      CsrSet, CsrClear, DivDiv, DivRem, Ebreak = Value
+      CsrSet, CsrClear, DivDiv, DivRem, Ebreak, Fence = Value
 
   def is_alu(op: FuOP.Type): Bool = {
     val alu_op = Seq(
@@ -1624,6 +1624,13 @@ object RVinst {
       FuOP.Ebreak,
       false.B,
       InstType.I
+    ) ::: none_op),
+    Instructions.IType("FENCE") -> (List(
+      true.B,
+      FuType.None,
+      FuOP.Fence,
+      false.B,
+      InstType.I
     ) ::: none_op)
   )
 
@@ -1729,7 +1736,7 @@ object RVinst {
       true.B,
       FuType.Alu,
       FuOP.AluSra,
-      false.B,
+      true.B,
       InstType.R
     ) ::: reg_reg_op),
     // srli rd, rs1, shamt
@@ -1759,7 +1766,7 @@ object RVinst {
       true.B,
       InstType.R
     ) ::: reg_reg_op),
-    // sub rd, rs1, rs2
+    // subw rd, rs1, rs2
     // x[rd] = sext((x[rs1] - x[rs2])[31:0])
     Instructions.I64Type("SUBW") -> (List(
       true.B,
@@ -1791,6 +1798,34 @@ object ExceptionCause extends ChiselEnum {
   val load_guest_page_fault = Value(0x15.U)
   val virtual_instruction = Value(0x16.U)
   val store_guest_page_fault = Value(0x17.U)
+  val unknown = Value(0x18.U)
+
+  def get_access_cause(req_type: TLBReqType.Type): ExceptionCause.Type = {
+    req_type match {
+      case TLBReqType.Fetch => fetch_access
+      case TLBReqType.LOAD  => load_access
+      case TLBReqType.STORE => store_access
+      case _                => unknown
+    }
+  }
+
+  def get_page_fault_cause(req_type: TLBReqType.Type): ExceptionCause.Type = {
+    req_type match {
+      case TLBReqType.Fetch => fetch_page_fault
+      case TLBReqType.LOAD  => load_page_fault
+      case TLBReqType.STORE => store_page_fault
+      case _                => unknown
+    }
+  }
+
+  def get_misaigned_cause(req_type: TLBReqType.Type): ExceptionCause.Type = {
+    req_type match {
+      case TLBReqType.Fetch => misaligned_fetch
+      case TLBReqType.LOAD  => misaligned_load
+      case TLBReqType.STORE => misaligned_store
+      case _                => unknown
+    }
+  }
 
   def toString(cause: ExceptionCause.Type): String = {
     cause match {
@@ -1899,7 +1934,7 @@ class InstBase(inst: UInt) extends Module {
   def imm_j =
     SignExt(
       Cat(inst(31), inst(19, 12), inst(20), inst(30, 21), 0.U(1.W)),
-      20,
+      21,
       64
     )
   def imm_z = Cat(Fill(27, 0.U), inst(19, 15))

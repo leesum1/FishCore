@@ -3,6 +3,7 @@ add_requires("verilator")
 add_requires("cli11",{system = false})
 add_requires("catch2",{system = false})
 add_requires("assert",{system = true})
+add_requires("elfio",{system = false})
 
 -- set_policy("build.warning", true)
 -- set_warnings("all", "extra")dd
@@ -20,8 +21,22 @@ target("Vtop")
     add_files("test.sv")
     add_values("verilator.flags","--top","CoreTestDut2","--trace-fst")
     add_includedirs("src/include/")
-    add_packages("catch2","cli11","assert")
+    add_packages("catch2","cli11","assert","elfio")
     add_links("rv64emu_cbinding")
+
+
+
+for _, file in ipairs(os.files("test/*.cpp")) do
+    local name = path.basename(file)
+    target(name)
+        set_kind("binary")
+        set_default(false)
+        add_files(file)
+        add_includedirs("src/include/")
+        add_packages("catch2","assert","elfio")
+        add_tests("default")
+
+end
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io

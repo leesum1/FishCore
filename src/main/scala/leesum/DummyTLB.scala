@@ -5,7 +5,6 @@ import chisel3.util.{Decoupled, Enum, MixedVecInit, is, switch}
 
 object TLBReqType extends ChiselEnum {
   val LOAD, STORE, Fetch = Value
-
 }
 
 class TLBReq extends Bundle {

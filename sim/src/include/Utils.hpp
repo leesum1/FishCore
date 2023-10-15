@@ -1,7 +1,6 @@
-#pragma once;
+#pragma once
+
 #include <assert.hpp>
-
-
 
 namespace Utils {
 

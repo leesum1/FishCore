@@ -115,11 +115,13 @@ class InstDecoder extends Module {
     scoreboard_entry.exception.tval := 0.U
   }
 
+  // TODO: refactor me!!!
   val exception_valid = scoreboard_entry.exception.valid
   val is_store = FuOP.is_store(scoreboard_entry.fu_op)
+  val is_fence = scoreboard_entry.fu_op === FuOP.Fence
 
   // TODO : if a exception happened, complete should be true?
-  scoreboard_entry.complete := exception_valid | is_store
+  scoreboard_entry.complete := exception_valid | is_store | is_fence
 
   // ------------------------------------------
   //  scoreboard branch predictor information

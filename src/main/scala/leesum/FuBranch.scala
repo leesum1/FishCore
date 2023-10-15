@@ -1,6 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, MuxLookup}
+import chisel3.util.{Cat, Decoupled, MuxLookup}
 
 class FuBranchReq extends Bundle {
   val fu_op = FuOP()
@@ -39,8 +39,8 @@ class FuBranch extends Module {
     0.U
   )(
     Seq(
-      FuOP.BrJalr.asUInt -> rs1_imm,
-      FuOP.BrJal.asUInt -> pc_imm,
+      FuOP.BrJalr.asUInt -> Cat(rs1_imm(63, 1), 0.U(1.W)),
+      FuOP.BrJal.asUInt -> Cat(pc_imm(63, 1), 0.U(1.W)),
       FuOP.BrBeq.asUInt -> pc_imm,
       FuOP.BrBne.asUInt -> pc_imm,
       FuOP.BrBlt.asUInt -> pc_imm,

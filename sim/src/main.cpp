@@ -16,32 +16,44 @@ void check_regs(std::span<uint64_t> ref_regs, std::span<uint64_t> dut_regs) {
 }
 
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] char **argv) {
+int main(int argc, char **argv) {
+
+    constexpr auto MEM_BASE = 0x80000000L;
+    constexpr auto MEM_SIZE = 0x800000L;
+    constexpr auto BOOT_PC = 0x80000000L;
 
     std::string file_name;
     bool wave_en = false;
+    bool difftest_en = false;
+    std::optional<std::string> dump_signature_file;
 
     CLI::App app{"Simulator for RISC-V"};
-    app.add_option("-f", file_name, "image file load to the ram")->required();
-    app.add_flag("-w", wave_en, "enable wave trace")->default_val(false);
+    app.add_option("-f,--file", file_name, "bin/elf file load to the ram")->required();
+    app.add_option("-s,--signature", dump_signature_file, "dump signature file(for riscof)")->default_val(std::nullopt);
+    app.add_flag("-w,--wave", wave_en, "enable wave trace")->default_val(false);
+    app.add_flag("-d,--difftest", difftest_en, "enable difftest with rv64emu")->default_val(false);
 
     CLI11_PARSE(app, argc, argv);
 
 
-    std::cout << "hello world!" << std::endl;
-
-
     auto sim_base = SimBase();
-    auto sim_mem = SynReadMemorySim(0x10000);
-    auto difftest_ref = DiffTest(0x80000000, 0x10000, 0x80000000);
+    auto sim_mem = SynReadMemorySim(MEM_SIZE);
 
+    auto createDiffTest = [&]() -> std::optional<DiffTest> {
+        return difftest_en ? std::make_optional<DiffTest>(MEM_BASE, MEM_SIZE, BOOT_PC) : std::nullopt;
+    };
+    auto diff_ref = createDiffTest();
+
+    if (diff_ref.has_value()) {
+        diff_ref->load_file(file_name.c_str());
+    }
+
+
+    sim_mem.load_file(file_name.c_str());
 
     if (wave_en) {
         sim_base.enable_wave_trace("test.fst");
     }
-
-    sim_mem.load_file(file_name);
-    difftest_ref.load_file(file_name.c_str());
 
 
     sim_base.reset();
@@ -50,8 +62,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char **argv) {
     uint64_t commit_num = 0;
     bool sim_abort = false;
     while (!sim_base.finished()) {
-        clk_num++;
         sim_base.step([&](auto top) -> bool {
+            clk_num += 1;
             // memory
             uint64_t rdata = sim_mem.update_outputs();
             sim_mem.update_inputs(
@@ -70,7 +82,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char **argv) {
             if (top->io_difftest_valid) {
                 int step_num = top->io_difftest_bits_commited_num;
                 commit_num += step_num;
-                difftest_ref.step(step_num);
 
                 if (top->io_difftest_bits_exception_valid) {
                     auto cause = top->io_difftest_bits_exception_cause;
@@ -79,38 +90,57 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char **argv) {
                     if (cause != 3) {
                         sim_abort = true;
                     }
-
-
                     return true;
-                } else {
-                    bool pc_fail = difftest_ref.check_pc(difftest_ref.get_pc(), sim_base.get_pc());
-                    bool gpr_fail = difftest_ref.check_gprs(
+                } else if (difftest_en & diff_ref.has_value()) {
+                    diff_ref->step(step_num);
+                    bool pc_fail = diff_ref->check_pc(diff_ref->get_pc(), sim_base.get_pc());
+                    bool gpr_fail = diff_ref->check_gprs(
                             [&](size_t idx) { return sim_base.get_reg(idx); },
-                            [&](size_t idx) { return difftest_ref.get_reg(idx); }
+                            [&](size_t idx) { return diff_ref->get_reg(idx); }
                     );
                     if ((pc_fail | gpr_fail)) {
                         std::cout
-                                << std::format("pc mismatch: ref: 0x{:016x}, dut: 0x{:016x}\n\n", difftest_ref.get_pc(),
+                                << std::format("pc mismatch: ref: 0x{:016x}, dut: 0x{:016x}\n\n", diff_ref->get_pc(),
                                                sim_base.get_pc());
+                        sim_abort = true;
                     };
                     return (pc_fail | gpr_fail);
                 }
+                return false;
             };
+
+
+            if ((clk_num % 1024) == 0) {
+                bool to_host_ret = false;
+                sim_mem.check_to_host([&]() {
+                    to_host_ret = true;
+                });
+                if (to_host_ret) {
+                    std::cout << std::format("to host at pc: 0x{:016x}\n", sim_base.get_pc());
+                    return true;
+                }
+            }
 
             return false;
         });
     }
 
 
-    std::cout << std::format("clk_num: {}, commit_num: {}, IPC: {}\n", clk_num / 2, commit_num,
-                             double_t(commit_num) / (clk_num / 2));
+    if (dump_signature_file.has_value()) {
+        sim_mem.dump_signature(dump_signature_file.value());
+    }
+
+
+    std::cout << std::format("clk_num: {}, commit_num: {}, IPC: {}\n", clk_num, commit_num,
+                             double_t(commit_num) / clk_num);
 
 
     auto success = sim_base.get_reg(10) == 0;
 
 
     // return zero if success
-    return !(success & !sim_abort);
+//    return !(success & !sim_abort);
+    return sim_abort;
 }
 
 

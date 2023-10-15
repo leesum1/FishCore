@@ -158,6 +158,11 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     port.ready := ack
   }
 
+  def retire_none(entry: ScoreBoardEntry, ack: Bool): Unit = {
+    assert(entry.exception.valid === false.B)
+    ack := true.B
+  }
+
   // -----------------------
   // retire logic
   // -----------------------
@@ -205,6 +210,9 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
             io.gpr_commit_ports.head,
             pop_ack.head
           )
+        }
+        is(FuType.None) {
+          retire_none(rob_data_seq.head, pop_ack.head)
         }
       }
     }

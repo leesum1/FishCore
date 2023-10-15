@@ -1,3 +1,4 @@
+#pragma once
 #include "Vtop.h"
 #include "verilated.h"
 #include <string>
