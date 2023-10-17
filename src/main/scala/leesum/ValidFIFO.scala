@@ -89,7 +89,7 @@ class MultiPortValidFIFO[T <: Data](
     name: String,
     num_push_ports: Int,
     num_pop_ports: Int
-) extends ValidFIFO(gen = gen, size = size, name = name) {
+) {
   require(
     num_push_ports > 0,
     "MultiportFIFO must have non-zero number of push-ports"
@@ -99,16 +99,23 @@ class MultiPortValidFIFO[T <: Data](
     "MultiportFIFO must have non-zero number of pop-ports"
   )
 
-  override def push_pop_flush_cond(
-      push_cond: Bool,
-      pop_cond: Bool,
-      flush_cond: Bool,
-      entry: T
-  ): Unit = {
-    require(num_push_ports == 1, "use push_pop_flush_cond_multi_port instead")
-    require(num_pop_ports == 1, "use push_pop_flush_cond_multi_port instead")
-    super.push_pop_flush_cond(push_cond, pop_cond, flush_cond, entry)
-  }
+  val content = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(new Valid(gen)))))
+
+  val push_ptr = RegInit(
+    0.U(log2Ceil(size).W)
+  ).suggestName(name + "_push_ptr")
+  val pop_ptr = RegInit(0.U(log2Ceil(size).W)).suggestName(name + "_pop_ptr")
+  val num_counter = RegInit(0.U((log2Ceil(size) + 1).W))
+  val free_entries = RegInit(size.U(log2Ceil(size + 1).W))
+
+  val empty = num_counter === 0.U
+  val full = num_counter(log2Ceil(size)) === 1.U
+  val occupied_entries = num_counter
+
+  empty.suggestName(name + "_empty")
+  full.suggestName(name + "_full")
+  free_entries.suggestName(name + "_free_entries")
+  occupied_entries.suggestName(name + "_occupied_entries")
 
   def peek(): Vec[Valid[T]] = {
     val last = Wire(Vec(num_pop_ports, Valid(gen)))
@@ -116,6 +123,23 @@ class MultiPortValidFIFO[T <: Data](
       last(i) := content(pop_ptr + i.U)
     }
     last
+  }
+
+  def random_access(addr: UInt): Valid[T] = {
+    assert(addr < size.U, "addr must less than size")
+    content(addr)
+  }
+
+  def flush(flush_cond: Bool): Unit = {
+    when(flush_cond) {
+      push_ptr := 0.U
+      pop_ptr := 0.U
+      num_counter := 0.U
+      free_entries := size.U
+      for (i <- 0 until size) {
+        content(i).valid := false.B
+      }
+    }
   }
 
   def push_pop_flush_cond_multi_port(
