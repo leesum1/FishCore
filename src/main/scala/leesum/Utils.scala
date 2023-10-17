@@ -1,23 +1,10 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{
-  BitPat,
-  Cat,
-  Fill,
-  ListLookup,
-  Lookup,
-  MuxLookup,
-  Valid,
-  ValidIO,
-  is,
-  log2Ceil,
-  switch
-}
-import circt.stage.ChiselStage
+import chisel3.util._
+import _root_.circt.stage.ChiselStage
 
 import java.io.{File, FileOutputStream, PrintWriter}
-import scala.reflect.ClassTag
 import scala.sys.process._
 
 object GenVerilogHelper {
@@ -38,7 +25,7 @@ object GenVerilogHelper {
         "--disable-all-randomization",
         "--strip-debug-info",
         "--lowering-options=disallowLocalVariables,disallowPackedArrays",
-        //        "--split-verilog",
+//        "--split-verilog",
         "--lower-memories",
         "--ignore-read-enable-mem",
         "-o=" + file_path,
@@ -100,9 +87,21 @@ object GenOrderVec {
 
 object SignExt {
   def apply(x: UInt, input_width: Int, output_width: Int): UInt = {
+    require(input_width < output_width)
+    require(x.getWidth >= input_width && x.getWidth <= output_width)
     val sign = x(input_width - 1)
     val sign_ext = Fill(output_width - input_width, sign)
-    Cat(sign_ext, x)
+    Cat(sign_ext, x(input_width - 1, 0))
+  }
+
+  def apply(x: UInt, input_width: Int, output_width: Int, en: Bool): UInt = {
+    require(input_width < output_width)
+    require(x.getWidth >= input_width && x.getWidth <= output_width)
+    Mux(
+      en,
+      SignExt(x, input_width, output_width),
+      Cat(0.U((output_width - input_width).W), x(input_width - 1, 0))
+    )
   }
 }
 
@@ -486,6 +485,19 @@ object writeByteArrayToStringsToFile {
     } finally {
       pw.close()
       fos.close()
+    }
+  }
+}
+object Long2UInt64 {
+  def apply(x: Long): UInt = {
+    if (x < 0) {
+      // because of chisel doesn't support convert a negative number to UInt
+      // so we first convert Long to hex string(with prefix x)
+      // then convert it to UInt
+      val hex_string: String = "x" + x.toHexString
+      hex_string.U(64.W)
+    } else {
+      x.U(64.W)
     }
   }
 }

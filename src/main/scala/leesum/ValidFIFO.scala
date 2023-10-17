@@ -1,20 +1,14 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{
-  Decoupled,
-  MuxLookup,
-  PopCount,
-  Queue,
-  Valid,
-  isPow2,
-  log2Ceil
-}
+import chisel3.util.{Decoupled, Valid, isPow2, log2Ceil}
 
 class ValidFIFO[T <: Data](
     gen: T,
     size: Int,
     name: String,
+    push_ports: Int = 1,
+    pop_ports: Int = 1,
     use_mem: Boolean = false
 ) {
   require(isPow2(size), "content must have power-of-2 number of entries")
@@ -28,13 +22,11 @@ class ValidFIFO[T <: Data](
     0.U(log2Ceil(size).W)
   ).suggestName(name + "_push_ptr")
   val pop_ptr = RegInit(0.U(log2Ceil(size).W)).suggestName(name + "_pop_ptr")
-  val num_counter = RegInit(
-    0.U((log2Ceil(size) + 1).W)
-  ).suggestName(name + "_num_counter")
+  val num_counter = RegInit(0.U((log2Ceil(size) + 1).W))
+  val free_entries = RegInit(size.U(log2Ceil(size + 1).W))
 
   val empty = num_counter === 0.U
   val full = num_counter(log2Ceil(size)) === 1.U
-  val free_entries = size.U - num_counter
   val occupied_entries = num_counter
 
   empty.suggestName(name + "_empty")
@@ -43,7 +35,7 @@ class ValidFIFO[T <: Data](
   occupied_entries.suggestName(name + "_occupied_entries")
 
   def random_access(addr: UInt): Valid[T] = {
-//    require(addr.getWidth == log2Ceil(size))
+    assert(addr < size.U, "addr must less than size")
     content(addr)
   }
 
@@ -56,6 +48,7 @@ class ValidFIFO[T <: Data](
       push_ptr := 0.U
       pop_ptr := 0.U
       num_counter := 0.U
+      free_entries := size.U
       for (i <- 0 until size) {
         content(i).valid := false.B
       }
@@ -74,18 +67,19 @@ class ValidFIFO[T <: Data](
 
       push_ptr := push_ptr + 1.U
       num_counter := num_counter + 1.U
+      free_entries := free_entries - 1.U
     }
     when(pop_cond) {
       content(pop_ptr).valid := false.B
       pop_ptr := pop_ptr + 1.U
       num_counter := num_counter - 1.U
+      free_entries := free_entries + 1.U
     }
     when(push_cond && pop_cond) {
       num_counter := num_counter
+      free_entries := free_entries
     }
-
     flush(flush_cond)
-
   }
 }
 
@@ -155,6 +149,7 @@ class MultiPortValidFIFO[T <: Data](
     push_ptr := push_ptr + push_count
     pop_ptr := pop_ptr + pop_count
     num_counter := num_counter + push_count - pop_count
+    free_entries := free_entries - push_count + pop_count
 
     flush(flush_cond)
     // -----------------------
@@ -222,7 +217,7 @@ class DummyMultiPortValidFIFO[T <: Data](
 
   0.until(num_push_ports)
     .foreach({ i =>
-      io.in(i).ready := !fifo.random_access(fifo.push_ptr + i.U).valid
+      io.in(i).ready := fifo.free_entries > i.U
     })
 
 }

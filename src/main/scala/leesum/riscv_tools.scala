@@ -1,8 +1,7 @@
 package leesum
 
-import chisel3.{ChiselEnum, _}
 import chisel3.util.{BitPat, Cat, Fill, MuxLookup}
-import leesum.DcacheConst.SIZE1
+import chisel3.{ChiselEnum, _}
 
 object RiscvTools {
 
@@ -1126,18 +1125,63 @@ object CSRs {
 }
 
 object FuType extends ChiselEnum {
-  val None, Alu, Lsu, Csr, Br, Mul, Div = Value
+  val None = Value(0.U)
+  val Alu = Value(1.U)
+  val Lsu = Value(2.U)
+  val Csr = Value(3.U)
+  val Br = Value(4.U)
+  val Mul = Value(5.U)
+  val Div = Value(6.U)
 }
 
 object FuOP extends ChiselEnum {
-  val None, AluAdd, AluSub, AluXor, AluOr, AluAnd, AluSrl, AluSra, AluSll,
-      AluSlt, AluSltu, LsuLb, LsuLbu, LsuLh, LsuLhu, LsuLw, LsuLwu, LsuLd,
-      LsuSb, LsuSh, LsuSw, LsuSd, BrBeq, BrBne, BrBlt, BrBge, BrBltu, BrBgeu,
-      BrJal, BrJalr, MulMul, MulMulh, MulMulhsu, MulMulhu, CsrRead, CsrWrite,
-      CsrSet, CsrClear, DivDiv, DivRem, Ebreak, Fence = Value
+  val None = Value(0.U)
+  val AluAdd = Value(1.U)
+  val AluSub = Value(2.U)
+  val AluXor = Value(3.U)
+  val AluOr = Value(4.U)
+  val AluAnd = Value(5.U)
+  val AluSrl = Value(6.U)
+  val AluSra = Value(7.U)
+  val AluSll = Value(8.U)
+  val AluSlt = Value(9.U)
+  val AluSltu = Value(10.U)
+  val LsuLb = Value(11.U)
+  val LsuLbu = Value(12.U)
+  val LsuLh = Value(13.U)
+  val LsuLhu = Value(14.U)
+  val LsuLw = Value(15.U)
+  val LsuLwu = Value(16.U)
+  val LsuLd = Value(17.U)
+  val LsuSb = Value(18.U)
+  val LsuSh = Value(19.U)
+  val LsuSw = Value(20.U)
+  val LsuSd = Value(21.U)
+  val BrBeq = Value(22.U)
+  val BrBne = Value(23.U)
+  val BrBlt = Value(24.U)
+  val BrBge = Value(25.U)
+  val BrBltu = Value(26.U)
+  val BrBgeu = Value(27.U)
+  val BrJal = Value(28.U)
+  val BrJalr = Value(29.U)
+  val MulMul = Value(30.U)
+  val MulMulh = Value(31.U)
+  val MulMulhsu = Value(32.U)
+  val MulMulhu = Value(33.U)
+  val CsrRead = Value(34.U)
+  val CsrWrite = Value(35.U)
+  val CsrSet = Value(36.U)
+  val CsrClear = Value(37.U)
+  val DivDiv = Value(38.U)
+  val DivDivu = Value(39.U)
+  val DivRem = Value(40.U)
+  val DivRemu = Value(41.U)
+  val Ebreak = Value(42.U)
+  val Fence = Value(43.U)
 
   def is_alu(op: FuOP.Type): Bool = {
-    val alu_op = Seq(
+    val alu_op_map = Seq(
       FuOP.AluAdd,
       FuOP.AluSub,
       FuOP.AluXor,
@@ -1149,12 +1193,8 @@ object FuOP extends ChiselEnum {
       FuOP.AluSlt,
       FuOP.AluSltu
     )
-    val op_is_alu = WireInit(false.B)
-    for (x <- alu_op) {
-      when(op === x) {
-        op_is_alu := true.B
-      }
-    }
+    val mul_op_vec = VecInit(alu_op_map.map(_.asUInt))
+    val op_is_alu = mul_op_vec.contains(op.asUInt)
     op_is_alu
   }
 
@@ -1173,23 +1213,13 @@ object FuOP extends ChiselEnum {
       FuOP.BrBltu,
       FuOP.BrBgeu
     )
-    val op_is_branch = WireInit(false.B)
-    for (x <- branch_op) {
-      when(op === x) {
-        op_is_branch := true.B
-      }
-    }
+    val op_is_branch = VecInit(branch_op.map(_.asUInt)).contains(op.asUInt)
     op_is_branch
   }
   def is_store(op: FuOP.Type): Bool = {
     val store_op = Seq(FuOP.LsuSb, FuOP.LsuSh, FuOP.LsuSw, FuOP.LsuSd)
 
-    val op_is_store = WireInit(false.B)
-    for (x <- store_op) {
-      when(op === x) {
-        op_is_store := true.B
-      }
-    }
+    val op_is_store = VecInit(store_op.map(_.asUInt)).contains(op.asUInt)
     op_is_store
   }
   def is_load(op: FuOP.Type): Bool = {
@@ -1202,13 +1232,7 @@ object FuOP extends ChiselEnum {
       FuOP.LsuLwu,
       FuOP.LsuLd
     )
-
-    val op_is_load = WireInit(false.B)
-    for (x <- load_op) {
-      when(op === x) {
-        op_is_load := true.B
-      }
-    }
+    val op_is_load = VecInit(load_op.map(_.asUInt)).contains(op.asUInt)
     op_is_load
   }
 
@@ -1220,12 +1244,8 @@ object FuOP extends ChiselEnum {
     assert(is_lsu(op), "not a load/store operation")
     val sign_ext_op = List(FuOP.LsuLb, FuOP.LsuLh, FuOP.LsuLw)
 
-    val lsu_need_sign_ext = WireInit(false.B)
-    for (x <- sign_ext_op) {
-      when(op === x) {
-        lsu_need_sign_ext := true.B
-      }
-    }
+    val lsu_need_sign_ext =
+      VecInit(sign_ext_op.map(_.asUInt)).contains(op.asUInt)
     lsu_need_sign_ext
   }
   def get_lsu_size(op: FuOP.Type): UInt = {
@@ -1245,6 +1265,53 @@ object FuOP extends ChiselEnum {
     )
     MuxLookup(op, 0.U)(size_map)
   }
+
+  def is_mul(op: FuOP.Type): Bool = {
+    val mul_op = Seq(
+      FuOP.MulMul,
+      FuOP.MulMulh,
+      FuOP.MulMulhsu,
+      FuOP.MulMulhu
+    )
+    val op_is_mul = VecInit(mul_op.map(_.asUInt)).contains(op.asUInt)
+    op_is_mul
+  }
+
+  def get_mul_signed_info(op: FuOP.Type): Vec[Bool] = {
+    val signed_map = List(
+      FuOP.MulMul -> VecInit(true.B, true.B),
+      FuOP.MulMulh -> VecInit(true.B, true.B),
+      FuOP.MulMulhsu -> VecInit(true.B, false.B),
+      FuOP.MulMulhu -> VecInit(false.B, false.B)
+    )
+    MuxLookup(op, VecInit(true.B, true.B))(signed_map)
+  }
+
+  def is_div(op: FuOP.Type): Bool = {
+    val div_op = Seq(FuOP.DivDiv, FuOP.DivDivu)
+    val div_op_vec = VecInit(div_op.map(_.asUInt))
+    div_op_vec.contains(op.asUInt)
+  }
+  def is_rem(op: FuOP.Type): Bool = {
+    val rem_op = Seq(FuOP.DivRem, FuOP.DivRemu)
+    val rem_op_vec = VecInit(rem_op.map(_.asUInt))
+    rem_op_vec.contains(op.asUInt)
+  }
+
+  def is_div_rem_signed(op: FuOP.Type): Bool = {
+    val is_mul_div_signed = VecInit(
+      Seq(
+        FuOP.DivDiv,
+        FuOP.DivRem
+      ).map(_.asUInt)
+    ).contains(op.asUInt)
+    is_mul_div_signed
+  }
+
+  def is_div_rem(op: FuOP.Type): Bool = {
+    is_div(op) || is_rem(op)
+  }
+
 }
 
 object gen_fu_op_verilog extends App {
@@ -1262,11 +1329,26 @@ object gen_fu_op_verilog extends App {
 }
 
 object AluOP extends ChiselEnum {
-  val None, Add, Sub, Xor, Or, And, Srl, Sra, Sll, Slt, Sltu = Value
+  val None = Value(0.U)
+  val Add = Value(1.U)
+  val Sub = Value(2.U)
+  val Xor = Value(3.U)
+  val Or = Value(4.U)
+  val And = Value(5.U)
+  val Srl = Value(6.U)
+  val Sra = Value(7.U)
+  val Sll = Value(8.U)
+  val Slt = Value(9.U)
+  val Sltu = Value(10.U)
 }
 
 object InstType extends ChiselEnum {
-  val R, I, S, B, U, J = Value
+  val R = Value(0.U)
+  val I = Value(1.U)
+  val S = Value(2.U)
+  val B = Value(3.U)
+  val U = Value(4.U)
+  val J = Value(5.U)
 }
 
 class DecoderSignals extends Bundle {
@@ -1776,6 +1858,113 @@ object RVinst {
       InstType.R
     ) ::: reg_reg_op)
   )
+
+  val m64_map: Array[(BitPat, List[Element])] = Array(
+    // divuw rd, rs1, rs2
+    // x[rd] = sext(x[rs1][31:0] ÷u x[rs2][31:0])
+    Instructions.M64Type("DIVUW") -> (List(
+      true.B,
+      FuType.Div,
+      FuOP.DivDivu,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    // divw rd, rs1, rs2
+    // x[rd] = sext(x[rs1][31:0] ÷s x[rs2][31:0])
+    Instructions.M64Type("DIVW") -> (List(
+      true.B,
+      FuType.Div,
+      FuOP.DivDiv,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    // mulw rd, rs1, rs2
+    // x[rd] = sext((x[rs1] × x[rs2])[31:0])
+    Instructions.M64Type("MULW") -> (List(
+      true.B,
+      FuType.Mul,
+      FuOP.MulMul,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    // remuw rd, rs1, rs2
+    // x[rd] = sext(x[rs1][31:0] %u x[rs2][31:0])
+    Instructions.M64Type("REMUW") -> (List(
+      true.B,
+      FuType.Div,
+      FuOP.DivRemu,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    // remuw rd, rs1, rs2
+    // x[rd] = sext(x[rs1][31:0] %s x[rs2][31:0])
+    Instructions.M64Type("REMW") -> (List(
+      true.B,
+      FuType.Div,
+      FuOP.DivRem,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op)
+  )
+
+  val m_map: Array[(BitPat, List[Element])] = Array(
+    Instructions.MType("DIV") -> (List(
+      true.B,
+      FuType.Div,
+      FuOP.DivDiv,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.MType("DIVU") -> (List(
+      true.B,
+      FuType.Div,
+      FuOP.DivDivu,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.MType("MUL") -> (List(
+      true.B,
+      FuType.Mul,
+      FuOP.MulMul,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.MType("MULH") -> (List(
+      true.B,
+      FuType.Mul,
+      FuOP.MulMulh,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.MType("MULHSU") -> (List(
+      true.B,
+      FuType.Mul,
+      FuOP.MulMulhsu,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.MType("MULHU") -> (List(
+      true.B,
+      FuType.Mul,
+      FuOP.MulMulhu,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.MType("REM") -> (List(
+      true.B,
+      FuType.Div,
+      FuOP.DivRem,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.MType("REMU") -> (List(
+      true.B,
+      FuType.Div,
+      FuOP.DivRemu,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op)
+  )
 }
 
 object ExceptionCause extends ChiselEnum {
@@ -1801,29 +1990,32 @@ object ExceptionCause extends ChiselEnum {
   val unknown = Value(0x18.U)
 
   def get_access_cause(req_type: TLBReqType.Type): ExceptionCause.Type = {
-    req_type match {
-      case TLBReqType.Fetch => fetch_access
-      case TLBReqType.LOAD  => load_access
-      case TLBReqType.STORE => store_access
-      case _                => unknown
+    MuxLookup(req_type, unknown) {
+      Seq(
+        TLBReqType.Fetch -> fetch_access,
+        TLBReqType.LOAD -> load_access,
+        TLBReqType.STORE -> store_access
+      )
     }
   }
 
   def get_page_fault_cause(req_type: TLBReqType.Type): ExceptionCause.Type = {
-    req_type match {
-      case TLBReqType.Fetch => fetch_page_fault
-      case TLBReqType.LOAD  => load_page_fault
-      case TLBReqType.STORE => store_page_fault
-      case _                => unknown
+    MuxLookup(req_type, unknown) {
+      Seq(
+        TLBReqType.Fetch -> fetch_page_fault,
+        TLBReqType.LOAD -> load_page_fault,
+        TLBReqType.STORE -> store_page_fault
+      )
     }
   }
 
   def get_misaigned_cause(req_type: TLBReqType.Type): ExceptionCause.Type = {
-    req_type match {
-      case TLBReqType.Fetch => misaligned_fetch
-      case TLBReqType.LOAD  => misaligned_load
-      case TLBReqType.STORE => misaligned_store
-      case _                => unknown
+    MuxLookup(req_type, unknown) {
+      Seq(
+        TLBReqType.Fetch -> misaligned_fetch,
+        TLBReqType.LOAD -> misaligned_load,
+        TLBReqType.STORE -> misaligned_store
+      )
     }
   }
 
@@ -1855,7 +2047,12 @@ object ExceptionCause extends ChiselEnum {
 }
 
 object BpType extends ChiselEnum {
-  val None, Call, Return, Branch, Jal, Jalr = Value
+  val None = Value(0.U)
+  val Call = Value(1.U)
+  val Return = Value(2.U)
+  val Branch = Value(3.U)
+  val Jal = Value(4.U)
+  val Jalr = Value(5.U)
 }
 
 // TODO:

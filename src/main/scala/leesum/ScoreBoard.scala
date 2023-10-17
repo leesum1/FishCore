@@ -51,22 +51,19 @@ class ScoreBoard(
       val fu_branch_wb_port = Flipped(Decoupled(new FuBranchResp))
       // lsu_port
       val fu_lsu_wb_port = Flipped(Decoupled(new LSUResp))
-      //  TODO: mul_div
-      val fu_mul_div_valid = Input(Bool())
-      val fu_mul_div_id = Input(UInt(log2Ceil(entries).W))
-      val fu_mul_div_wb = Input(UInt(64.W))
-      val fu_mul_div_wb_valid = Input(Bool())
+      //  mul_div_port
+      val fu_mul_div_wb_port = Flipped(Decoupled(new FuMulDivResp))
     }
   )
 
   // if Write-back ID conflict, then return false
-  def checkWritebackConflict(): Bool = {
+  def check_write_back_conflict(): Bool = {
     val fu_valid = VecInit(
       Seq(
         io.fu_alu_wb_port.fire,
         io.fu_branch_wb_port.fire,
         io.fu_lsu_wb_port.fire,
-        io.fu_mul_div_valid
+        io.fu_mul_div_wb_port.fire
       )
     )
     val fu_id = VecInit(
@@ -74,7 +71,7 @@ class ScoreBoard(
         io.fu_alu_wb_port.bits.trans_id,
         io.fu_branch_wb_port.bits.trans_id,
         io.fu_lsu_wb_port.bits.trans_id,
-        io.fu_mul_div_id
+        io.fu_mul_div_wb_port.bits.trans_id
       )
     )
 
@@ -92,12 +89,12 @@ class ScoreBoard(
   }
 
   assert(
-    checkWritebackConflict(),
+    check_write_back_conflict(),
     "writeback conflict"
   )
 
   // ---------------------------
-  //  internal memory
+  //  internal fifo
   // ---------------------------
 
   val rob = new MultiPortValidFIFO(
@@ -128,9 +125,7 @@ class ScoreBoard(
   })
 
   0.until(num_push_ports)
-    .foreach(i =>
-      io.push_ports(i).ready := !rob.random_access(rob.push_ptr + i.U).valid
-    )
+    .foreach(i => io.push_ports(i).ready := rob.free_entries > i.U)
   // ---------------------------
   // allocate trans_id for push
   // ---------------------------
@@ -203,19 +198,33 @@ class ScoreBoard(
     }
   }
 
-  io.fu_lsu_wb_port.ready := true.B
+  // no exception for mul_div
+  def mul_div_write_back(
+      mul_div_resp: FuMulDivResp,
+      en: Bool
+  ): Unit = {
+    when(en) {
+      val rob_idx = mul_div_resp.trans_id
+      rob.content(rob_idx).bits.complete := true.B
+      rob.content(rob_idx).bits.result := mul_div_resp.data
+      rob.content(rob_idx).bits.result_valid := true.B
+
+      assert(
+        rob.random_access(rob_idx).valid,
+        "rob entry must be valid"
+      )
+    }
+  }
+
   io.fu_alu_wb_port.ready := true.B
   io.fu_branch_wb_port.ready := true.B
-  lsu_write_back(io.fu_lsu_wb_port.bits, io.fu_lsu_wb_port.fire)
-  alu_write_back(io.fu_alu_wb_port.bits, io.fu_alu_wb_port.fire)
-  branch_write_back(io.fu_branch_wb_port.bits, io.fu_branch_wb_port.fire)
+  io.fu_lsu_wb_port.ready := true.B
+  io.fu_mul_div_wb_port.ready := true.B
 
-  // TODO: NOT IMPLEMENTED
-  when(io.fu_mul_div_valid) {
-    rob.content(io.fu_mul_div_id).bits.complete := true.B
-    rob.content(io.fu_mul_div_id).bits.result := io.fu_mul_div_wb
-    rob.content(io.fu_mul_div_id).bits.result_valid := io.fu_mul_div_wb_valid
-  }
+  alu_write_back(io.fu_alu_wb_port.bits, io.fu_alu_wb_port.fire)
+  mul_div_write_back(io.fu_mul_div_wb_port.bits, io.fu_mul_div_wb_port.fire)
+  lsu_write_back(io.fu_lsu_wb_port.bits, io.fu_lsu_wb_port.fire)
+  branch_write_back(io.fu_branch_wb_port.bits, io.fu_branch_wb_port.fire)
 
   // ---------------------
   // rd_occupied_gpr logic
@@ -241,7 +250,7 @@ class ScoreBoard(
       io.fu_alu_wb_port.fire,
       io.fu_branch_wb_port.fire,
       io.fu_lsu_wb_port.fire,
-      io.fu_mul_div_valid
+      io.fu_mul_div_wb_port.fire
     )
   )
   val fu_id = VecInit(
@@ -249,7 +258,7 @@ class ScoreBoard(
       io.fu_alu_wb_port.bits.trans_id,
       io.fu_branch_wb_port.bits.trans_id,
       io.fu_lsu_wb_port.bits.trans_id,
-      io.fu_mul_div_id
+      io.fu_mul_div_wb_port.bits.trans_id
     )
   )
   val fu_result = VecInit(
@@ -257,7 +266,7 @@ class ScoreBoard(
       io.fu_alu_wb_port.bits.res,
       io.fu_branch_wb_port.bits.wb_data,
       io.fu_lsu_wb_port.bits.wb_data,
-      io.fu_mul_div_wb
+      io.fu_mul_div_wb_port.bits.data
     )
   )
   val fu_result_valid = VecInit(
@@ -265,7 +274,7 @@ class ScoreBoard(
       io.fu_alu_wb_port.fire,
       io.fu_branch_wb_port.bits.wb_valid,
       io.fu_lsu_wb_port.bits.wb_data_valid,
-      io.fu_mul_div_wb_valid
+      io.fu_mul_div_wb_port.fire
     )
   )
 

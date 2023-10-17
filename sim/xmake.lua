@@ -1,4 +1,9 @@
-set_policy("build.sanitizer.address", true)
+-- set_policy("build.sanitizer.address", true)
+-- set_policy("build.sanitizer.undefined", true)
+-- set_policy("build.sanitizer.memory", true)
+-- set_policy("build.sanitizer.leak", true)
+
+
 add_requires("verilator")
 add_requires("cli11",{system = false})
 add_requires("catch2",{system = false})
@@ -11,14 +16,14 @@ add_requires("elfio",{system = false})
 -- 设置 C++20 标准
 set_languages("cxx20")
 -- 最快运行速度的优化
--- set_optimize("fastest")
+set_optimize("fastest")
 
 add_rules("plugin.compile_commands.autoupdate", {outputdir = "."})
 target("Vtop")
     add_rules("verilator.binary")
-    set_toolchains("@verilator","gcc")
+    set_toolchains("@verilator")
     add_files("src/*.cpp")
-    add_files("test.sv")
+    add_files("vsrc/*.sv")
     add_values("verilator.flags","--top","CoreTestDut2","--trace-fst")
     add_includedirs("src/include/")
     add_packages("catch2","cli11","assert","elfio")

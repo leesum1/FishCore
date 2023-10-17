@@ -25,6 +25,7 @@ int main(int argc, char **argv) {
     std::string file_name;
     bool wave_en = false;
     bool difftest_en = false;
+    long max_cycles = 5000;
     std::optional<std::string> dump_signature_file;
 
     CLI::App app{"Simulator for RISC-V"};
@@ -32,6 +33,7 @@ int main(int argc, char **argv) {
     app.add_option("-s,--signature", dump_signature_file, "dump signature file(for riscof)")->default_val(std::nullopt);
     app.add_flag("-w,--wave", wave_en, "enable wave trace")->default_val(false);
     app.add_flag("-d,--difftest", difftest_en, "enable difftest with rv64emu")->default_val(false);
+    app.add_option("--clk", max_cycles, "max cycles")->default_val(5000);
 
     CLI11_PARSE(app, argc, argv);
 
@@ -61,7 +63,7 @@ int main(int argc, char **argv) {
     uint64_t clk_num = 0;
     uint64_t commit_num = 0;
     bool sim_abort = false;
-    while (!sim_base.finished()) {
+    while (!sim_base.finished() && (clk_num < max_cycles)) {
         sim_base.step([&](auto top) -> bool {
             clk_num += 1;
             // memory

@@ -26,7 +26,11 @@ class AGUResp extends Bundle {
   val exception_pipe = Decoupled(new ExceptionQueueIn())
 }
 
-class AGU extends Module {
+class AGU(
+    addr_map: Seq[(Long, Long)] = Seq(
+      (0, 0xffffffffffffffffL) // default addr map, 0x0 -> 0xffffffffffffffff
+    )
+) extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new AGUReq))
     val out = new AGUResp
@@ -85,14 +89,9 @@ class AGU extends Module {
   }
 
   def check_addr_range(addr: UInt): Bool = {
-    val ranges = Seq(
-//        (0x00000000.U, 0x00010000.U), // 第一个地址范围
-      (0x80000000L.U, 0x88000000L.U) // 第二个地址范围
-    )
-
-    val in_range = ranges
+    val in_range = addr_map
       .map { case (start, end) =>
-        addr >= start && addr <= end
+        addr >= Long2UInt64(start) && addr <= Long2UInt64(end)
       }
       .reduce(_ || _)
 
@@ -113,6 +112,7 @@ class AGU extends Module {
 
   // TODO: not implemented now
   def dispatch_to_exception(tlb_rsp: TLBResp): Unit = {
+
     io.out.exception_pipe.valid := true.B
     when(io.out.exception_pipe.fire) {
       io.out.exception_pipe.bits.exception.valid := true.B
@@ -127,7 +127,7 @@ class AGU extends Module {
       // 4. defeat unknown
       io.out.exception_pipe.bits.exception.cause := PriorityMux(
         Seq(
-          is_misaligned -> ExceptionCause.misaligned_load,
+          is_misaligned -> ExceptionCause.get_misaigned_cause(tlb_rsp.req_type),
           tlb_rsp.exception.valid -> tlb_rsp.exception.cause,
           out_of_range -> ExceptionCause.get_access_cause(tlb_rsp.req_type),
           true.B -> ExceptionCause.unknown

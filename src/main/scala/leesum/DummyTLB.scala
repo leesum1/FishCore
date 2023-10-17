@@ -4,7 +4,9 @@ import chisel3.util.random.LFSR
 import chisel3.util.{Decoupled, Enum, MixedVecInit, is, switch}
 
 object TLBReqType extends ChiselEnum {
-  val LOAD, STORE, Fetch = Value
+  val LOAD = Value(0.U)
+  val STORE = Value(1.U)
+  val Fetch = Value(2.U)
 }
 
 class TLBReq extends Bundle {

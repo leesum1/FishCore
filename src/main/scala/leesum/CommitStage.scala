@@ -1,16 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.{
-  Decoupled,
-  DecoupledIO,
-  MuxLookup,
-  PopCount,
-  Valid,
-  is,
-  isPow2,
-  log2Ceil,
-  switch
-}
+import chisel3.util._
 import leesum.moniter.CommitMonitorPort
 
 class RedirectPC extends Bundle {
@@ -64,9 +54,14 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       gpr_commit_port: GPRsWritePort,
       ack: Bool
   ): Unit = {
-    assert(FuOP.is_alu(entry.fu_op), "fu_op must be lsu")
+    val alu_mul_div_op =
+      FuOP.is_alu(entry.fu_op) || FuOP.is_mul(entry.fu_op) || FuOP.is_div_rem(
+        entry.fu_op
+      )
+
+    assert(alu_mul_div_op, "fu_op must be alu, mul or div")
     assert(entry.exception.valid === false.B)
-    when(FuOP.is_alu(entry.fu_op)) {
+    when(alu_mul_div_op) {
       gpr_commit_port.write(entry.rd_addr, entry.result)
       ack := true.B
     }
@@ -184,7 +179,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
     }.otherwise {
       switch(rob_data_seq.head.fu_type) {
-        is(FuType.Alu) {
+        is(FuType.Mul, FuType.Alu, FuType.Div) {
           retire_alu(
             rob_data_seq.head,
             io.gpr_commit_ports.head,

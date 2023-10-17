@@ -4,7 +4,6 @@ import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.experimental.VecLiterals.AddVecLiteralConstructor
 import chiseltest._
 import leesum.TestUtils.long2UInt64
-import leesum.axi4.SkidBuffer
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -453,11 +452,7 @@ class ScoreBoardTest extends AnyFreeSpec with ChiselScalatestTester {
     dut.io.fu_alu_wb_port.initSource().setSourceClock(dut.clock)
     dut.io.fu_branch_wb_port.initSource().setSourceClock(dut.clock)
     dut.io.fu_lsu_wb_port.initSource().setSourceClock(dut.clock)
-
-    dut.io.fu_mul_div_valid.poke(false.B)
-    dut.io.fu_mul_div_wb_valid.poke(false.B)
-    dut.io.fu_mul_div_wb.poke(0.U)
-    dut.io.fu_mul_div_id.poke(0.U)
+    dut.io.fu_mul_div_wb_port.initSource().setSourceClock(dut.clock)
 
     dut.io.operand_bypass.foreach(bypass => {
       bypass.rs1_addr.poke(0.U)

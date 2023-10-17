@@ -17,6 +17,7 @@ lazy val root = (project in file("."))
       "edu.berkeley.cs" %% "firrtl" % chiselVersion,
       "edu.berkeley.cs" %% "chiseltest" % "5.0.2",
       "net.fornwall" % "jelf" % "0.7.0",
+      "org.typelevel" %% "spire" % "0.18.0",
       "org.scalacheck" %% "scalacheck" % "1.17.0" % "test"
     ),
     scalacOptions ++= Seq(

@@ -7,10 +7,10 @@ class FuIO extends Bundle {
   val alu_0 = Decoupled(new AluReq())
   val branch_0 = Decoupled(new FuBranchReq())
   val lsu_0 = Decoupled(new LSUReq)
+  val mul_0 = Decoupled(new MulReq)
+  val div_0 = Decoupled(new DivReq)
 
   val csr_0 = Decoupled(UInt(32.W))
-  val mul_0 = Decoupled(UInt(32.W))
-  val div_0 = Decoupled(UInt(32.W))
 }
 
 class RegFileReadPort extends Bundle {
@@ -57,13 +57,12 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
     VecInit(io.push_port.map(_.bits))
   )
 
+  val fifo_data_seq = issue_fifo.peek()
+
   0.until(num_push_port)
     .foreach({ i =>
-      io.push_port(i)
-        .ready := !issue_fifo.random_access(issue_fifo.push_ptr + i.U).valid
+      io.push_port(i).ready := issue_fifo.free_entries > i.U
     })
-
-  val fifo_data_seq = issue_fifo.peek()
 
   // ------------------
   // fu pipeline
@@ -72,10 +71,10 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   val alu_0_pipe = Wire(Decoupled(new AluReq()))
   val branch_0_pipe = Wire(Decoupled(new FuBranchReq()))
   val lsu_0_pipe = Wire(Decoupled(new LSUReq))
+  val mul_0_pipe = Wire(Decoupled(new MulReq))
+  val div_0_pipe = Wire(Decoupled(new DivReq))
 
   val csr_0_pipe = Wire(Decoupled(UInt(32.W)))
-  val mul_0_pipe = Wire(Decoupled(UInt(32.W)))
-  val div_0_pipe = Wire(Decoupled(UInt(32.W)))
 
   alu_0_pipe.noenq()
   branch_0_pipe.noenq()
@@ -520,7 +519,6 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   // -------------------
   // mul logic
   // -------------------
-  // TODO: NOT IMPLEMENTED
   val mul_allow_dispatch = VecInit(
     allow_issue_fire.zip(fifo_data_seq).map { case (allow, scb) =>
       allow && scb.bits.fu_type === FuType.Mul
@@ -531,17 +529,21 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
     "mul unit can only dispatch one inst at one cycle"
   )
 
-  // TODO: NOT IMPLEMENTED
   def dispatch_to_mul(
-      mul: DecoupledIO[UInt],
+      mul: DecoupledIO[MulReq],
       scb: ScoreBoardEntry,
       mul_allow_dispatch: Bool,
       op_bundle: oprandBundle,
       trans_id: UInt
   ) = {
     when(scb.fu_type === FuType.Mul && mul_allow_dispatch) {
+      assert(FuOP.is_mul(scb.fu_op))
       mul.valid := true.B
-      mul.bits := op_bundle.rs1_data
+      mul.bits.op_a := op_bundle.rs1_data
+      mul.bits.op_b := op_bundle.rs2_data
+      mul.bits.op_type := scb.fu_op
+      mul.bits.is_rv32 := scb.is_rv32
+      mul.bits.trans_id := trans_id
     }
   }
 
@@ -558,7 +560,6 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   // ------------------
   // div logic
   // ------------------
-  // TODO: NOT IMPLEMENTED
   val div_allow_dispatch = VecInit(
     allow_issue_fire.zip(fifo_data_seq).map { case (allow, scb) =>
       allow && scb.bits.fu_type === FuType.Div
@@ -569,17 +570,21 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
     "div unit can only dispatch one inst at one cycle"
   )
 
-  // TODO: NOT IMPLEMENTED
   def dispatch_to_div(
-      div: DecoupledIO[UInt],
+      div: DecoupledIO[DivReq],
       scb: ScoreBoardEntry,
       div_allow_dispatch: Bool,
       op_bundle: oprandBundle,
       trans_id: UInt
   ) = {
     when(scb.fu_type === FuType.Div && div_allow_dispatch) {
+      assert(FuOP.is_div_rem(scb.fu_op))
       div.valid := true.B
-      div.bits := op_bundle.rs1_data
+      div.bits.op_a := op_bundle.rs1_data
+      div.bits.op_b := op_bundle.rs2_data
+      div.bits.op_type := scb.fu_op
+      div.bits.is_rv32 := scb.is_rv32
+      div.bits.trans_id := trans_id
     }
   }
 

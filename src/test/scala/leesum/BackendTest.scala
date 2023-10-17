@@ -4,16 +4,8 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
-import leesum.TestUtils.{
-  check_aligned,
-  gen_axi_wdata,
-  gen_axi_wstrb,
-  gen_rand_uint,
-  int2UInt32,
-  long2UInt64
-}
+import leesum.TestUtils.{int2UInt32, long2UInt64}
 import leesum.axi4.AXI4Memory
-import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
 class BackendTestDut extends Module {
@@ -97,10 +89,7 @@ class BackendTestDut extends Module {
   score_board.io.fu_lsu_wb_port <> lsu.io.lsu_resp
   score_board.io.fu_branch_wb_port <> bru.io.out
 
-  score_board.io.fu_mul_div_valid := false.B
-  score_board.io.fu_mul_div_id := 0.U
-  score_board.io.fu_mul_div_wb := 0.U
-  score_board.io.fu_mul_div_wb_valid := false.B
+  score_board.io.fu_mul_div_wb_port.noenq()
 
   // scoreboard <> commit stage
   score_board.io.pop_ports <> commit_stage.io.rob_commit_ports
