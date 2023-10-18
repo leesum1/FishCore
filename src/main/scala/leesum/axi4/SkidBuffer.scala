@@ -1,6 +1,6 @@
 package leesum.axi4
 import chisel3._
-import chisel3.util.{Decoupled, DecoupledIO, Enum, is, switch}
+import chisel3.util.{Decoupled, DecoupledIO, Enum, Queue, is, switch}
 import leesum.GenVerilogHelper
 
 class SkidBuffer[T <: Data](gen: T, CUT_VALID: Boolean, CUT_READY: Boolean)
@@ -133,16 +133,42 @@ object SkidBuffer {
       CUT_VALID: Boolean,
       CUT_READY: Boolean
   ): Unit = {
-    val buffer = Module(
+    val skid_buffer = Module(
       new SkidBuffer(in.bits.cloneType, CUT_VALID, CUT_READY)
     )
-    buffer.io.in.valid := in.valid
-    in.ready := buffer.io.in.ready
-    buffer.io.in.bits := in.bits
+    skid_buffer.io.in <> in
+    skid_buffer.io.out <> out
+  }
+}
 
-    out.valid := buffer.io.out.valid
-    buffer.io.out.ready := out.ready
-    out.bits := buffer.io.out.bits
+object SkidBufferWithFLush {
+  def apply[T <: Data](
+      in: DecoupledIO[T],
+      out: DecoupledIO[T],
+      flush: Bool,
+      CUT_VALID: Boolean,
+      CUT_READY: Boolean
+  ): Unit = {
+
+    require(
+      CUT_VALID || CUT_READY,
+      "CUT_VALID and CUT_READY can not be false at the same time"
+    )
+    require(
+      !(CUT_VALID && CUT_READY),
+      "CUT_VALID and CUT_READY can not be true at the same time"
+    )
+
+    if (CUT_VALID) {
+      val cut_valid = Queue(in, 1, pipe = true, flush = Some(flush))
+      out <> cut_valid
+    }
+    if (CUT_READY) {
+      val cut_ready =
+        Queue(in, 1, pipe = false, flow = true, flush = Some(flush))
+      out <> cut_ready
+    }
+
   }
 }
 

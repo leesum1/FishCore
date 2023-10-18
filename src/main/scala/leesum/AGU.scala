@@ -1,7 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util.{Decoupled, Enum, PriorityMux, is, switch}
-import leesum.axi4.StreamJoin
+import leesum.axi4.{SkidBufferWithFLush, StreamJoin}
 
 class AGUReq extends Bundle {
   val op_a = UInt(64.W)
@@ -42,47 +42,50 @@ class AGU(
     val store_bypass = Flipped(new StoreBypassIO)
   })
 
-  // TODO: need optimize, use alu to calculate vaddr
-  val vaddr = io.in.bits.op_a.asSInt + io.in.bits.op_b.asSInt
+  val agu_req = Wire(Flipped(Decoupled(new AGUReq)))
+
+  SkidBufferWithFLush(
+    io.in,
+    agu_req,
+    io.flush,
+    CUT_VALID = false,
+    CUT_READY = true
+  )
+
+  // TODO: need optimize, use alu to calculate vaddr?
+  val vaddr = agu_req.bits.op_a.asSInt + agu_req.bits.op_b.asSInt
 
   val sIdle :: sWaitTLBRsp :: sWaitFifo :: sFlush :: Nil = Enum(4)
   val state = RegInit(sIdle)
   val tlb_resp_buf = RegInit(0.U.asTypeOf(new TLBResp))
   val agu_req_buf = RegInit(0.U.asTypeOf(new AGUReq))
 
-  // TODO: put exception pipe outside the Module?
-//  val exception_pipe = Module(new PipeLine(new ExceptionQueueIn()))
+  io.tlb_req.noenq()
+  io.tlb_resp.nodeq()
+  agu_req.nodeq()
 
-  io.tlb_req.valid := false.B
-  io.tlb_resp.ready := false.B
-  io.in.ready := false.B
-  io.tlb_req.bits := DontCare
+  io.out.exception_pipe.noenq()
 
-  io.out.exception_pipe.valid := false.B
-  io.out.exception_pipe.bits := DontCare
-
-  io.out.store_pipe.valid := false.B
-  io.out.store_pipe.bits := DontCare
-  io.out.load_pipe.valid := false.B
-  io.out.load_pipe.bits := DontCare
+  io.out.store_pipe.noenq()
+  io.out.load_pipe.noenq()
   io.store_bypass.valid := false.B
   io.store_bypass.paddr := DontCare
 
   // TODO: use a queue optimize timing?
   def send_tlb_req(): Unit = {
-    io.in.ready := io.tlb_req.ready && !io.flush
+    agu_req.ready := io.tlb_req.ready && !io.flush
 
-    io.tlb_req.valid := io.in.valid
+    io.tlb_req.valid := agu_req.valid
     io.tlb_req.bits.vaddr := vaddr.asUInt
-    io.tlb_req.bits.size := io.in.bits.size
+    io.tlb_req.bits.size := agu_req.bits.size
     io.tlb_req.bits.req_type := Mux(
-      io.in.bits.is_store,
+      agu_req.bits.is_store,
       TLBReqType.STORE,
       TLBReqType.LOAD
     )
-    when(io.in.fire && io.tlb_req.fire) {
+    when(agu_req.fire && io.tlb_req.fire) {
       state := sWaitTLBRsp
-      agu_req_buf := io.in.bits
+      agu_req_buf := agu_req.bits
     }.otherwise {
       state := sIdle
     }

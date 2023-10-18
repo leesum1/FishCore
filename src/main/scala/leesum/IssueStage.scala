@@ -42,7 +42,7 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   // issue fifo
   // ----------------
 
-  val issue_fifo = new MultiPortValidFIFO(
+  val issue_fifo = new MultiPortValidFIFO2(
     new ScoreBoardEntry(),
     8,
     name = "i_fifo",
@@ -58,6 +58,12 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   )
 
   val fifo_data_seq = issue_fifo.peek()
+
+//  0.until(num_push_port)
+//    .foreach({ i =>
+//      io.push_port(i)
+//        .ready := !issue_fifo.random_access(issue_fifo.push_ptr_seq(i)).valid
+//    })
 
   0.until(num_push_port)
     .foreach({ i =>

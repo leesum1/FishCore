@@ -97,7 +97,7 @@ class ScoreBoard(
   //  internal fifo
   // ---------------------------
 
-  val rob = new MultiPortValidFIFO(
+  val rob = new MultiPortValidFIFO2(
     gen = genType,
     entries,
     name = "rob",
@@ -124,14 +124,16 @@ class ScoreBoard(
     io.pop_ports(i).valid := pop.valid
   })
 
+  // TODO: performance???
   0.until(num_push_ports)
     .foreach(i => io.push_ports(i).ready := rob.free_entries > i.U)
+
   // ---------------------------
   // allocate trans_id for push
   // ---------------------------
   0.until(num_push_ports)
     .foreach(i => {
-      io.push_trans_id(i) := rob.push_ptr + i.U
+      io.push_trans_id(i) := rob.push_ptr_seq(i)
     })
 
   // -------------------------

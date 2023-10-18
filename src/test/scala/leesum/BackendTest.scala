@@ -46,6 +46,7 @@ class BackendTestDut extends Module {
   lsu.io.flush := commit_stage.io.flush
   tlb.io.flush := commit_stage.io.flush
   dcache.io.flush := commit_stage.io.flush
+  bru.io.flush := commit_stage.io.flush
 
   // dcache <> axi_mem
   axi_mem.io <> dcache.io.axi_mem

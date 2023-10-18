@@ -1,6 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util.{Cat, Decoupled, MuxLookup}
+import leesum.axi4.SkidBufferWithFLush
 
 class FuBranchReq extends Bundle {
   val fu_op = FuOP()
@@ -26,6 +27,7 @@ class FuBranch extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new FuBranchReq))
     val out = Decoupled(new FuBranchResp)
+    val flush = Input(Bool())
   })
 
   // TODO: need optimize, use alu to calculate vaddr
@@ -86,8 +88,21 @@ class FuBranch extends Module {
   io.out.bits.wb_data := ra_target
   io.out.bits.trans_id := io.in.bits.trans_id
 
-  io.out.valid := io.in.valid
-  io.in.ready := io.out.ready
+  val br_resp = Wire(Decoupled(new FuBranchResp))
+  br_resp.valid := io.in.valid
+  io.in.ready := br_resp.ready
+
+  br_resp.bits.is_miss_predict := is_miss_predict
+  br_resp.bits.redirect_pc := taraget_pc
+  br_resp.bits.wb_data := ra_target
+  br_resp.bits.trans_id := io.in.bits.trans_id
+  SkidBufferWithFLush(
+    br_resp,
+    io.out,
+    io.flush,
+    CUT_VALID = true,
+    CUT_READY = false
+  )
 }
 object gen_Fubranch extends App {
   GenVerilogHelper(new FuBranch())

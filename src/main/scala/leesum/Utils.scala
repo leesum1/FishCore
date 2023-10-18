@@ -148,6 +148,7 @@ object PopCountOrder {
   def apply(vec: Vec[Bool]): UInt = {
     val order_count_width = log2Ceil(vec.size + 1)
 
+    assert(CheckOrder(vec), "PopCountOrder: vec must be in order")
     val order_count = MuxLookup(
       vec.asUInt,
       0.U

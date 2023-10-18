@@ -34,7 +34,6 @@ class FuMulDiv extends Module {
   resp_arb.io.in(0) <> mul_resp
   resp_arb.io.in(1) <> div_resp
   resp_arb.io.out <> io.fu_div_mul_resp
-
 }
 
 object gen_fu_mul_div_verilog extends App {

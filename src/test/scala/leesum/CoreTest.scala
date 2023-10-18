@@ -91,6 +91,7 @@ class CoreTestDut(memFile: String) extends Module {
   dcache.io.flush := commit_stage.io.flush
   icache.io.flush := commit_stage.io.flush
   inst_realign.flush := commit_stage.io.flush
+  bru.io.flush := commit_stage.io.flush
 
   // pc_gen_stage <> fetch_stage
   pc_gen_stage.io.pc <> fetch_stage.io.pc_in
@@ -282,6 +283,7 @@ class CoreTestDut_NoM extends Module {
   dcache.io.flush := commit_stage.io.flush
   icache.io.flush := commit_stage.io.flush
   inst_realign.flush := commit_stage.io.flush
+  bru.io.flush := commit_stage.io.flush
 //  mul_div.io.flush := commit_stage.io.flush
 
   // pc_gen_stage <> fetch_stage
@@ -416,8 +418,8 @@ class CoreTestDut2 extends Module {
   val commit_stage = Module(new CommitStage(2, monitor_en))
   val reg_file = Module(new GPRs(2, 2, monitor_en))
 
-  val fetch_tlb = Module(new DummyTLB(random_latency = false))
-  val lsu_tlb = Module(new DummyTLB(random_latency = false))
+  val fetch_tlb = Module(new DummyTLB(random_latency = true))
+  val lsu_tlb = Module(new DummyTLB(random_latency = true))
 
   val dcache = Module(new DummyDCache)
   val icache = Module(new DummyICache)
@@ -476,6 +478,7 @@ class CoreTestDut2 extends Module {
   dcache.io.flush := commit_stage.io.flush
   icache.io.flush := commit_stage.io.flush
   inst_realign.flush := commit_stage.io.flush
+  bru.io.flush := commit_stage.io.flush
   mul_div.io.flush := commit_stage.io.flush
 
   // pc_gen_stage <> fetch_stage
@@ -583,8 +586,8 @@ class CoreTestDut2 extends Module {
 
 object gen_CoreTestDut_verilog extends App {
   //  GenVerilogHelper(new CoreTestDut("src/main/resources/random_file.bin"))
-  GenVerilogHelper(new CoreTestDut2)
-
+  GenVerilogHelper(new CoreTestDut_NoM)
+//  GenVerilogHelper(new CoreTestDut2)
 }
 
 class CoreTest extends AnyFreeSpec with ChiselScalatestTester {
