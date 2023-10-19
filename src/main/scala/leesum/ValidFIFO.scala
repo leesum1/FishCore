@@ -16,7 +16,11 @@ class ValidFIFO[T <: Data](
 //  val content =
 //    Mem(size, new Valid(gen)).suggestName(name + "_content")
 
-  val content = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(new Valid(gen)))))
+//  val content = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(new Valid(gen)))))
+
+  private val content_data = Mem(size, gen).suggestName(name + "_data")
+  private val content_valid =
+    RegInit(VecInit(Seq.fill(size)(false.B))).suggestName(name + "_valid")
 
   val push_ptr = RegInit(
     0.U(log2Ceil(size).W)
@@ -34,13 +38,27 @@ class ValidFIFO[T <: Data](
   free_entries.suggestName(name + "_free_entries")
   occupied_entries.suggestName(name + "_occupied_entries")
 
+  private def read(ptr: UInt): Valid[T] = {
+    assert(ptr < size.U, "ptr must less than size")
+    val data = content_data(ptr)
+    val valid = content_valid(ptr)
+    val res = Wire(new Valid(gen))
+    res.bits := data
+    res.valid := valid
+    res
+  }
+  private def write(ptr: UInt, valid: Bool, data: T): Unit = {
+    assert(ptr < size.U, "ptr must less than size")
+    content_data(ptr) := data
+    content_valid(ptr) := valid
+  }
+
   def random_access(addr: UInt): Valid[T] = {
-    assert(addr < size.U, "addr must less than size")
-    content(addr)
+    read(addr)
   }
 
   def peek_last(): Valid[T] = {
-    content(pop_ptr)
+    read(pop_ptr)
   }
 
   def flush(flush_cond: Bool): Unit = {
@@ -50,7 +68,7 @@ class ValidFIFO[T <: Data](
       num_counter := 0.U
       free_entries := size.U
       for (i <- 0 until size) {
-        content(i).valid := false.B
+        content_valid(i) := false.B
       }
     }
   }
@@ -62,15 +80,15 @@ class ValidFIFO[T <: Data](
       entry: T
   ): Unit = {
     when(push_cond) {
-      content(push_ptr).bits := entry
-      content(push_ptr).valid := true.B
+      content_data(push_ptr) := entry
+      content_valid(push_ptr) := true.B
 
       push_ptr := push_ptr + 1.U
       num_counter := num_counter + 1.U
       free_entries := free_entries - 1.U
     }
     when(pop_cond) {
-      content(pop_ptr).valid := false.B
+      content_valid(pop_ptr) := false.B
       pop_ptr := pop_ptr + 1.U
       num_counter := num_counter - 1.U
       free_entries := free_entries + 1.U
@@ -80,6 +98,19 @@ class ValidFIFO[T <: Data](
       free_entries := free_entries
     }
     flush(flush_cond)
+
+    // -----------------------
+    // assert
+    // -----------------------
+
+    when(RegNext(flush_cond)) {
+      for (i <- 0 until size) {
+        assert(
+          !content_valid(i),
+          "content must be invalid after flush"
+        )
+      }
+    }
   }
 }
 

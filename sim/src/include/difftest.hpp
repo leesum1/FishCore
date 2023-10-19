@@ -74,7 +74,7 @@ public:
     bool check_gprs(read_gpr_fuc dut_gpr, read_gpr_fuc ref_gpr, bool debug_en);
 
 
-    bool check_pc(uint64_t ref_pc, uint64_t dut_pc);
+    bool check_pc(uint64_t ref_pc, uint64_t dut_pc, bool debug_en);
 
     ~DiffTest();
 
@@ -140,8 +140,13 @@ bool DiffTest::check_gprs(DiffTest::read_gpr_fuc dut_gpr, DiffTest::read_gpr_fuc
     return fail;
 }
 
-bool DiffTest::check_pc(uint64_t ref_pc, uint64_t dut_pc) {
+bool DiffTest::check_pc(uint64_t ref_pc, uint64_t dut_pc, bool debug_en = false) {
     bool fail = false;
+
+    if (debug_en) {
+        std::cout << std::format("ref pc: 0x{:016x}, dut pc: 0x{:016x}\n", ref_pc, dut_pc);
+    }
+
     if (ref_pc != dut_pc) {
         std::cout << std::format("pc mismatch: ref: 0x{:016x}, dut: 0x{:016x}\n", ref_pc, dut_pc);
         fail = true;

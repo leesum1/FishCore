@@ -95,10 +95,11 @@ int main(int argc, char **argv) {
                     return true;
                 } else if (difftest_en & diff_ref.has_value()) {
                     diff_ref->step(step_num);
-                    bool pc_fail = diff_ref->check_pc(diff_ref->get_pc(), sim_base.get_pc());
+                    bool pc_fail = diff_ref->check_pc(diff_ref->get_pc(), sim_base.get_pc(), false);
                     bool gpr_fail = diff_ref->check_gprs(
                             [&](size_t idx) { return sim_base.get_reg(idx); },
-                            [&](size_t idx) { return diff_ref->get_reg(idx); }
+                            [&](size_t idx) { return diff_ref->get_reg(idx); },
+                            false
                     );
                     if ((pc_fail | gpr_fail)) {
                         std::cout
