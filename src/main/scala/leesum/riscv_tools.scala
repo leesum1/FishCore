@@ -1169,16 +1169,26 @@ object FuOP extends ChiselEnum {
   val MulMulh = Value(31.U)
   val MulMulhsu = Value(32.U)
   val MulMulhu = Value(33.U)
-  val CsrRead = Value(34.U)
-  val CsrWrite = Value(35.U)
-  val CsrSet = Value(36.U)
-  val CsrClear = Value(37.U)
   val DivDiv = Value(38.U)
   val DivDivu = Value(39.U)
   val DivRem = Value(40.U)
   val DivRemu = Value(41.U)
   val Ebreak = Value(42.U)
   val Fence = Value(43.U)
+  val CSRRW = Value(44.U)
+  val CSRRS = Value(45.U)
+  val CSRRC = Value(46.U)
+
+  def is_csr(op: FuOP.Type): Bool = {
+    val csr_op_map = Seq(
+      FuOP.CSRRW,
+      FuOP.CSRRS,
+      FuOP.CSRRC
+    )
+    val csr_op_vec = VecInit(csr_op_map.map(_.asUInt))
+    val op_is_csr = csr_op_vec.contains(op.asUInt)
+    op_is_csr
+  }
 
   def is_alu(op: FuOP.Type): Bool = {
     val alu_op_map = Seq(

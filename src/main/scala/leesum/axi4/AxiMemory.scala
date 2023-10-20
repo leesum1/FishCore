@@ -1,10 +1,7 @@
 package leesum.axi4
 import chisel3._
 import chisel3.util.{Decoupled, Enum, is, isPow2, log2Ceil, switch}
-import circt.stage.ChiselStage
 import leesum.GenVerilogHelper
-
-import scala.math.BigInt.{int2bigInt, long2bigInt}
 class AXI4Memory(
     AXI_AW: Int, // axi address width
     AXI_DW: Int, // axi data width
@@ -617,41 +614,6 @@ class AXI4SlaveBrige(
 
 }
 
-class fsm_test extends Module {
-  val io = IO(new Bundle {
-    val in_valid = Input(Bool())
-    val in_data = Input(UInt(4.W))
-    val wire_out = Output(UInt(4.W))
-    val reg_out = Output(UInt(4.W))
-  })
-
-  val sIdle :: sFirst :: Nil = Enum(2)
-  val state = RegInit(sIdle)
-  val wire_a = WireInit(0.U(4.W))
-  val reg_a = RegInit(0.U(4.W))
-
-  // before switch, wire_a := 0.U, reg_a := 0.U
-  reg_a := 0.U
-  wire_a := 0.U
-  switch(state) {
-    is(sIdle) {
-      when(io.in_valid) {
-        state := sFirst
-        wire_a := io.in_data + 1.U
-        reg_a := io.in_data + 1.U
-      }
-    }
-    is(sFirst) {
-      when(io.in_valid) {
-        state := sIdle
-        wire_a := io.in_data + 2.U
-        reg_a := io.in_data + 2.U
-      }
-    }
-  }
-  io.wire_out := wire_a
-  io.reg_out := reg_a
-}
 object gen_verilog extends App {
   GenVerilogHelper(
     new AXI4Memory(

@@ -4,9 +4,8 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
-import chiseltest.simulator.WriteVcdAnnotation
 import leesum.TestUtils.long2UInt64
-import leesum.axi4.{AXI4Memory, fsm_test}
+import leesum.axi4.AXI4Memory
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 

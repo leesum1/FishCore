@@ -78,6 +78,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     when(FuOP.is_load(entry.fu_op)) {
       when(entry.lsu_io_space && !entry.complete) {
 
+        // TODO: mmio_commit.valid rely on mmio_commit.ready
         mmio_commit.valid := true.B
         when(io.mmio_commit.ready) {
           mmio_commit.bits := true.B

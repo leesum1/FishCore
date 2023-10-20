@@ -1,6 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, DecoupledIO, Enum, MuxLookup, Queue, is, switch}
+import chisel3.util.{Decoupled, DecoupledIO, Queue}
 
 class PipeLine[T <: Data](gen: T) extends Module {
   val io = IO(new Bundle {

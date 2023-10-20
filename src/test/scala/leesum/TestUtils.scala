@@ -1,10 +1,10 @@
 package leesum
 
 import chisel3._
-import chisel3.util.BitPat
-import chisel3.util.experimental.decode.{TruthTable, decoder}
 import leesum.TestUtils.{gen_axi_wstrb, sign_ext}
 import org.scalacheck.Gen
+
+import scala.language.implicitConversions
 
 object TestUtils {
 
@@ -132,4 +132,47 @@ object rand_test1 extends App {
   println(sign_test2.toHexString)
 
   println(wstrb.toBinaryString)
+}
+
+import chisel3.util._
+import chiseltest._
+
+class ExtendedDecoupledDriver[T <: Data](x: ReadyValidIO[T]) {
+  def expectDequeueAdditional(data: T, clock: Clock)(
+      addition_expect: => Unit
+  ): Unit = timescope {
+    // TODO: check for init
+    x.ready.poke(true.B)
+    fork
+      .withRegion(Monitor) {
+        x.waitForValid()
+        x.valid.expect(true.B)
+        x.bits.expect(data)
+        addition_expect
+      }
+      .joinAndStep(clock)
+  }
+
+  def enqueueAdditional(data: T, clock: Clock)(
+      addition_poke: => Unit
+  ): Unit = timescope {
+    x.bits.poke(data)
+    x.valid.poke(true.B)
+    addition_poke
+    fork
+      .withRegion(Monitor) {
+        while (!x.ready.peek().litToBoolean) {
+          clock.step(1)
+        }
+      }
+      .joinAndStep(clock)
+  }
+
+}
+object ExtendedDecoupledDriverImplicits {
+  implicit def toExtendedDriver[T <: Data](
+      x: ReadyValidIO[T]
+  ): ExtendedDecoupledDriver[T] = {
+    new ExtendedDecoupledDriver(x)
+  }
 }
