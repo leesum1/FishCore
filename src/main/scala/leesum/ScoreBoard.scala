@@ -149,7 +149,7 @@ class ScoreBoard(
       rob.content(rob_idx).bits.result_valid := true.B
 
       assert(
-        rob.random_access(rob_idx).valid,
+        rob.create_read_port(rob_idx).valid,
         "rob entry must be valid"
       )
     }
@@ -174,7 +174,7 @@ class ScoreBoard(
         rob.content(rob_idx).bits.result_valid := true.B
       }
       assert(
-        rob.random_access(rob_idx).valid,
+        rob.create_read_port(rob_idx).valid,
         "rob entry must be valid"
       )
     }
@@ -194,7 +194,7 @@ class ScoreBoard(
         .is_miss_predict := branch_resp.is_miss_predict
       rob.content(rob_idx).bits.bp.predict_pc := branch_resp.redirect_pc
       assert(
-        rob.random_access(rob_idx).valid,
+        rob.create_read_port(rob_idx).valid,
         "rob entry must be valid"
       )
     }
@@ -212,7 +212,7 @@ class ScoreBoard(
       rob.content(rob_idx).bits.result_valid := true.B
 
       assert(
-        rob.random_access(rob_idx).valid,
+        rob.create_read_port(rob_idx).valid,
         "rob entry must be valid"
       )
     }
@@ -296,7 +296,7 @@ class ScoreBoard(
       fu_result(idx)
     } else {
       val sbe_idx = idx - fu_id.length
-      val sbe_data = rob.random_access(sbe_idx.U).bits
+      val sbe_data = rob.create_read_port(sbe_idx.U).bits
       sbe_data.result
     }
   })
@@ -307,7 +307,7 @@ class ScoreBoard(
       .foreach(i => {
         when(
           fu_valid(i) && fu_result_valid(i) && (rob
-            .random_access(fu_id(i))
+            .create_read_port(fu_id(i))
             .bits
             .rd_addr === rs_addr) && rs_addr =/= 0.U
         ) {
@@ -317,7 +317,7 @@ class ScoreBoard(
 
     0.until(entries)
       .foreach(i => {
-        val rob_entry = rob.random_access(i.U)
+        val rob_entry = rob.create_read_port(i.U)
         when(
           rob_entry.valid && rob_entry.bits
             .rd_data_valid() && rob_entry.bits.rd_addr === rs_addr && rs_addr =/= 0.U
@@ -380,8 +380,8 @@ class ScoreBoard(
     i <- 0 until entries;
     j <- i + 1 until entries
   ) {
-    val entry_i = rob.random_access(i.U)
-    val entry_j = rob.random_access(j.U)
+    val entry_i = rob.create_read_port(i.U)
+    val entry_j = rob.create_read_port(j.U)
     val is_x0 = entry_i.bits.rd_addr === 0.U && entry_j.bits.rd_addr === 0.U
     when(
       entry_i.valid && entry_j.valid && entry_i.bits.rd_addr === entry_j.bits.rd_addr && !is_x0

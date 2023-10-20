@@ -76,13 +76,9 @@ class ReOrderBuffer(
     )
 
     val is_distinct = WireInit(true.B)
-    for (i <- 0 until fu_id.length) {
-      for (j <- i + 1 until fu_id.length) {
-        when(fu_valid(i) && fu_valid(j)) {
-          when(fu_id(i) === fu_id(j)) {
-            is_distinct := false.B
-          }
-        }
+    for (i <- fu_id.indices; j <- i + 1 until fu_id.length) {
+      when(fu_valid(i) && fu_valid(j) && fu_id(i) === fu_id(j)) {
+        is_distinct := false.B
       }
     }
     is_distinct
@@ -149,7 +145,7 @@ class ReOrderBuffer(
       rob.content(rob_idx).bits.result_valid := true.B
 
       assert(
-        rob.random_access(rob_idx).valid,
+        rob.create_read_port(rob_idx).valid,
         "rob entry must be valid"
       )
     }
@@ -174,7 +170,7 @@ class ReOrderBuffer(
         rob.content(rob_idx).bits.result_valid := true.B
       }
       assert(
-        rob.random_access(rob_idx).valid,
+        rob.create_read_port(rob_idx).valid,
         "rob entry must be valid"
       )
     }
@@ -194,7 +190,7 @@ class ReOrderBuffer(
         .is_miss_predict := branch_resp.is_miss_predict
       rob.content(rob_idx).bits.bp.predict_pc := branch_resp.redirect_pc
       assert(
-        rob.random_access(rob_idx).valid,
+        rob.create_read_port(rob_idx).valid,
         "rob entry must be valid"
       )
     }
@@ -212,7 +208,7 @@ class ReOrderBuffer(
       rob.content(rob_idx).bits.result_valid := true.B
 
       assert(
-        rob.random_access(rob_idx).valid,
+        rob.create_read_port(rob_idx).valid,
         "rob entry must be valid"
       )
     }
@@ -302,33 +298,79 @@ class ReOrderBuffer(
     )
   )
 
+//  def check_operand_bypass(
+//      bypass_req: OperandByPassReq,
+//      bypass_resp: OperandByPassResp
+//  ) = {
+//    val rob_idx_valid = rename_table.crate_read_port(bypass_req.rs_addr).valid
+//    val rob_idx = rename_table.crate_read_port(bypass_req.rs_addr).bits
+//
+//    when(rob_idx_valid) {
+//      val fu_id_eq =
+//        VecInit(
+//          fu_id.zip(fu_valid).zip(fu_result_valid).map {
+//            case ((id, valid), result_valid) =>
+//              id === rob_idx & valid & result_valid
+//          }
+//        )
+//
+//      assert(
+//        PopCount(fu_id_eq) <= 1.U,
+//        "rs1 bypass error, fu write back conflict"
+//      )
+//      when(fu_id_eq.reduce(_ | _)) {
+//        // fu write back with higher priority
+//        bypass_resp.fwd_valid := true.B
+//        bypass_resp.fwd_stall := false.B
+//        bypass_resp.rs_data := fu_result(fu_id_eq.indexWhere(_ === true.B))
+//      }.otherwise {
+//        val rob_entry = rob.content(rob_idx)
+//        assert(
+//          rob_entry.valid,
+//          "rs1 bypass error, rob entry must be valid"
+//        )
+//
+//        when(rob_entry.bits.rd_data_valid()) {
+//          bypass_resp.fwd_valid := true.B
+//          bypass_resp.fwd_stall := false.B
+//          bypass_resp.rs_data := rob_entry.bits.result
+//        }.otherwise {
+//          bypass_resp.fwd_valid := false.B
+//          bypass_resp.fwd_stall := true.B
+//        }
+//      }
+//    }
+//  }
+
   def check_operand_bypass(
       bypass_req: OperandByPassReq,
       bypass_resp: OperandByPassResp
   ) = {
-    val rob_idx_valid = rename_table.rand_access(bypass_req.rs_addr).valid
-    val rob_idx = rename_table.rand_access(bypass_req.rs_addr).bits
+    val rob_read = rename_table.crate_read_port(bypass_req.rs_addr)
+    val rob_idx_valid = rob_read.valid
+    val rob_idx = rob_read.bits
+    val rob_entry = rob.content(rob_idx)
 
     when(rob_idx_valid) {
-      val fu_id_eq =
-        VecInit(
-          fu_id.zip(fu_valid).zip(fu_result_valid).map {
-            case ((id, valid), result_valid) =>
-              id === rob_idx & valid & result_valid
-          }
-        )
+      val is_fu_ready = VecInit(
+        fu_id.zip(fu_valid).zip(fu_result_valid).map {
+          case ((id, valid), result_valid) =>
+            id === rob_idx & valid & result_valid
+        }
+      )
+
+      val is_any_fu_ready = is_fu_ready.reduce(_ | _)
 
       assert(
-        PopCount(fu_id_eq) <= 1.U,
+        PopCount(is_fu_ready) <= 1.U,
         "rs1 bypass error, fu write back conflict"
       )
-      when(fu_id_eq.reduce(_ | _)) {
-        // fu write back with higher priority
+
+      when(is_any_fu_ready) {
         bypass_resp.fwd_valid := true.B
         bypass_resp.fwd_stall := false.B
-        bypass_resp.rs_data := fu_result(fu_id_eq.indexWhere(_ === true.B))
+        bypass_resp.rs_data := fu_result(is_fu_ready.indexWhere(_ === true.B))
       }.otherwise {
-        val rob_entry = rob.content(rob_idx)
         assert(
           rob_entry.valid,
           "rs1 bypass error, rob entry must be valid"
@@ -355,7 +397,10 @@ class ReOrderBuffer(
   require(io.operand_bypass_resp.length == io.operand_bypass_req.length)
 
   for (i <- 0 until io.operand_bypass_req.length) {
-    check_operand_bypass(io.operand_bypass_req(i), io.operand_bypass_resp(i))
+    check_operand_bypass(
+      io.operand_bypass_req(i),
+      io.operand_bypass_resp(i)
+    )
   }
 
   // ----------------------

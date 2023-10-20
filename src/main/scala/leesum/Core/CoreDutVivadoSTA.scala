@@ -204,7 +204,3 @@ class CoreDutVivadoSTA(random_latency: Boolean = false) extends Module {
 object gen_CoreTestDutVivadoSTA_verilog extends App {
   GenVerilogHelper(new CoreDutVivadoSTA())
 }
-
-object gen_CoreTestDutRename_verilog extends App {
-  GenVerilogHelper(new CoreDutWithRename(random_latency = true))
-}

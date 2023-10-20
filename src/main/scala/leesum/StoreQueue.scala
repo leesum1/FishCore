@@ -9,7 +9,6 @@ import chisel3.util.{
   Valid,
   is,
   isPow2,
-  log2Ceil,
   switch
 }
 class StoreQueueIn extends Bundle {
@@ -97,7 +96,7 @@ class StoreQueue(
     io.store_commit.fire,
     io.dcache_req.fire,
     false.B,
-    speculate_store_fifo.peek_last().bits
+    speculate_store_fifo.peek().bits
   )
 
   // ----------------------------
@@ -113,7 +112,7 @@ class StoreQueue(
 
   def send_dcache_store_req() = {
     when(!commit_store_fifo.empty) {
-      val entry = commit_store_fifo.peek_last()
+      val entry = commit_store_fifo.peek()
       assert(entry.valid, "commit store queue must be valid")
 
       io.dcache_req.valid := true.B
@@ -165,9 +164,9 @@ class StoreQueue(
 
   val all_fifo: Seq[Valid[StoreQueueIn]] =
     0.until(speculate_store_queue_size).indices.map { i =>
-      speculate_store_fifo.random_access(i.U)
+      speculate_store_fifo.create_read_port(i.U)
     } ++ 0.until(commit_store_queue_size).indices.map { i =>
-      commit_store_fifo.random_access(i.U)
+      commit_store_fifo.create_read_port(i.U)
     }
 
   val addr_match_mask = all_fifo.map { entry =>

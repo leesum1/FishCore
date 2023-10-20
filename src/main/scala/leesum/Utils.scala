@@ -13,11 +13,15 @@ object GenVerilogHelper {
     val result = command.!! // execute the command
     println(result)
   }
-  def apply(gen: => RawModule): Unit = {
+  def apply(gen: => RawModule, location: String = ""): Unit = {
     val projectDir = System.getProperty("user.dir")
 
     val verilogDir = s"$projectDir/gen_verilog"
-    val file_path = verilogDir + '/' + "test.sv"
+    val file_path = if (location.trim().nonEmpty) {
+      location + '/' + "test.sv"
+    } else {
+      verilogDir + '/' + "test.sv"
+    }
 
     val x = ChiselStage.emitSystemVerilog(
       gen = gen,

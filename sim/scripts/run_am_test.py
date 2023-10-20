@@ -1,36 +1,28 @@
 import glob
 import os
-import subprocess
+import utilts
+
 from concurrent.futures import ThreadPoolExecutor
 
 am_test_path = os.path.join("/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build")
-
-print(am_test_path)
 
 # find all .bin files in am_test_path
 # Use the glob module to search for all .bin files in the directory
 bin_files = glob.glob(os.path.join(am_test_path, "*.bin"))
 
 
-def execute_command(bin_name):
+def execute_am_test(bin_name):
     # 构建命令字符串
-    command = f"xmake r Vtop -f {bin_name}"
+    command = f"xmake r Vtop --am --clk=10000000 -f  {bin_name}"
 
     # 执行命令
-    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    # 获取执行的返回值
-    return_code = result.returncode
-
-    # 输出命令的标准输出和标准错误
-    stdout_output = result.stdout.decode("utf-8")
-    stderr_output = result.stderr.decode("utf-8")
+    am_test_ret = utilts.execute_command(command, enable_print=False)
 
     return {
         "bin_file": bin_name,
-        "return_code": return_code,
-        "stdout_output": stdout_output,
-        "stderr_output": stderr_output
+        "return_code": am_test_ret["return_code"],
+        "stdout_output": am_test_ret["stdout_output"],
+        "stderr_output": am_test_ret["stderr_output"]
     }
 
 
@@ -41,14 +33,14 @@ def print_result(result):
     print(f"Standard Error:\n{result['stderr_output']}")
 
 
-crc32_result = execute_command(os.path.join(am_test_path, "recursion-riscv64-nemu.bin"))
-
-print_result(crc32_result)
+# crc32_result = execute_am_test(os.path.join(am_test_path, "crc32-riscv64-nemu.elf"))
+#
+# print_result(crc32_result)
 
 # 使用 ThreadPoolExecutor 并行执行命令
 results = []
 with ThreadPoolExecutor() as executor:
-    futures = [executor.submit(execute_command, bin_file) for bin_file in bin_files]
+    futures = [executor.submit(execute_am_test, bin_file) for bin_file in bin_files]
     for future in futures:
         result = future.result()
         results.append(result)

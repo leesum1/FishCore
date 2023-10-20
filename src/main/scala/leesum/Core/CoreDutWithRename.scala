@@ -200,8 +200,11 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
 
 }
 
-object gen_CoreTestDutSTA_verilog extends App {
+object gen_CoreTestWithRename extends App {
   //  GenVerilogHelper(new CoreTestDut("src/main/resources/random_file.bin"))
-  GenVerilogHelper(new CoreDutWithRename)
+  GenVerilogHelper(
+    new CoreDutWithRename,
+    "/home/leesum/workhome/chisel-fish/sim/vsrc"
+  )
   //  GenVerilogHelper(new CoreTestDut2)
 }

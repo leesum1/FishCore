@@ -3,20 +3,20 @@ package leesum
 import chisel3._
 import chisel3.util.{Decoupled, Valid, isPow2, log2Ceil}
 
+/** This is a FIFO, which use Mem as storage. And each element in the FIFO has a
+  * valid bit. The FIFO has a push port and a pop port, and can read randomly
+  * through the create_read_port API.
+  * @param gen
+  * @param size
+  * @param name
+  * @tparam T
+  */
 class ValidFIFO[T <: Data](
     gen: T,
     size: Int,
-    name: String,
-    push_ports: Int = 1,
-    pop_ports: Int = 1,
-    use_mem: Boolean = false
+    name: String
 ) {
   require(isPow2(size), "content must have power-of-2 number of entries")
-
-//  val content =
-//    Mem(size, new Valid(gen)).suggestName(name + "_content")
-
-//  val content = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(new Valid(gen)))))
 
   private val content_data = Mem(size, gen).suggestName(name + "_data")
   private val content_valid =
@@ -53,11 +53,11 @@ class ValidFIFO[T <: Data](
     content_valid(ptr) := valid
   }
 
-  def random_access(addr: UInt): Valid[T] = {
+  def create_read_port(addr: UInt): Valid[T] = {
     read(addr)
   }
 
-  def peek_last(): Valid[T] = {
+  def peek(): Valid[T] = {
     read(pop_ptr)
   }
 
@@ -114,6 +114,17 @@ class ValidFIFO[T <: Data](
   }
 }
 
+/** This is a multi-port FIFO, which use Reg as storage. And each element in the
+  * FIFO has a valid bit. And you can use create_read_port API to read
+  * randomly.The flag signals(push_ptr, pop_ptr, num_counter, free_entries) were
+  * all register.
+  * @param gen
+  * @param size
+  * @param name
+  * @param num_push_ports
+  * @param num_pop_ports
+  * @tparam T
+  */
 class MultiPortValidFIFO[T <: Data](
     gen: T,
     size: Int,
@@ -174,7 +185,7 @@ class MultiPortValidFIFO[T <: Data](
     last
   }
 
-  def random_access(addr: UInt): Valid[T] = {
+  def create_read_port(addr: UInt): Valid[T] = {
     assert(addr < size.U, "addr must less than size")
     content(addr)
   }
@@ -270,6 +281,17 @@ class MultiPortValidFIFO[T <: Data](
   }
 }
 
+/** This is a multi-port FIFO, which use Reg as storage. And each element in the
+  * FIFO has a valid bit. And you can use create_read_port API to read
+  * randomly.The flag signals(push_ptr, pop_ptr, num_counter, free_entries) were
+  * not all register.
+  * @param gen
+  * @param size
+  * @param name
+  * @param num_push_ports
+  * @param num_pop_ports
+  * @tparam T
+  */
 class MultiPortValidFIFO2[T <: Data](
     gen: T,
     size: Int,
@@ -333,7 +355,7 @@ class MultiPortValidFIFO2[T <: Data](
     last
   }
 
-  def random_access(addr: UInt): Valid[T] = {
+  def create_read_port(addr: UInt): Valid[T] = {
     assert(addr < size.U, "addr must less than size")
     content(addr)
   }
@@ -425,6 +447,170 @@ class MultiPortValidFIFO2[T <: Data](
   }
 }
 
+/** This is a multi-port FIFO, which use Mem as storage. And each element in the
+  * FIFO has a valid bit.This MultiPortValidFIFO can only support push and pop
+  * operation.Don't support random read or write.The push ports and pop ports
+  * must be ordered(the later port can be set only if the early port was set).
+  * @param gen
+  * @param size
+  * @param name
+  * @param num_push_ports
+  * @param num_pop_ports
+  * @tparam T
+  */
+class MultiPortValidFIFOUseMem[T <: Data](
+    gen: T,
+    size: Int,
+    name: String,
+    num_push_ports: Int,
+    num_pop_ports: Int
+) {
+  require(
+    num_push_ports > 0,
+    "MultiportFIFO must have non-zero number of push-ports"
+  )
+  require(
+    num_pop_ports > 0,
+    "MultiportFIFO must have non-zero number of pop-ports"
+  )
+  val ptr_width = log2Ceil(size)
+
+  val fifo_valid = RegInit(VecInit(Seq.fill(size)(false.B)))
+  val fifo_data = Mem(size, gen).suggestName(name + "_data")
+
+  val push_ptr_seq = RegInit(
+    VecInit(Seq.tabulate(num_push_ports)(i => i.U(ptr_width.W)))
+  )
+  val pop_ptr_seq = RegInit(
+    VecInit(Seq.tabulate(num_pop_ports)(i => i.U(ptr_width.W)))
+  )
+
+  private def push_ptr_inc(size: UInt): Unit = {
+    assert(size <= num_push_ports.U, "size must less than num_push_ports")
+    push_ptr_seq.foreach({ ptr =>
+      ptr := ptr + size
+    })
+  }
+  private def pop_ptr_inc(size: UInt): Unit = {
+    assert(size <= num_pop_ports.U, "size must less than num_pop_ports")
+    pop_ptr_seq.foreach({ ptr =>
+      ptr := ptr + size
+    })
+  }
+
+  val num_counter = RegInit(0.U((log2Ceil(size) + 1).W))
+  val free_entries = RegInit(size.U(log2Ceil(size + 1).W))
+
+  val empty = num_counter === 0.U
+  val full = num_counter(log2Ceil(size)) === 1.U
+  val occupied_entries = num_counter
+
+  empty.suggestName(name + "_empty")
+  full.suggestName(name + "_full")
+  free_entries.suggestName(name + "_free_entries")
+  occupied_entries.suggestName(name + "_occupied_entries")
+
+  def peek(): Vec[Valid[T]] = {
+    val last = Wire(Vec(num_pop_ports, Valid(gen)))
+    for (i <- 0 until num_pop_ports) {
+      val current_pop_ptr = pop_ptr_seq(i)
+      last(i).valid := fifo_valid(current_pop_ptr)
+      last(i).bits := fifo_data(current_pop_ptr)
+    }
+    last
+  }
+
+  def flush(flush_cond: Bool): Unit = {
+    when(flush_cond) {
+      num_counter := 0.U
+      free_entries := size.U
+      push_ptr_seq.zipWithIndex.foreach({ case (ptr, i) =>
+        ptr := i.U
+      })
+      pop_ptr_seq.zipWithIndex.foreach({ case (ptr, i) =>
+        ptr := i.U
+      })
+      fifo_valid.foreach({ v =>
+        v := false.B
+      })
+    }
+  }
+
+  def push_pop_flush_cond_multi_port(
+      push_cond: Vec[Bool],
+      pop_cond: Vec[Bool],
+      flush_cond: Bool,
+      entry: Vec[T]
+  ): Unit = {
+
+    require(push_cond.length == num_push_ports)
+    require(pop_cond.length == num_pop_ports)
+    require(entry.length == num_push_ports)
+    // -------------------
+    // push
+    // -------------------
+    for (i <- 0 until num_push_ports) {
+      when(push_cond(i)) {
+        val current_push_ptr = push_ptr_seq(i)
+        fifo_valid(current_push_ptr) := true.B
+        fifo_data(current_push_ptr) := entry(i)
+      }
+    }
+    // -------------------
+    // pop
+    // -------------------
+    for (i <- 0 until num_pop_ports) {
+      when(pop_cond(i)) {
+        val current_pop_ptr = pop_ptr_seq(i)
+        fifo_valid(current_pop_ptr) := false.B
+      }
+    }
+
+    // -----------------------
+    // update ptr
+    // -----------------------
+    val push_count = PopCountOrder(push_cond)
+    val pop_count = PopCountOrder(pop_cond)
+
+    push_ptr_inc(push_count)
+    pop_ptr_inc(pop_count)
+
+    num_counter := num_counter + push_count - pop_count
+    free_entries := free_entries - push_count + pop_count
+    // -----------------------
+    // flash
+    // -----------------------
+    flush(flush_cond)
+    // -----------------------
+    // assert
+    // -----------------------
+    assert(CheckOrder(push_cond), "push_cond must be ordered")
+    assert(CheckOrder(pop_cond), "pop_cond must be ordered")
+    assert(push_count <= free_entries, "push_cond should not overflow")
+    assert(
+      pop_count <= occupied_entries,
+      "pop_cond should not overflow"
+    )
+
+    when(RegNext(flush_cond)) {
+      assert(num_counter === 0.U, "num_counter should be zero after flush")
+      assert(free_entries === size.U, "free_entries should be size after flush")
+      assert(
+        pop_ptr_seq === VecInit(
+          Seq.tabulate(num_pop_ports)(i => i.U(ptr_width.W))
+        ),
+        "pop_ptr_seq should be zero after flush"
+      )
+      assert(
+        push_ptr_seq === VecInit(
+          Seq.tabulate(num_push_ports)(i => i.U(ptr_width.W))
+        ),
+        "push_ptr_seq should be zero after flush"
+      )
+    }
+  }
+}
+
 class DummyValidFIFO extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(UInt(64.W)))
@@ -436,8 +622,8 @@ class DummyValidFIFO extends Module {
 
   fifo.push_pop_flush_cond(io.in.fire, io.out.fire, io.flush, io.in.bits)
 
-  io.out.bits := fifo.peek_last().bits
-  io.out.valid := fifo.peek_last().valid && !fifo.empty
+  io.out.bits := fifo.peek().bits
+  io.out.valid := fifo.peek().valid && !fifo.empty
   io.in.ready := !fifo.full
 }
 

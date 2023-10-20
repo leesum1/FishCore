@@ -5,16 +5,6 @@
 #include "difftest.hpp"
 #include "CLI/CLI.hpp"
 
-void check_regs(std::span<uint64_t> ref_regs, std::span<uint64_t> dut_regs) {
-    for (auto idx: std::views::iota(0, 32)) {
-        auto ref_val = ref_regs[idx];
-        auto dut_val = dut_regs[idx];
-        if (ref_val != dut_val) {
-            std::cout << std::format("reg {} mismatch: ref: 0x{:016x}, dut: 0x{:016x}", idx, ref_val, dut_val);
-        }
-    }
-}
-
 
 int main(int argc, char **argv) {
 
@@ -25,19 +15,22 @@ int main(int argc, char **argv) {
     std::string file_name;
     bool wave_en = false;
     bool difftest_en = false;
+    bool am_en = false;
+    bool debug_en = false;
     long max_cycles = 5000;
     std::optional<std::string> dump_signature_file;
 
     CLI::App app{"Simulator for RISC-V"};
     app.add_option("-f,--file", file_name, "bin/elf file load to the ram")->required();
     app.add_option("-s,--signature", dump_signature_file, "dump signature file(for riscof)")->default_val(std::nullopt);
+    app.add_option("--clk", max_cycles, "max cycles")->default_val(50000);
+    app.add_flag("--am", am_en, "enable am")->default_val(false);
     app.add_flag("-w,--wave", wave_en, "enable wave trace")->default_val(false);
     app.add_flag("-d,--difftest", difftest_en, "enable difftest with rv64emu")->default_val(false);
-    app.add_option("--clk", max_cycles, "max cycles")->default_val(5000);
+    app.add_flag("--debug", debug_en, "enable debug")->default_val(false);
+
 
     CLI11_PARSE(app, argc, argv);
-
-
     auto sim_base = SimBase();
     auto sim_mem = SynReadMemorySim(MEM_SIZE);
 
@@ -95,11 +88,11 @@ int main(int argc, char **argv) {
                     return true;
                 } else if (difftest_en & diff_ref.has_value()) {
                     diff_ref->step(step_num);
-                    bool pc_fail = diff_ref->check_pc(diff_ref->get_pc(), sim_base.get_pc(), false);
+                    bool pc_fail = diff_ref->check_pc(diff_ref->get_pc(), sim_base.get_pc(), debug_en);
                     bool gpr_fail = diff_ref->check_gprs(
                             [&](size_t idx) { return sim_base.get_reg(idx); },
                             [&](size_t idx) { return diff_ref->get_reg(idx); },
-                            false
+                            debug_en
                     );
                     if ((pc_fail | gpr_fail)) {
                         std::cout
@@ -138,12 +131,14 @@ int main(int argc, char **argv) {
                              double_t(commit_num) / clk_num);
 
 
-    auto success = sim_base.get_reg(10) == 0;
+    bool success =
+            am_en ? sim_base.get_reg(10) == 0 : true;
 
 
-    // return zero if success
-//    return !(success & !sim_abort);
-    return sim_abort;
+    // zero means success
+    bool return_code = !(success & !sim_abort);
+
+    return return_code;
 }
 
 

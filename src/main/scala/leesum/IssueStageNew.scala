@@ -46,7 +46,7 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
   // issue fifo
   // ----------------
 
-  val issue_fifo = new MultiPortValidFIFO2(
+  val issue_fifo = new MultiPortValidFIFOUseMem(
     new ScoreBoardEntry(),
     8,
     name = "i_fifo",
@@ -62,12 +62,6 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
   )
 
   val issue_peek = issue_fifo.peek()
-
-//  0.until(num_push_port)
-//    .foreach({ i =>
-//      io.push_port(i)
-//        .ready := !issue_fifo.random_access(issue_fifo.push_ptr_seq(i)).valid
-//    })
 
   0.until(num_push_port)
     .foreach({ i =>
@@ -557,7 +551,6 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
       "only one valid signal can be true"
     )
   })
-
 }
 
 object gen_IssueStageNew_verilog extends App {
