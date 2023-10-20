@@ -79,7 +79,8 @@ class CoreDutVivadoSTA(random_latency: Boolean = false) extends Module {
   axi_mem.io.axi_slave.b <> dcache.io.axi_mem.b
 
   // fu
-  val alu = Module(new FuAlu)
+
+  val alu_seq = Seq.fill(2)(Module(new FuAlu))
   val lsu = Module(new LSU)
   val bru = Module(new FuBranch)
 //  val mul_div = Module(new FuMulDiv)
@@ -152,7 +153,10 @@ class CoreDutVivadoSTA(random_latency: Boolean = false) extends Module {
   rob.io.operand_bypass_req := issue_stage_rob.io.operand_bypass_req
 
   // issue stage <> fu
-  issue_stage_rob.io.fu_port.alu_0 <> alu.io.in
+  require(issue_stage_rob.io.fu_port.alu.length == alu_seq.length)
+  for (i <- 0 until alu_seq.length) {
+    issue_stage_rob.io.fu_port.alu(i) <> alu_seq(i).io.in
+  }
   issue_stage_rob.io.fu_port.lsu_0 <> lsu.io.lsu_req
   issue_stage_rob.io.fu_port.branch_0 <> bru.io.in
   issue_stage_rob.io.fu_port.mul_0.nodeq()
@@ -164,7 +168,10 @@ class CoreDutVivadoSTA(random_latency: Boolean = false) extends Module {
   issue_stage_rob.io.gpr_read_port <> reg_file.io.read_ports
 
   // scoreboard <> fu
-  rob.io.fu_alu_wb_port <> alu.io.out
+  require(rob.io.fu_alu_wb_port.length == alu_seq.length)
+  for (i <- 0 until alu_seq.length) {
+    rob.io.fu_alu_wb_port(i) <> alu_seq(i).io.out
+  }
   rob.io.fu_lsu_wb_port <> lsu.io.lsu_resp
   rob.io.fu_branch_wb_port <> bru.io.out
 

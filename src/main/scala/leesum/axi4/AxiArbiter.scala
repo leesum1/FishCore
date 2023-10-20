@@ -1,7 +1,6 @@
 package leesum.axi4
 import chisel3._
-import chisel3.util.{Enum, HasBlackBoxResource, MuxLookup, is, switch}
-import leesum.{GenMaskZero, GenVerilogHelper}
+import chisel3.util.{Enum, is, switch}
 import leesum.axi4.AXIDef._
 
 class AxiReadArbiter extends Module {
@@ -21,6 +20,22 @@ class AxiReadArbiter extends Module {
   val r_sel_idx = VecInit(io.in.map(_.ar.valid)).indexWhere(_ === true.B)
   val r_sel_idx_valid = io.in.map(_.ar.valid).reduce(_ || _)
 
+  def select_input(): Unit = {
+    when(r_sel_idx_valid) {
+      assert(r_sel_idx < 2.U, "idx must less than num_input")
+      assert(io.in(r_sel_idx).ar.valid, "in_req(idx) must be valid")
+      io.out.ar <> io.in(r_sel_idx).ar
+      when(io.out.ar.fire) {
+        r_occupied_sel_buf := r_sel_idx
+        r_state := sWaitResp
+      }.otherwise {
+        r_state := sReadIdle
+      }
+    }.otherwise {
+      r_state := sReadIdle
+    }
+  }
+
   io.in.foreach(_.ar.nodeq())
   io.in.foreach(_.r.noenq())
   io.in.foreach(_.aw.nodeq())
@@ -35,24 +50,12 @@ class AxiReadArbiter extends Module {
 
   switch(r_state) {
     is(sReadIdle) {
-      when(r_sel_idx_valid) {
-        assert(r_sel_idx < 2.U, "idx must less than num_input")
-        assert(io.in(r_sel_idx).ar.valid, "in_req(idx) must be valid")
-        io.out.ar <> io.in(r_sel_idx).ar
-        when(io.out.ar.fire) {
-          r_occupied_sel_buf := r_sel_idx
-          r_state := sWaitResp
-        }.otherwise {
-          r_state := sReadIdle
-        }
-      }.otherwise {
-        r_state := sReadIdle
-      }
+      select_input()
     }
     is(sWaitResp) {
       io.in(r_occupied_sel_buf).r <> io.out.r
       when(io.out.r.fire) {
-        r_state := sReadIdle
+        select_input()
       }
     }
   }

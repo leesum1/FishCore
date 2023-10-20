@@ -17,7 +17,11 @@ class RenameTable(set_ports_num: Int, clear_ports_num: Int, rob_nums: Int) {
   private val rename_table_valid = RegInit(
     VecInit(Seq.fill(32)(false.B))
   )
-  private val rename_table_data = Mem(32, UInt(rob_ptr_width.W))
+//  private val rename_table_data = Mem(32, UInt(rob_ptr_width.W))
+
+  private val rename_table_data = RegInit(
+    VecInit(Seq.fill(32)(0.U(rob_ptr_width.W)))
+  )
 
   private def read(addr: UInt): Valid[UInt] = {
     assert(addr < 32.U, "addr must less than 32")

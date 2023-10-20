@@ -5,6 +5,7 @@
 compile_commands.json
 test.sv
 build/
+scripts/__pycache__/
 
 # MacOS Cache
 .DS_Store

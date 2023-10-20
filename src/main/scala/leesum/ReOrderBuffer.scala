@@ -46,7 +46,7 @@ class ReOrderBuffer(
 
       // write-back port
       // alu
-      val fu_alu_wb_port = Flipped(Decoupled(new AluResp))
+      val fu_alu_wb_port = Vec(2, Flipped(Decoupled(new AluResp)))
       // branch
       val fu_branch_wb_port = Flipped(Decoupled(new FuBranchResp))
       // lsu_port
@@ -54,39 +54,6 @@ class ReOrderBuffer(
       //  mul_div_port
       val fu_mul_div_wb_port = Flipped(Decoupled(new FuMulDivResp))
     }
-  )
-
-  // if Write-back ID conflict, then return false
-  def check_write_back_conflict(): Bool = {
-    val fu_valid = VecInit(
-      Seq(
-        io.fu_alu_wb_port.fire,
-        io.fu_branch_wb_port.fire,
-        io.fu_lsu_wb_port.fire,
-        io.fu_mul_div_wb_port.fire
-      )
-    )
-    val fu_id = VecInit(
-      Seq(
-        io.fu_alu_wb_port.bits.trans_id,
-        io.fu_branch_wb_port.bits.trans_id,
-        io.fu_lsu_wb_port.bits.trans_id,
-        io.fu_mul_div_wb_port.bits.trans_id
-      )
-    )
-
-    val is_distinct = WireInit(true.B)
-    for (i <- fu_id.indices; j <- i + 1 until fu_id.length) {
-      when(fu_valid(i) && fu_valid(j) && fu_id(i) === fu_id(j)) {
-        is_distinct := false.B
-      }
-    }
-    is_distinct
-  }
-
-  assert(
-    check_write_back_conflict(),
-    "write-back conflict"
   )
 
   // ---------------------------
@@ -214,12 +181,14 @@ class ReOrderBuffer(
     }
   }
 
-  io.fu_alu_wb_port.ready := true.B
+  io.fu_alu_wb_port.foreach(_.ready := true.B)
   io.fu_branch_wb_port.ready := true.B
   io.fu_lsu_wb_port.ready := true.B
   io.fu_mul_div_wb_port.ready := true.B
 
-  alu_write_back(io.fu_alu_wb_port.bits, io.fu_alu_wb_port.fire)
+  io.fu_alu_wb_port.foreach(alu_resp =>
+    alu_write_back(alu_resp.bits, alu_resp.fire)
+  )
   mul_div_write_back(io.fu_mul_div_wb_port.bits, io.fu_mul_div_wb_port.fire)
   lsu_write_back(io.fu_lsu_wb_port.bits, io.fu_lsu_wb_port.fire)
   branch_write_back(io.fu_branch_wb_port.bits, io.fu_branch_wb_port.fire)
@@ -266,81 +235,37 @@ class ReOrderBuffer(
   // bypass logic
   // ----------------------
   val fu_valid = VecInit(
-    Seq(
-      io.fu_alu_wb_port.fire,
-      io.fu_branch_wb_port.fire,
-      io.fu_lsu_wb_port.fire,
-      io.fu_mul_div_wb_port.fire
-    )
+    io.fu_alu_wb_port.map(_.fire) ++
+      Seq(
+        io.fu_branch_wb_port.fire,
+        io.fu_lsu_wb_port.fire,
+        io.fu_mul_div_wb_port.fire
+      )
   )
   val fu_id = VecInit(
-    Seq(
-      io.fu_alu_wb_port.bits.trans_id,
-      io.fu_branch_wb_port.bits.trans_id,
-      io.fu_lsu_wb_port.bits.trans_id,
-      io.fu_mul_div_wb_port.bits.trans_id
-    )
+    io.fu_alu_wb_port.map(_.bits.trans_id) ++
+      Seq(
+        io.fu_branch_wb_port.bits.trans_id,
+        io.fu_lsu_wb_port.bits.trans_id,
+        io.fu_mul_div_wb_port.bits.trans_id
+      )
   )
   val fu_result = VecInit(
-    Seq(
-      io.fu_alu_wb_port.bits.res,
-      io.fu_branch_wb_port.bits.wb_data,
-      io.fu_lsu_wb_port.bits.wb_data,
-      io.fu_mul_div_wb_port.bits.data
-    )
+    io.fu_alu_wb_port.map(_.bits.res) ++
+      Seq(
+        io.fu_branch_wb_port.bits.wb_data,
+        io.fu_lsu_wb_port.bits.wb_data,
+        io.fu_mul_div_wb_port.bits.data
+      )
   )
   val fu_result_valid = VecInit(
-    Seq(
-      io.fu_alu_wb_port.fire,
-      io.fu_branch_wb_port.bits.wb_valid,
-      io.fu_lsu_wb_port.bits.wb_data_valid,
-      io.fu_mul_div_wb_port.fire
-    )
+    io.fu_alu_wb_port.map(_.fire) ++
+      Seq(
+        io.fu_branch_wb_port.bits.wb_valid,
+        io.fu_lsu_wb_port.bits.wb_data_valid,
+        io.fu_mul_div_wb_port.fire
+      )
   )
-
-//  def check_operand_bypass(
-//      bypass_req: OperandByPassReq,
-//      bypass_resp: OperandByPassResp
-//  ) = {
-//    val rob_idx_valid = rename_table.crate_read_port(bypass_req.rs_addr).valid
-//    val rob_idx = rename_table.crate_read_port(bypass_req.rs_addr).bits
-//
-//    when(rob_idx_valid) {
-//      val fu_id_eq =
-//        VecInit(
-//          fu_id.zip(fu_valid).zip(fu_result_valid).map {
-//            case ((id, valid), result_valid) =>
-//              id === rob_idx & valid & result_valid
-//          }
-//        )
-//
-//      assert(
-//        PopCount(fu_id_eq) <= 1.U,
-//        "rs1 bypass error, fu write back conflict"
-//      )
-//      when(fu_id_eq.reduce(_ | _)) {
-//        // fu write back with higher priority
-//        bypass_resp.fwd_valid := true.B
-//        bypass_resp.fwd_stall := false.B
-//        bypass_resp.rs_data := fu_result(fu_id_eq.indexWhere(_ === true.B))
-//      }.otherwise {
-//        val rob_entry = rob.content(rob_idx)
-//        assert(
-//          rob_entry.valid,
-//          "rs1 bypass error, rob entry must be valid"
-//        )
-//
-//        when(rob_entry.bits.rd_data_valid()) {
-//          bypass_resp.fwd_valid := true.B
-//          bypass_resp.fwd_stall := false.B
-//          bypass_resp.rs_data := rob_entry.bits.result
-//        }.otherwise {
-//          bypass_resp.fwd_valid := false.B
-//          bypass_resp.fwd_stall := true.B
-//        }
-//      }
-//    }
-//  }
 
   def check_operand_bypass(
       bypass_req: OperandByPassReq,
@@ -406,6 +331,21 @@ class ReOrderBuffer(
   // ----------------------
   // assert
   // ----------------------
+
+  // if Write-back ID conflict, then return false
+  def check_write_back_conflict(): Bool = {
+    val is_distinct = WireInit(true.B)
+    for (i <- fu_id.indices; j <- i + 1 until fu_id.length) {
+      when(fu_valid(i) && fu_valid(j) && fu_id(i) === fu_id(j)) {
+        is_distinct := false.B
+      }
+    }
+    is_distinct
+  }
+  assert(
+    check_write_back_conflict(),
+    "write-back conflict"
+  )
 
   rob.content.foreach(entry => {
     when(entry.valid) {

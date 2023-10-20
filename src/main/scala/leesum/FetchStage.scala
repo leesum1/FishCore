@@ -1,7 +1,6 @@
 package leesum
 import chisel3._
 import chisel3.util.{Decoupled, DecoupledIO, Enum, Queue, is, switch}
-import axi4.{AXI4Memory, AXIDef, AXIMasterIO, StreamFork, StreamFork2}
 
 class FetchResp extends Bundle {
   val pc = UInt(64.W)

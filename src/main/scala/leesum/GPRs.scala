@@ -1,6 +1,5 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, Valid, isPow2, log2Ceil}
 import leesum.moniter.GERMonitorPort
 
 class RegFile {
@@ -45,6 +44,8 @@ class GPRs(read_port_num: Int, write_port_num: Int, monitor_en: Boolean = false)
     io.read_ports(i).rs1_data := rf.read(io.read_ports(i).rs1_addr)
     io.read_ports(i).rs2_data := rf.read(io.read_ports(i).rs2_addr)
   }
+
+  // if multiple write ports write to the same address, the last one will take effect
   for (i <- 0 until write_port_num) {
     when(io.write_ports(i).wen) {
       rf.write(io.write_ports(i).addr, io.write_ports(i).wdata)
@@ -62,13 +63,6 @@ class GPRs(read_port_num: Int, write_port_num: Int, monitor_en: Boolean = false)
   // assert
   // -----------------------
 
-  assert(
-    CheckUnique(
-      VecInit(io.write_ports.map(wp => Mux(wp.wen, wp.addr, 0.U))),
-      0.U
-    ),
-    "write address conflict"
-  )
 }
 
 object gen_gprs_verilog extends App {

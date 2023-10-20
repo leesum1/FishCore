@@ -3,23 +3,16 @@ package leesum
 import chisel3._
 import chisel3.util._
 
-//class FuIO extends Bundle {
-//
-//  val alu_0 = Decoupled(new AluReq())
-//  val branch_0 = Decoupled(new FuBranchReq())
-//  val lsu_0 = Decoupled(new LSUReq)
-//  val mul_0 = Decoupled(new MulReq)
-//  val div_0 = Decoupled(new DivReq)
-//
-//  val csr_0 = Decoupled(UInt(32.W))
-//}
-//
-//class RegFileReadPort extends Bundle {
-//  val rs1_addr = Output(UInt(5.W))
-//  val rs2_addr = Output(UInt(5.W))
-//  val rs1_data = Input(UInt(64.W))
-//  val rs2_data = Input(UInt(64.W))
-//}
+class FuReq extends Bundle {
+
+  val alu = Vec(2, Decoupled(new AluReq()))
+  val branch_0 = Decoupled(new FuBranchReq())
+  val lsu_0 = Decoupled(new LSUReq)
+  val mul_0 = Decoupled(new MulReq)
+  val div_0 = Decoupled(new DivReq)
+
+  val csr_0 = Decoupled(UInt(32.W))
+}
 
 class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
   val io = IO(new Bundle {
@@ -36,7 +29,7 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
     val operand_bypass_resp =
       Input(Vec(num_pop_port * 2, new OperandByPassResp()))
 
-    val fu_port = new FuIO()
+    val fu_port = new FuReq()
   })
 
   require(num_pop_port == 2, "only support 2 pop port now")
@@ -72,7 +65,7 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
   // fu pipeline
   // ------------------
 
-  val alu_0_pipe = Wire(Decoupled(new AluReq()))
+  val alu_pipe_vec = Wire(Vec(2, Decoupled(new AluReq())))
   val branch_0_pipe = Wire(Decoupled(new FuBranchReq()))
   val lsu_0_pipe = Wire(Decoupled(new LSUReq))
   val mul_0_pipe = Wire(Decoupled(new MulReq))
@@ -80,14 +73,20 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
 
   val csr_0_pipe = Wire(Decoupled(UInt(32.W)))
 
-  alu_0_pipe.noenq()
+  alu_pipe_vec.foreach(
+    _.noenq()
+  )
   branch_0_pipe.noenq()
   lsu_0_pipe.noenq()
   csr_0_pipe.noenq()
   mul_0_pipe.noenq()
   div_0_pipe.noenq()
 
-  io.fu_port.alu_0 <> PipeLine(alu_0_pipe, io.flush)
+  require(io.fu_port.alu.length == alu_pipe_vec.length)
+
+  for (i <- 0 until io.fu_port.alu.length) {
+    io.fu_port.alu(i) <> PipeLine(alu_pipe_vec(i), io.flush)
+  }
   io.fu_port.branch_0 <> PipeLine(branch_0_pipe, io.flush)
   io.fu_port.lsu_0 <> PipeLine(lsu_0_pipe, io.flush)
   io.fu_port.csr_0 <> PipeLine(csr_0_pipe, io.flush)
@@ -129,28 +128,59 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
     val imm = UInt(64.W)
     val immz = UInt(64.W)
   }
+//
+//  def check_raw_between_issue(
+//      inst_scb_seq: Vec[ScoreBoardEntry],
+//      stall_seq: Vec[Bool]
+//  ): Unit = {
+//    require(inst_scb_seq.length == stall_seq.length)
+//    for (i <- inst_scb_seq.length - 1 to 0 by -1) {
+//      for (j <- i - 1 to 0 by -1) {
+//        val cur_inst = inst_scb_seq(i)
+//        val pre_inst = inst_scb_seq(j)
+//        when(
+//          cur_inst.rs1_addr === pre_inst.rd_addr && cur_inst.rs1_addr =/= 0.U
+//        ) {
+//          stall_seq(i) := true.B
+//        }
+//        when(
+//          cur_inst.rs2_addr === pre_inst.rd_addr && cur_inst.rs2_addr =/= 0.U
+//        ) {
+//          stall_seq(i) := true.B
+//        }
+//      }
+//    }
+//  }
 
   def check_raw_between_issue(
       inst_scb_seq: Vec[ScoreBoardEntry],
       stall_seq: Vec[Bool]
   ): Unit = {
     require(inst_scb_seq.length == stall_seq.length)
-    for (i <- inst_scb_seq.length - 1 to 0 by -1) {
-      for (j <- i - 1 to 0 by -1) {
-        val cur_inst = inst_scb_seq(i)
-        val pre_inst = inst_scb_seq(j)
-        when(
-          cur_inst.rs1_addr === pre_inst.rd_addr && cur_inst.rs1_addr =/= 0.U
-        ) {
-          stall_seq(i) := true.B
-        }
-        when(
-          cur_inst.rs2_addr === pre_inst.rd_addr && cur_inst.rs2_addr =/= 0.U
-        ) {
-          stall_seq(i) := true.B
-        }
-      }
+    require(inst_scb_seq.length == 2)
+    val cur_inst = inst_scb_seq(1)
+    val pre_inst = inst_scb_seq(0)
+
+    when(
+      pre_inst.rd_addr =/= 0.U &&
+        (cur_inst.rs1_addr === pre_inst.rd_addr || cur_inst.rs2_addr === pre_inst.rd_addr)
+    ) {
+      stall_seq(1) := true.B
     }
+
+//    for (i <- inst_scb_seq.length - 1 to 0 by -1) {
+//      for (j <- i - 1 to 0 by -1) {
+//        val cur_inst = inst_scb_seq(i)
+//        val pre_inst = inst_scb_seq(j)
+//
+//        when(
+//          pre_inst.rd_addr =/= 0.U &&
+//            (cur_inst.rs1_addr === pre_inst.rd_addr || cur_inst.rs2_addr === pre_inst.rd_addr)
+//        ) {
+//          stall_seq(i) := true.B
+//        }
+//      }
+//    }
   }
 
   def check_fu_hazard(
@@ -174,9 +204,18 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
       )
     }
 
-    // TODO: not implemented 2 alu
-    when(fu_seq(0) === fu_seq(1) && fu_seq(0) =/= FuType.None) {
-      fu_hazard_seq(1) := true.B
+    // when two inst use the same fu, stall the second inst, except multi fu unit
+    val multi_fu_vec = VecInit(
+      Seq(
+        FuType.None.asUInt,
+        FuType.Alu.asUInt
+      )
+    )
+
+    when(fu_seq(0) === fu_seq(1)) {
+      when(!multi_fu_vec.contains(fu_seq(0).asUInt)) {
+        fu_hazard_seq(1) := true.B
+      }
     }
 
     fu_hazard_seq.zipWithIndex.foreach { case (fu_hazard, i) =>
@@ -321,9 +360,9 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
     }
   )
 
-  for (i <- 0.until(num_pop_port)) {
+  for (i <- 0.until(2)) {
     dispatch_to_alu(
-      alu = alu_0_pipe,
+      alu = alu_pipe_vec(i),
       scb = issue_peek(i).bits,
       alu_allow_dispatch = alu_allow_dispatch(i),
       op_bundle = inst_op(i),
@@ -331,8 +370,8 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
     )
   }
   assert(
-    PopCount(alu_allow_dispatch) <= 1.U,
-    "alu unit can only dispatch one inst at one cycle"
+    PopCount(alu_allow_dispatch) <= 2.U,
+    "alu unit can only dispatch two inst at one cycle"
   )
 
   // ------------------

@@ -42,7 +42,7 @@ class IssueStage(num_push_port: Int, num_pop_port: Int) extends Module {
   // issue fifo
   // ----------------
 
-  val issue_fifo = new MultiPortValidFIFO2(
+  val issue_fifo = new MultiPortValidFIFOUseMem(
     new ScoreBoardEntry(),
     8,
     name = "i_fifo",

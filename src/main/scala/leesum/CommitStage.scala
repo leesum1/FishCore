@@ -161,6 +161,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   // -----------------------
   // retire logic
   // -----------------------
+
+  // first inst
   when(rob_valid_seq.head && rob_data_seq.head.complete && !flush_next) {
     when(rob_data_seq.head.exception.valid) {
       assert(
@@ -212,6 +214,25 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       }
     }
   }
+
+//  // second inst
+//  when(rob_valid_seq(1) && rob_data_seq(1).complete && !flush_next) {
+//    when(
+//      pop_ack.head && !rob_data_seq.head.exception.valid && rob_data_seq.head.fu_type =/= FuType.Br
+//    ) {
+//      val retire_fu_type_seq = VecInit(
+//        Seq(
+//          FuType.Alu.asUInt,
+//          FuType.Mul.asUInt,
+//          FuType.Div.asUInt
+//        )
+//      )
+//      when(retire_fu_type_seq.contains(rob_data_seq(1).fu_type.asUInt)) {
+//        retire_alu(rob_data_seq(1), io.gpr_commit_ports(1), pop_ack(1))
+//      }
+//    }
+//  }
+
   // -----------------------
   // commit monitor
   // -----------------------
