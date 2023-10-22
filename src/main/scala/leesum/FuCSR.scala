@@ -67,7 +67,7 @@ class FuCSR extends Module {
     csr_result
   }
 
-  private def sen_csr_resp(req: FuCsrReq) = {
+  private def send_csr_resp(req: FuCsrReq) = {
     io.csr_rw_port.addr := req.csr_addr
     io.csr_rw_port.read_en := true.B
     io.csr_rw_port.write_en := !req.only_read
@@ -108,7 +108,7 @@ class FuCSR extends Module {
 
   io.csr_commit.ready := csr_peek.valid
   when(io.csr_commit.fire) {
-    sen_csr_resp(csr_peek.bits)
+    send_csr_resp(csr_peek.bits)
   }
 
   // --------------------------

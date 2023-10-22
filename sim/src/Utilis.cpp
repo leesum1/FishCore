@@ -1,0 +1,18 @@
+//
+// Created by leesum on 10/23/23.
+//
+
+
+#include <cstdint>
+#include "Utils.h"
+
+
+namespace Utils {
+    bool check_aligned(uint64_t addr, uint64_t size) {
+        return (addr & (size - 1)) == 0;
+    }
+
+    uint64_t aligned_addr(uint64_t addr) {
+        return addr & ~(0x7);
+    }
+}

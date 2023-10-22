@@ -1135,6 +1135,14 @@ object FuType extends ChiselEnum {
 }
 
 object FuOP extends ChiselEnum {
+
+  var counter = 0 // 用于追踪当前的值
+  def nextValue(): FuOP.Type = {
+    val result = Value(counter.U)
+    counter += 1
+    result
+  }
+
   val None = Value(0.U)
   val AluAdd = Value(1.U)
   val AluSub = Value(2.U)
@@ -1169,15 +1177,21 @@ object FuOP extends ChiselEnum {
   val MulMulh = Value(31.U)
   val MulMulhsu = Value(32.U)
   val MulMulhu = Value(33.U)
-  val DivDiv = Value(38.U)
-  val DivDivu = Value(39.U)
-  val DivRem = Value(40.U)
-  val DivRemu = Value(41.U)
-  val Ebreak = Value(42.U)
-  val Fence = Value(43.U)
-  val CSRRW = Value(44.U)
-  val CSRRS = Value(45.U)
-  val CSRRC = Value(46.U)
+  val DivDiv = Value(34.U)
+  val DivDivu = Value(35.U)
+  val DivRem = Value(36.U)
+  val DivRemu = Value(37.U)
+  val Ebreak = Value(38.U)
+  val Fence = Value(39.U)
+  val Ecall = Value(40.U)
+  val Scall = Value(41.U)
+  val Mret = Value(42.U)
+  val Sret = Value(43.U)
+  val FenceI = Value(44.U)
+  val SFenceVM = Value(45.U)
+  val CSRRW = Value(46.U)
+  val CSRRS = Value(47.U)
+  val CSRRC = Value(48.U)
 
   def is_csr(op: FuOP.Type): Bool = {
     val csr_op_map = Seq(

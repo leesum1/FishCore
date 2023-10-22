@@ -1,7 +1,7 @@
 #include <iostream>
 #include <ranges>
 #include "simbase.hpp"
-#include "SynReadMemorySim.hpp"
+#include "include/SramMemoryDev.h"
 #include "difftest.hpp"
 #include "CLI/CLI.hpp"
 
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
     CLI11_PARSE(app, argc, argv);
     auto sim_base = SimBase();
-    auto sim_mem = SynReadMemorySim(MEM_SIZE);
+    auto sim_mem = SimDevices::SynReadMemoryDev(MEM_SIZE);
 
     auto createDiffTest = [&]() -> std::optional<DiffTest> {
         return difftest_en ? std::make_optional<DiffTest>(MEM_BASE, MEM_SIZE, BOOT_PC) : std::nullopt;
@@ -131,8 +131,7 @@ int main(int argc, char **argv) {
                              double_t(commit_num) / clk_num);
 
 
-    bool success =
-            am_en ? sim_base.get_reg(10) == 0 : true;
+    bool success = am_en ? sim_base.get_reg(10) == 0 : true;
 
 
     // zero means success
