@@ -12,7 +12,16 @@ class LSUResp extends Bundle {
   def wb_data_valid = !exception.valid && !is_mmio
 }
 
-class LSU() extends Module {
+class LSU(
+    // ADDR_START, ADDR_END, mmio
+    addr_map: Seq[(Long, Long, Boolean)] = Seq(
+      (
+        0,
+        0xffffffffffffffffL,
+        false
+      ) // default addr map, 0x0 -> 0xffffffffffffffff, mmio = false
+    )
+) extends Module {
   val io = IO(new Bundle {
     val lsu_req = Flipped(Decoupled(new LSUReq))
     val flush = Input(Bool())
@@ -35,7 +44,7 @@ class LSU() extends Module {
     val lsu_resp = Decoupled(new LSUResp)
   })
 
-  val agu = Module(new AGU)
+  val agu = Module(new AGU(addr_map))
   val load_queue = Module(new LoadQueue)
   val store_queue = Module(new StoreQueue)
 

@@ -1124,6 +1124,13 @@ object CSRs {
   }
 }
 
+object Privilegelevel {
+  val U = 0
+  val S = 1
+  val H = 2
+  val M = 3
+}
+
 object FuType extends ChiselEnum {
   val None = Value(0.U)
   val Alu = Value(1.U)
@@ -1135,13 +1142,6 @@ object FuType extends ChiselEnum {
 }
 
 object FuOP extends ChiselEnum {
-
-  var counter = 0 // 用于追踪当前的值
-  def nextValue(): FuOP.Type = {
-    val result = Value(counter.U)
-    counter += 1
-    result
-  }
 
   val None = Value(0.U)
   val AluAdd = Value(1.U)
@@ -1192,6 +1192,27 @@ object FuOP extends ChiselEnum {
   val CSRRW = Value(46.U)
   val CSRRS = Value(47.U)
   val CSRRC = Value(48.U)
+
+  def is_xret(op: FuOP.Type): Bool = {
+    val system_op_map = Seq(
+      FuOP.Mret,
+      FuOP.Sret
+    )
+    val system_op_vec = VecInit(system_op_map.map(_.asUInt))
+    val op_is_system = system_op_vec.contains(op.asUInt)
+    op_is_system
+  }
+
+  def is_fence(op: FuOP.Type): Bool = {
+    val fence_op_map = Seq(
+      FuOP.Fence,
+      FuOP.FenceI,
+      FuOP.SFenceVM
+    )
+    val fence_op_vec = VecInit(fence_op_map.map(_.asUInt))
+    val op_is_fence = fence_op_vec.contains(op.asUInt)
+    op_is_fence
+  }
 
   def is_csr(op: FuOP.Type): Bool = {
     val csr_op_map = Seq(
@@ -1424,6 +1445,8 @@ object RVinst {
   val jalr_op = List(true.B, false.B, true.B, true.B, false.B, false.B)
   val load_op = List(true.B, false.B, true.B, true.B, false.B, false.B)
   val store_op = List(true.B, true.B, false.B, true.B, false.B, false.B)
+  val csr_op = List(true.B, false.B, true.B, false.B, false.B, false.B)
+  val csri_op = List(false.B, false.B, true.B, false.B, false.B, true.B)
 
   val none_op = List(false.B, false.B, false.B, false.B, false.B, false.B)
 
@@ -1721,25 +1744,6 @@ object RVinst {
     ) ::: reg_imm_op)
   )
 
-  // TODO: ecall ebreak scall
-  val i_special_map: Array[(BitPat, List[Element])] = Array(
-    // RaiseException(Breakpoint)
-    Instructions.IType("EBREAK") -> (List(
-      true.B,
-      FuType.None,
-      FuOP.Ebreak,
-      false.B,
-      InstType.I
-    ) ::: none_op),
-    Instructions.IType("FENCE") -> (List(
-      true.B,
-      FuType.None,
-      FuOP.Fence,
-      false.B,
-      InstType.I
-    ) ::: none_op)
-  )
-
   val i64_map: Array[(BitPat, List[Element])] = Array(
     // addiw rd, rs1, immediate
     // x[rd] = sext((x[rs1] + sext(immediate))[31:0])
@@ -1989,6 +1993,92 @@ object RVinst {
       InstType.R
     ) ::: reg_reg_op)
   )
+
+  val zicsr_map: Array[(BitPat, List[Element])] = Array(
+    Instructions.ZICSRType("CSRRC") -> (List(
+      true.B,
+      FuType.Csr,
+      FuOP.CSRRC,
+      false.B,
+      InstType.I
+    ) ::: csr_op),
+    Instructions.ZICSRType("CSRRCI") -> (List(
+      true.B,
+      FuType.Csr,
+      FuOP.CSRRC,
+      false.B,
+      InstType.I
+    ) ::: csri_op),
+    Instructions.ZICSRType("CSRRS") -> (List(
+      true.B,
+      FuType.Csr,
+      FuOP.CSRRS,
+      false.B,
+      InstType.I
+    ) ::: csr_op),
+    Instructions.ZICSRType("CSRRSI") -> (List(
+      true.B,
+      FuType.Csr,
+      FuOP.CSRRS,
+      false.B,
+      InstType.I
+    ) ::: csri_op),
+    Instructions.ZICSRType("CSRRW") -> (List(
+      true.B,
+      FuType.Csr,
+      FuOP.CSRRW,
+      false.B,
+      InstType.I
+    ) ::: csr_op),
+    Instructions.ZICSRType("CSRRWI") -> (List(
+      true.B,
+      FuType.Csr,
+      FuOP.CSRRW,
+      false.B,
+      InstType.I
+    ) ::: csri_op)
+  )
+
+  // TODO: ecall ebreak scall
+  val privilege_map: Array[(BitPat, List[Element])] = Array(
+    // RaiseException(Breakpoint)
+    Instructions.IType("EBREAK") -> (List(
+      true.B,
+      FuType.None,
+      FuOP.Ebreak,
+      false.B,
+      InstType.I
+    ) ::: none_op),
+    Instructions.IType("FENCE") -> (List(
+      true.B,
+      FuType.None,
+      FuOP.Fence,
+      false.B,
+      InstType.I
+    ) ::: none_op),
+    Instructions.IType("ECALL") -> (List(
+      true.B,
+      FuType.None,
+      FuOP.Ecall,
+      false.B,
+      InstType.I
+    ) ::: none_op),
+    Instructions.ZIFENCEIType("FENCE_I") -> (List(
+      true.B,
+      FuType.None,
+      FuOP.FenceI,
+      false.B,
+      InstType.I
+    ) ::: none_op),
+    Instructions.SYSTEMType("MRET") -> (List(
+      true.B,
+      FuType.None,
+      FuOP.Mret,
+      false.B,
+      InstType.I
+    ) ::: none_op)
+  )
+
 }
 
 object ExceptionCause extends ChiselEnum {
@@ -2012,6 +2102,18 @@ object ExceptionCause extends ChiselEnum {
   val virtual_instruction = Value(0x16.U)
   val store_guest_page_fault = Value(0x17.U)
   val unknown = Value(0x18.U)
+
+  def get_call_cause(privilege: UInt): ExceptionCause.Type = {
+    require(privilege.getWidth == 2)
+    MuxLookup(privilege, unknown) {
+      Seq(
+        Privilegelevel.U.asUInt -> user_ecall,
+        Privilegelevel.S.asUInt -> supervisor_ecall,
+        Privilegelevel.H.asUInt -> virtual_supervisor_ecall,
+        Privilegelevel.M.asUInt -> machine_ecall
+      )
+    }
+  }
 
   def get_access_cause(req_type: TLBReqType.Type): ExceptionCause.Type = {
     MuxLookup(req_type, unknown) {
@@ -2140,7 +2242,9 @@ class ScoreBoardEntry extends Bundle {
   }
 }
 
-class InstBase(inst: UInt) extends Module {
+class InstBase(inst: UInt) {
+  require(inst.getWidth == 32)
+
   def opcode = inst(6, 0)
   def rd = inst(11, 7)
   def funct3 = inst(14, 12)
@@ -2158,7 +2262,9 @@ class InstBase(inst: UInt) extends Module {
       21,
       64
     )
-  def imm_z = Cat(Fill(27, 0.U), inst(19, 15))
+  def imm_z = Cat(Fill(59, 0.U), inst(19, 15))
+
+  def csr_addr = inst(31, 20)
 
   def is_rvc = inst(1, 0) =/= 0.U
   def rvc_rd = inst(4, 2)

@@ -11,7 +11,7 @@ class FuReq extends Bundle {
   val mul_0 = Decoupled(new MulReq)
   val div_0 = Decoupled(new DivReq)
 
-  val csr_0 = Decoupled(UInt(32.W))
+  val csr_0 = Decoupled(new FuCsrReq)
 }
 
 class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
@@ -71,7 +71,7 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
   val mul_0_pipe = Wire(Decoupled(new MulReq))
   val div_0_pipe = Wire(Decoupled(new DivReq))
 
-  val csr_0_pipe = Wire(Decoupled(UInt(32.W)))
+  val csr_0_pipe = Wire(Decoupled(new FuCsrReq))
 
   alu_pipe_vec.foreach(
     _.noenq()
@@ -126,7 +126,6 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
     val rs2_data = UInt(64.W)
     val pc = UInt(64.W)
     val imm = UInt(64.W)
-    val immz = UInt(64.W)
   }
 //
 //  def check_raw_between_issue(
@@ -281,8 +280,6 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
 
     op_bundle.pc := scb.pc
     op_bundle.imm := scb.result
-    // TODO: not implemented immz
-    op_bundle.immz := scb.result
     op_bundle
   }
 
@@ -463,7 +460,6 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
   // ----------------------
   // csr logic
   // ----------------------
-  // TODO: NOT IMPLEMENTED
   val csr_allow_dispatch = VecInit(
     allow_issue_fire.zip(issue_peek).map { case (allow, scb) =>
       allow && scb.bits.fu_type === FuType.Csr
@@ -474,17 +470,27 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
     "csr unit can only dispatch one inst at one cycle"
   )
 
-  // TODO: NOT IMPLEMENTED
   def dispatch_to_csr(
-      csr: DecoupledIO[UInt],
+      csr: DecoupledIO[FuCsrReq],
       scb: ScoreBoardEntry,
       csr_allow_dispatch: Bool,
       op_bundle: operandBundle,
       trans_id: UInt
   ) = {
     when(scb.fu_type === FuType.Csr && csr_allow_dispatch) {
+      assert(FuOP.is_csr(scb.fu_op))
+      val inst_base = new InstBase(scb.inst)
       csr.valid := true.B
-      csr.bits := op_bundle.rs1_data
+      csr.bits.csr_addr := inst_base.csr_addr
+      csr.bits.csr_op := scb.fu_op
+      csr.bits.rs1_or_zimm :=
+        Mux(scb.use_immz, inst_base.imm_z, op_bundle.rs1_data)
+      csr.bits.trans_id := trans_id
+      csr.bits.only_read := Mux(
+        scb.use_immz,
+        inst_base.imm_z === 0.U,
+        scb.rs1_addr === 0.U
+      )
     }
   }
 

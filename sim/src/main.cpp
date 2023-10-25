@@ -4,12 +4,20 @@
 #include "include/SramMemoryDev.h"
 #include "difftest.hpp"
 #include "CLI/CLI.hpp"
+#include "AMUartDev.h"
+#include "DeviceMange.h"
+#include "AMRTCDev.h"
 
 
 int main(int argc, char **argv) {
 
     constexpr auto MEM_BASE = 0x80000000L;
-    constexpr auto MEM_SIZE = 0x800000L;
+    constexpr auto MEM_SIZE = 0x8000000L;
+    constexpr auto DEVICE_BASE = 0xa0000000L;
+    constexpr auto SERIAL_PORT = DEVICE_BASE + 0x00003f8L;
+    constexpr auto RTC_ADDR = DEVICE_BASE + 0x0000048L;
+
+
     constexpr auto BOOT_PC = 0x80000000L;
 
     std::string file_name;
@@ -30,9 +38,17 @@ int main(int argc, char **argv) {
     app.add_flag("--debug", debug_en, "enable debug")->default_val(false);
 
 
-    CLI11_PARSE(app, argc, argv);
+    CLI11_PARSE(app, argc, argv)
     auto sim_base = SimBase();
-    auto sim_mem = SimDevices::SynReadMemoryDev(MEM_SIZE);
+    auto device_manager = SimDevices::DeviceMange();
+    auto sim_mem = SimDevices::SynReadMemoryDev(MEM_BASE, MEM_SIZE);
+    auto sim_am_uart = SimDevices::AMUartDev(SERIAL_PORT, 8);
+    auto sim_am_rtc = SimDevices::AMRTCDev(RTC_ADDR, 8);
+
+    device_manager.add_device(&sim_mem);
+    device_manager.add_device(&sim_am_uart);
+    device_manager.add_device(&sim_am_rtc);
+
 
     auto createDiffTest = [&]() -> std::optional<DiffTest> {
         return difftest_en ? std::make_optional<DiffTest>(MEM_BASE, MEM_SIZE, BOOT_PC) : std::nullopt;
@@ -60,12 +76,12 @@ int main(int argc, char **argv) {
         sim_base.step([&](auto top) -> bool {
             clk_num += 1;
             // memory
-            uint64_t rdata = sim_mem.update_outputs();
-            sim_mem.update_inputs(
-                    top->io_mem_port_i_raddr - 0x80000000,
+            uint64_t rdata = device_manager.update_outputs();
+            device_manager.update_inputs(
+                    top->io_mem_port_i_raddr,
                     top->io_mem_port_i_rd,
                     {
-                            top->io_mem_port_i_waddr - 0x80000000,
+                            top->io_mem_port_i_waddr,
                             top->io_mem_port_i_wdata,
                             top->io_mem_port_i_wstrb
                     },
@@ -80,30 +96,39 @@ int main(int argc, char **argv) {
 
                 if (top->io_difftest_bits_exception_valid) {
                     auto cause = top->io_difftest_bits_exception_cause;
-                    std::cout << std::format("exception cause 0x{:x},pc 0x{:016x}\n",
-                                             cause, sim_base.get_pc());
-                    if (cause != 3) {
+
+                    auto valid_cause = std::array{0, 3, 4, 6, 11};
+                    if (std::ranges::find(valid_cause, cause) == valid_cause.end()) {
+                        std::cout << std::format("exception cause 0x{:x},pc 0x{:016x}\n",
+                                                 cause, sim_base.get_pc());
                         sim_abort = true;
+                        return true;
                     }
-                    return true;
-                } else if (difftest_en & diff_ref.has_value()) {
+                    if (cause == 3 && am_en) {
+                        return true;
+                    }
+                }
+                if (difftest_en & diff_ref.has_value()) {
                     diff_ref->step(step_num);
-                    bool pc_fail = diff_ref->check_pc(diff_ref->get_pc(), sim_base.get_pc(), debug_en);
-                    bool gpr_fail = diff_ref->check_gprs(
+                    bool pc_mismatch = diff_ref->check_pc(diff_ref->get_pc(), sim_base.get_pc(), debug_en);
+                    bool gpr_mismatch = diff_ref->check_gprs(
                             [&](size_t idx) { return sim_base.get_reg(idx); },
                             [&](size_t idx) { return diff_ref->get_reg(idx); },
                             debug_en
                     );
-                    if ((pc_fail | gpr_fail)) {
+                    bool csr_mismatch = diff_ref->check_csrs(top.get());
+                    bool mismatch = pc_mismatch | gpr_mismatch | csr_mismatch;
+
+                    if (mismatch) {
                         std::cout
                                 << std::format("pc mismatch: ref: 0x{:016x}, dut: 0x{:016x}\n\n", diff_ref->get_pc(),
                                                sim_base.get_pc());
                         sim_abort = true;
-                    };
-                    return (pc_fail | gpr_fail);
+                    }
+                    return mismatch;
                 }
                 return false;
-            };
+            }
 
 
             if ((clk_num % 1024) == 0) {

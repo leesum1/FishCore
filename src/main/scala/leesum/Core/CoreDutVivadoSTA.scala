@@ -2,7 +2,7 @@ package leesum.Core
 
 import chisel3._
 import chisel3.util.{Valid, log2Ceil}
-import leesum.axi4.{AXI4SlaveBrige, AxiReadArbiter, BasicMemoryIO}
+import leesum.axi4.{AXI4SlaveBridge, AxiReadArbiter, BasicMemoryIO}
 import leesum.moniter.{DifftestPort, MonitorTop}
 import leesum._
 class CoreDutVivadoSTA(random_latency: Boolean = false) extends Module {
@@ -42,7 +42,7 @@ class CoreDutVivadoSTA(random_latency: Boolean = false) extends Module {
   val icache = Module(new DummyICache)
   val axi_r_arb = Module(new AxiReadArbiter)
   val axi_mem = Module(
-    new AXI4SlaveBrige(
+    new AXI4SlaveBridge(
       AXI_AW = 32,
       AXI_DW = 64,
       INTERNAL_MEM_SIZE = 0x100000,

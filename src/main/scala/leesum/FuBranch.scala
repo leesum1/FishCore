@@ -20,10 +20,11 @@ class FuBranchResp extends Bundle {
   // if branch is mis-predicted, redirect_pc is the correct pc
   val is_miss_predict = Bool()
   val redirect_pc = UInt(64.W)
-  def wb_valid = !is_miss_predict
+  val exception = new ExceptionEntry()
+  def wb_valid = !is_miss_predict && !exception.valid
 }
 
-class FuBranch extends Module {
+class FuBranch(isa_c_en: Boolean = false) extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new FuBranchReq))
     val out = Decoupled(new FuBranchResp)
@@ -68,25 +69,14 @@ class FuBranch extends Module {
     )
   )
 
-  val is_miss_predict = Wire(Bool())
-  when(io.in.bits.bp.is_taken === branch_taken) {
-    when(io.in.bits.bp.is_taken) {
-      is_miss_predict := Mux(
-        io.in.bits.bp.predict_pc === taraget_pc,
-        false.B,
-        true.B
-      )
-    }.otherwise {
-      is_miss_predict := false.B
-    }
-  }.otherwise {
-    is_miss_predict := true.B
-  }
+  val is_miss_predict = (io.in.bits.bp.is_taken =/= branch_taken) ||
+    (io.in.bits.bp.is_taken && io.in.bits.bp.predict_pc =/= taraget_pc)
 
-  io.out.bits.is_miss_predict := is_miss_predict
-  io.out.bits.redirect_pc := taraget_pc
-  io.out.bits.wb_data := ra_target
-  io.out.bits.trans_id := io.in.bits.trans_id
+  val exception_valid = if (isa_c_en) {
+    false.B
+  } else {
+    taraget_pc(1)
+  }
 
   val br_resp = Wire(Decoupled(new FuBranchResp))
   br_resp.valid := io.in.valid
@@ -96,6 +86,10 @@ class FuBranch extends Module {
   br_resp.bits.redirect_pc := taraget_pc
   br_resp.bits.wb_data := ra_target
   br_resp.bits.trans_id := io.in.bits.trans_id
+  br_resp.bits.exception.valid := exception_valid
+  br_resp.bits.exception.cause := ExceptionCause.misaligned_fetch
+  br_resp.bits.exception.tval := taraget_pc
+
   SkidBufferWithFLush(
     br_resp,
     io.out,
@@ -106,5 +100,4 @@ class FuBranch extends Module {
 }
 object gen_Fubranch extends App {
   GenVerilogHelper(new FuBranch())
-
 }

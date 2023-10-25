@@ -53,8 +53,8 @@ class FuCsrTest extends AnyFreeSpec with ChiselScalatestTester {
       _.trans_id -> req.trans_id,
       _.data -> TestUtils.long2UInt64(csr_data),
       _.exception.valid -> false.B,
-      _.exception.cause -> ExceptionCause.unknown,
-      _.exception.tval -> 0.U
+      _.exception.cause -> ExceptionCause.illegal_instruction,
+      _.exception.tval -> req.csr_addr
     )
   }
 
@@ -98,8 +98,9 @@ class FuCsrTest extends AnyFreeSpec with ChiselScalatestTester {
           // test1
           // -----------------------
           req_seq.foreach(req => {
-            dut.io.csr_rw_port.read_data.poke(req.csr_addr)
-            dut.io.csr_rw_port.write_exception.poke(false.B)
+            dut.io.csr_read_port.read_data.poke(req.csr_addr)
+            dut.io.csr_read_port.read_ex_resp.poke(false.B)
+
             dut.io.csr_req.enqueue(req)
 
             fork {
@@ -110,7 +111,7 @@ class FuCsrTest extends AnyFreeSpec with ChiselScalatestTester {
                   resp_seq(req_seq.indexOf(req)),
                   dut.clock
                 ) {
-                  dut.io.csr_rw_port.write_data.expect(get_csr_wdata(req))
+                  dut.io.csr_write_port.write_data.expect(get_csr_wdata(req))
                 }
             }.joinAndStep(dut.clock)
 
@@ -126,14 +127,14 @@ class FuCsrTest extends AnyFreeSpec with ChiselScalatestTester {
             dut.io.csr_commit.enqueueSeq(Seq.fill(req_seq.length)(true.B))
           }.fork {
             req_seq.foreach(req => {
-              dut.io.csr_rw_port.read_data.poke(req.csr_addr)
-              dut.io.csr_rw_port.write_exception.poke(false.B)
+              dut.io.csr_read_port.read_data.poke(req.csr_addr)
+              dut.io.csr_read_port.read_ex_resp.poke(false.B)
               dut.io.csr_resp
                 .expectDequeueAdditional(
                   resp_seq(req_seq.indexOf(req)),
                   dut.clock
                 ) {
-                  dut.io.csr_rw_port.write_data.expect(get_csr_wdata(req))
+                  dut.io.csr_write_port.write_data.expect(get_csr_wdata(req))
                 }
             })
           }.joinAndStep(dut.clock)
@@ -147,8 +148,9 @@ class FuCsrTest extends AnyFreeSpec with ChiselScalatestTester {
     dut.io.csr_resp.initSink().setSinkClock(dut.clock)
     dut.io.csr_commit.initSource().setSourceClock(dut.clock)
     dut.io.flush.poke(false.B)
-    dut.io.csr_rw_port.read_data.poke(0.U)
-    dut.io.csr_rw_port.write_exception.poke(false.B)
+    dut.io.csr_read_port.read_data.poke(0.U)
+    dut.io.csr_read_port.read_ex_resp.poke(false.B)
+    dut.io.csr_write_port.write_ex_resp.poke(false.B)
     dut.clock.step(5)
   }
 }

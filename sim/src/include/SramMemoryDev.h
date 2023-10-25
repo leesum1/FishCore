@@ -10,7 +10,6 @@ namespace SimDevices {
 
     class SynReadMemoryDev : public DeviceBase {
     private:
-        const uint32_t mem_size;
         std::vector<uint8_t> mem;
         std::unordered_map<std::string, uint64_t> elf_symbol_map;
 
@@ -24,7 +23,7 @@ namespace SimDevices {
 
 
     public:
-        explicit SynReadMemoryDev(uint32_t mem_size);
+        explicit SynReadMemoryDev(uint64_t base_addr, uint32_t mem_size);
 
         void load_file(const char *file_name);
 

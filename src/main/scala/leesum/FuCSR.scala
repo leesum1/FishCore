@@ -1,6 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, MuxLookup}
+import chisel3.util.{Decoupled, Enum, MuxLookup, is, switch}
 
 class FuCsrReq extends Bundle {
   val csr_addr = UInt(12.W)
@@ -16,15 +16,6 @@ class FuCsrResp extends Bundle {
   val exception = new ExceptionEntry
 }
 
-class CsrReadWritePort extends Bundle {
-  val addr = Output(UInt(12.W))
-  val read_en = Output(Bool())
-  val write_en = Output(Bool())
-  val write_data = Output(UInt(64.W))
-  val read_data = Input(UInt(64.W))
-  val write_exception = Input(Bool())
-}
-
 class FuCSR extends Module {
   val io = IO(new Bundle {
     val csr_req = Flipped(Decoupled(new FuCsrReq))
@@ -33,7 +24,8 @@ class FuCSR extends Module {
 
     // from commit stage, when commit a csr instruction, set csr_commit to true
     val csr_commit = Flipped(Decoupled(Bool()))
-    val csr_rw_port = new CsrReadWritePort
+    val csr_read_port = new CSRReadPort
+    val csr_write_port = new CSRWritePort
   })
   val csr_fifo = new ValidFIFO(new FuCsrReq, 4, "csr_fifo")
   val csr_peek = csr_fifo.peek()
@@ -67,48 +59,70 @@ class FuCSR extends Module {
     csr_result
   }
 
-  private def send_csr_resp(req: FuCsrReq) = {
-    io.csr_rw_port.addr := req.csr_addr
-    io.csr_rw_port.read_en := true.B
-    io.csr_rw_port.write_en := !req.only_read
+  private def send_csr_resp(exception_valid: Bool) = {
+    assert(csr_peek.valid, "csr_fifo should be valid")
+    assert(io.csr_commit.valid, "csr_commit should be valid")
+    assert(io.csr_resp.ready, "csr_resp should be ready")
 
+    io.csr_commit.ready := true.B
     io.csr_resp.valid := true.B
-    io.csr_resp.bits.trans_id := req.trans_id
-    val csr_result = get_csr_result(
-      req.csr_op,
-      io.csr_rw_port.read_data,
-      req.rs1_or_zimm
-    )
-    io.csr_rw_port.write_data := csr_result
-    when(io.csr_rw_port.write_exception) {
-      io.csr_resp.bits.exception.valid := true.B
-      io.csr_resp.bits.data := 0.U
-      io.csr_resp.bits.exception.cause := ExceptionCause.illegal_instruction
-      io.csr_resp.bits.exception.tval := req.csr_addr
-    }.otherwise {
-      io.csr_resp.bits.exception.valid := false.B
-      io.csr_resp.bits.exception.cause := ExceptionCause.unknown
-      io.csr_resp.bits.exception.tval := 0.U
-      io.csr_resp.bits.data := io.csr_rw_port.read_data
-    }
+    csr_fifo_pop := true.B
+    state := sIdleRead
 
-    assert(io.csr_resp.fire, "csr_resp should be fired")
-
-    when(io.csr_resp.fire) {
-      csr_fifo_pop := true.B
-    }
+    io.csr_resp.bits.trans_id := csr_peek.bits.trans_id
+    io.csr_resp.bits.data := csr_read_buf
+    io.csr_resp.bits.exception.valid := exception_valid
+    io.csr_resp.bits.exception.cause := ExceptionCause.illegal_instruction
+    io.csr_resp.bits.exception.tval := csr_peek.bits.csr_addr
   }
 
   io.csr_resp.noenq()
   io.csr_commit.nodeq()
-  io.csr_rw_port.addr := 0.U
-  io.csr_rw_port.read_en := false.B
-  io.csr_rw_port.write_en := false.B
-  io.csr_rw_port.write_data := 0.U
+  io.csr_read_port.addr := 0.U
+  io.csr_read_port.read_en := false.B
+  io.csr_write_port.addr := 0.U
+  io.csr_write_port.write_en := false.B
+  io.csr_write_port.write_data := 0.U
 
-  io.csr_commit.ready := csr_peek.valid
-  when(io.csr_commit.fire) {
-    send_csr_resp(csr_peek.bits)
+  io.csr_commit.ready := false.B
+
+  val sIdleRead :: sWrite :: sException :: Nil = Enum(3)
+  val state = RegInit(sIdleRead)
+  val csr_read_buf = RegInit(0.U(64.W))
+
+  switch(state) {
+    is(sIdleRead) {
+      when(csr_peek.valid && io.csr_commit.valid) {
+        io.csr_read_port.addr := csr_peek.bits.csr_addr
+        io.csr_read_port.read_en := true.B
+        csr_read_buf := io.csr_read_port.read_data
+
+        when(io.csr_read_port.read_ex_resp) {
+          state := sException
+        }.otherwise {
+          state := sWrite
+        }
+      }
+    }
+    is(sWrite) {
+      val csr_wdata = get_csr_result(
+        csr_peek.bits.csr_op,
+        csr_read_buf,
+        csr_peek.bits.rs1_or_zimm
+      )
+      io.csr_write_port.addr := csr_peek.bits.csr_addr
+      io.csr_write_port.write_en := !csr_peek.bits.only_read
+      io.csr_write_port.write_data := csr_wdata
+      when(io.csr_write_port.write_ex_resp && !csr_peek.bits.only_read) {
+        send_csr_resp(true.B)
+      }.otherwise {
+        send_csr_resp(false.B)
+      }
+    }
+    is(sException) {
+      send_csr_resp(true.B)
+    }
+
   }
 
   // --------------------------

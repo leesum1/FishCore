@@ -60,7 +60,8 @@ class LoadQueue extends Module {
     when(load_queue_out.valid && !io.flush) {
       val isMmio = load_queue_out.bits.is_mmio
       io.mmio_commit.ready := isMmio
-      when(isMmio && io.mmio_commit.fire || !isMmio) {
+      // NOTE: MMIO DO NOT NEED TO HANDSHAKE
+      when(isMmio && io.mmio_commit.valid || !isMmio) {
         io.dcache_req.valid := true.B
         io.dcache_req.bits.paddr := load_queue_out.bits.paddr
         io.dcache_req.bits.size := load_queue_out.bits.size

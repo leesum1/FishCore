@@ -1,8 +1,9 @@
 package leesum.axi4
+
 import chisel3._
 import chisel3.util.{Decoupled, Enum, is, isPow2, log2Ceil, switch}
-import leesum.GenVerilogHelper
-class AXI4Memory(
+
+class AXI4SlaveBridge(
     AXI_AW: Int, // axi address width
     AXI_DW: Int, // axi data width
     INTERNAL_MEM_SIZE: Long, // internal memory size
@@ -23,7 +24,14 @@ class AXI4Memory(
     "INTERNAL_MEM_BASE must be multiple of INTERNAL_MEM_SIZE"
   )
 
-  val io = IO(new AXISlaveIO(AXI_AW, AXI_DW))
+  val ADDR_WIDTH = log2Ceil(INTERNAL_MEM_BASE + INTERNAL_MEM_SIZE)
+  val DATA_WIDTH = INTERNAL_MEM_DW
+  val BASE_ADDR = INTERNAL_MEM_BASE
+
+  val io = IO(new Bundle {
+    val axi_slave = new AXISlaveIO(AXI_AW, AXI_DW)
+    val mem_port = Flipped(new BasicMemoryIO(ADDR_WIDTH, DATA_WIDTH))
+  })
 
   ///////////////////////////////
   /// register all output signals
@@ -31,7 +39,7 @@ class AXI4Memory(
 
   val axi_ar = Wire(Decoupled(new AXIAddressChannel(AXI_AW)))
   SkidBuffer(
-    io.ar,
+    io.axi_slave.ar,
     axi_ar,
     CUT_VALID = false,
     CUT_READY = true
@@ -39,14 +47,14 @@ class AXI4Memory(
   val axi_aw = Wire(Decoupled(new AXIAddressChannel(AXI_AW)))
 
   SkidBuffer(
-    io.aw,
+    io.axi_slave.aw,
     axi_aw,
     CUT_VALID = false,
     CUT_READY = true
   )
   val axi_w = Wire(Decoupled(new AXIWriteDataChannel(AXI_DW)))
   SkidBuffer(
-    io.w,
+    io.axi_slave.w,
     axi_w,
     CUT_VALID = false,
     CUT_READY = true
@@ -55,28 +63,21 @@ class AXI4Memory(
   val axi_b = Wire(Decoupled(new AXIWriteResponseChannel))
   SkidBuffer(
     axi_b,
-    io.b,
+    io.axi_slave.b,
     CUT_VALID = true,
     CUT_READY = false
   )
   val axi_r = Wire(Decoupled(new AXIReadDataChannel(AXI_DW)))
   SkidBuffer(
     axi_r,
-    io.r,
+    io.axi_slave.r,
     CUT_VALID = true,
     CUT_READY = false
   )
 
-  val ADDR_WIDTH = log2Ceil(INTERNAL_MEM_BASE + INTERNAL_MEM_SIZE)
-  val DATA_WIDTH = INTERNAL_MEM_DW
-  val BASE_ADDR = INTERNAL_MEM_BASE
   ////////////////////////////
   /// internal memory
   ////////////////////////////
-  val mem =
-    Module(
-      new BasicMemory(DATA_WIDTH, BASE_ADDR, INTERNAL_MEM_SIZE, memoryFile)
-    )
 
   val x = WireInit
   val i_we = WireInit(Bool(), false.B)
@@ -86,13 +87,13 @@ class AXI4Memory(
   val i_rd = WireInit(Bool(), false.B)
   val i_raddr = WireInit(UInt(ADDR_WIDTH.W), 0.U)
   val o_rdata = WireInit(UInt(DATA_WIDTH.W), 0.U)
-  mem.io.i_rd := i_rd
-  mem.io.i_raddr := i_raddr
-  mem.io.i_we := i_we
-  mem.io.i_waddr := i_waddr
-  mem.io.i_wdata := i_wdata
-  mem.io.i_wstrb := i_wstrb
-  o_rdata := mem.io.o_rdata
+  io.mem_port.i_rd := i_rd
+  io.mem_port.i_raddr := i_raddr
+  io.mem_port.i_we := i_we
+  io.mem_port.i_waddr := i_waddr
+  io.mem_port.i_wdata := i_wdata
+  io.mem_port.i_wstrb := i_wstrb
+  o_rdata := io.mem_port.o_rdata
 
   def send_internal_read_req(addr: UInt) = {
     i_rd := true.B
@@ -305,18 +306,4 @@ class AXI4Memory(
       }
     }
   }
-
-}
-
-object gen_verilog extends App {
-  GenVerilogHelper(
-    new AXI4Memory(
-      AXI_AW = 32,
-      AXI_DW = 64,
-      INTERNAL_MEM_SIZE = 0x1000,
-      INTERNAL_MEM_DW = 64,
-      INTERNAL_MEM_BASE = 0
-    )
-  )
-
 }

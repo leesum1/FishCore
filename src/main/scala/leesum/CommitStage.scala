@@ -21,8 +21,14 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     // lsu
     val mmio_commit = Decoupled(Bool())
     val store_commit = Decoupled(Bool())
+    // csr
+    val csr_commit = Decoupled(Bool())
     // branch
     val branch_commit = Decoupled(new RedirectPC())
+
+    // csr regfile direct access
+    val direct_read_ports = Input(new CSRDirectReadPorts)
+    val direct_write_ports = Output(new CSRDirectWritePorts)
 
     val commit_monitor = if (monitor_en) {
       Some(Output(Vec(num_commit_port, Valid(new CommitMonitorPort))))
@@ -37,6 +43,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   val pop_ack = WireInit(VecInit(Seq.fill(num_commit_port)(false.B)))
 
   val flush_next = RegInit(false.B)
+  val privilege_mode = RegInit(3.U(2.W)) // machine mode
 
   when(flush_next) {
     flush_next := false.B
@@ -70,24 +77,14 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   def retire_load(
       entry: ScoreBoardEntry,
       gpr_commit_port: GPRsWritePort,
-      mmio_commit: DecoupledIO[Bool],
       ack: Bool
   ): Unit = {
     assert(FuOP.is_lsu(entry.fu_op), "fu_op must be lsu")
     assert(entry.exception.valid === false.B)
     when(FuOP.is_load(entry.fu_op)) {
-      when(entry.lsu_io_space && !entry.complete) {
-
-        // TODO: mmio_commit.valid rely on mmio_commit.ready
-        mmio_commit.valid := true.B
-        when(io.mmio_commit.ready) {
-          mmio_commit.bits := true.B
-          ack := true.B
-        }
-      }.elsewhen(entry.complete) {
-        gpr_commit_port.write(entry.rd_addr, entry.result)
-        ack := true.B
-      }
+      assert(entry.complete === true.B, "load must be complete")
+      gpr_commit_port.write(entry.rd_addr, entry.result)
+      ack := true.B
     }
   }
 
@@ -102,8 +99,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     when(FuOP.is_store(entry.fu_op)) {
       // valid rely on store_commit.ready
       store_commit.valid := true.B
+      store_commit.bits := true.B
       when(store_commit.fire) {
-        store_commit.bits := true.B
         ack := true.B
       }
     }
@@ -140,8 +137,117 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     }
   }
 
+  def retire_none(entry: ScoreBoardEntry, ack: Bool): Unit = {
+    assert(entry.exception.valid === false.B)
+    ack := true.B
+  }
+
+  // TODO: exception
+  def retire_exception(entry: ScoreBoardEntry, ack: Bool): Unit = {
+    assert(entry.exception.valid === true.B)
+    val mtvec = new MtvecFiled(io.direct_read_ports.mtvec)
+    val exception_mcause = Mux(
+      entry.fu_op === FuOP.Ecall,
+      ExceptionCause.get_call_cause(privilege_mode),
+      entry.exception.cause
+    ).asUInt
+
+    val mstatus = new MstatusFiled(io.direct_read_ports.mstatus)
+
+    val new_pc = mtvec.get_exception_pc(exception_mcause)
+    io.branch_commit.valid := true.B
+    when(io.branch_commit.fire) {
+      io.branch_commit.bits.target := new_pc
+      flush_next := true.B
+      ack := true.B
+
+      io.direct_write_ports.mepc.valid := true.B
+      io.direct_write_ports.mepc.bits := entry.pc
+      io.direct_write_ports.mcause.valid := true.B
+      io.direct_write_ports.mcause.bits := exception_mcause
+      io.direct_write_ports.mtval.valid := true.B
+      io.direct_write_ports.mtval.bits := entry.exception.tval
+      io.direct_write_ports.mstatus.valid := true.B
+      io.direct_write_ports.mstatus.bits := mstatus.get_exception_mstatus(
+        Privilegelevel.M.U(2.W)
+      )
+
+    }
+    // ------------------
+    // assert
+    // ------------------
+//    assert(
+//      mcause.interrupt === false.B,
+//      "exception cause must be exception"
+//    )
+    assert(
+      entry.complete,
+      "exception must be complete"
+    )
+
+  }
+
+  def retire_mret(entry: ScoreBoardEntry, ack: Bool): Unit = {
+    assert(entry.fu_op === FuOP.Mret, "fu_op must be mret")
+    assert(entry.exception.valid === false.B)
+    assert(entry.complete === true.B, "mret must be complete")
+
+    val mstatus = new MstatusFiled(io.direct_read_ports.mstatus)
+    val mepc = io.direct_read_ports.mepc
+
+    // supposing xPP holds the value y
+    val y = mstatus.mpp
+    // the privilege mode is changed to xPP
+    privilege_mode := y
+
+    // (If y!=M, x RET also sets MPRV=0.)
+    // reference to  https://github.com/riscv/riscv-isa-manual/pull/929
+    val new_mstatus = mstatus.get_mret_mstatus(y =/= Privilegelevel.M.U(2.W))
+
+    io.branch_commit.valid := true.B
+    when(io.branch_commit.fire) {
+      io.branch_commit.bits.target := mepc
+      io.direct_write_ports.mstatus.valid := true.B
+      io.direct_write_ports.mstatus.bits := new_mstatus
+      flush_next := true.B
+      ack := true.B
+    }
+  }
+
+  // TODO: CSR NOT IMPLEMENTED
+  def retire_csr(
+      entry: ScoreBoardEntry,
+      gpr_commit_port: GPRsWritePort,
+      csr_commit_port: DecoupledIO[Bool],
+      ack: Bool
+  ): Unit = {
+    assert(FuOP.is_csr(entry.fu_op), "fu_op must be csr")
+    assert(entry.exception.valid === false.B)
+
+    val sIdle :: sACK :: Nil = Enum(2)
+    val state = RegInit(sIdle)
+
+    switch(state) {
+      is(sIdle) {
+        assert(entry.complete === false.B, "csr must be not complete")
+        csr_commit_port.bits := true.B
+        csr_commit_port.valid := true.B
+        when(csr_commit_port.fire) {
+          state := sACK
+        }
+      }
+      is(sACK) {
+        assert(entry.complete === true.B, "csr must be complete")
+        gpr_commit_port.write(entry.rd_addr, entry.result)
+        ack := true.B
+        state := sIdle
+      }
+    }
+  }
+
   io.mmio_commit.noenq()
   io.store_commit.noenq()
+  io.csr_commit.noenq()
   io.gpr_commit_ports.foreach(gpr => {
     gpr.addr := 0.U
     gpr.wdata := 0.U
@@ -154,10 +260,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     port.ready := ack
   }
 
-  def retire_none(entry: ScoreBoardEntry, ack: Bool): Unit = {
-    assert(entry.exception.valid === false.B)
-    ack := true.B
-  }
+  io.direct_write_ports.clear()
 
   // -----------------------
   // retire logic
@@ -166,20 +269,15 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   // first inst
   when(rob_valid_seq.head && rob_data_seq.head.complete && !flush_next) {
     when(rob_data_seq.head.exception.valid) {
-      assert(
-        rob_data_seq.head.complete === true.B,
-        "rob entry must be complete"
-      )
-      val pc = rob_data_seq.head.pc
-
-      printf(
-        "Exception: %d, PC:%x, tval: %x\n",
-        rob_data_seq.head.exception.cause.asUInt,
-        pc,
-        rob_data_seq.head.exception.tval
-      )
-      pop_ack.head := true.B
-
+      retire_exception(rob_data_seq.head, pop_ack.head)
+    }.elsewhen(
+      FuOP.is_xret(rob_data_seq.head.fu_op)
+    ) {
+      when(rob_data_seq.head.fu_op === FuOP.Mret) {
+        retire_mret(rob_data_seq.head, pop_ack.head)
+      }.otherwise {
+        assert(false.B, "not implemented")
+      }
     }.otherwise {
       switch(rob_data_seq.head.fu_type) {
         is(FuType.Mul, FuType.Alu, FuType.Div) {
@@ -193,7 +291,6 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
           retire_load(
             rob_data_seq.head,
             io.gpr_commit_ports.head,
-            io.mmio_commit,
             pop_ack.head
           )
           retire_store(
@@ -209,30 +306,58 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
             pop_ack.head
           )
         }
+        is(FuType.Csr) {
+          retire_csr(
+            rob_data_seq.head,
+            io.gpr_commit_ports.head,
+            io.csr_commit,
+            pop_ack.head
+          )
+        }
         is(FuType.None) {
           retire_none(rob_data_seq.head, pop_ack.head)
         }
       }
     }
+  }.elsewhen(rob_valid_seq.head && !rob_data_seq.head.complete && !flush_next) {
+    assert(
+      rob_data_seq.head.exception.valid === false.B,
+      "rob entry must be not exception"
+    )
+    switch(rob_data_seq.head.fu_type) {
+      is(FuType.Lsu) {
+        when(
+          rob_data_seq.head.lsu_io_space && FuOP.is_load(
+            rob_data_seq.head.fu_op
+          )
+        ) {
+          io.mmio_commit.valid := true.B
+          io.mmio_commit.bits := true.B
+        }
+      }
+      is(FuType.Csr) {
+        io.csr_commit.valid := true.B
+      }
+    }
   }
 
-//  // second inst
-//  when(rob_valid_seq(1) && rob_data_seq(1).complete && !flush_next) {
-//    when(
-//      pop_ack.head && !rob_data_seq.head.exception.valid && rob_data_seq.head.fu_type =/= FuType.Br
-//    ) {
-//      val retire_fu_type_seq = VecInit(
-//        Seq(
-//          FuType.Alu.asUInt,
-//          FuType.Mul.asUInt,
-//          FuType.Div.asUInt
-//        )
-//      )
-//      when(retire_fu_type_seq.contains(rob_data_seq(1).fu_type.asUInt)) {
-//        retire_alu(rob_data_seq(1), io.gpr_commit_ports(1), pop_ack(1))
-//      }
-//    }
-//  }
+  // second inst
+  when(rob_valid_seq(1) && rob_data_seq(1).complete && !flush_next) {
+    when(
+      pop_ack.head && !rob_data_seq.head.exception.valid && rob_data_seq.head.fu_type =/= FuType.Br
+    ) {
+      val retire_fu_type_seq = VecInit(
+        Seq(
+          FuType.Alu.asUInt,
+          FuType.Mul.asUInt,
+          FuType.Div.asUInt
+        )
+      )
+      when(retire_fu_type_seq.contains(rob_data_seq(1).fu_type.asUInt)) {
+        retire_alu(rob_data_seq(1), io.gpr_commit_ports(1), pop_ack(1))
+      }
+    }
+  }
 
   // -----------------------
   // commit monitor
@@ -247,6 +372,13 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     commitMonitorSignals(0).bits.fu_type := rob_data_seq(0).fu_type
     commitMonitorSignals(0).bits.fu_op := rob_data_seq(0).fu_op
     commitMonitorSignals(0).bits.exception := rob_data_seq(0).exception
+
+    // override exception cause
+    commitMonitorSignals(0).bits.exception.cause := Mux(
+      rob_data_seq(0).fu_op === FuOP.Ecall,
+      ExceptionCause.get_call_cause(privilege_mode),
+      rob_data_seq(0).exception.cause
+    )
 
     commitMonitorSignals(1).valid := io.rob_commit_ports(1).fire
     commitMonitorSignals(1).bits.pc := rob_data_seq(1).pc
@@ -269,7 +401,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     rob_valid_seq.head && rob_data_seq.head.complete
   ) {
     assert(
-      rob_data_seq.head.pc =/= 0.U
+      rob_data_seq.head.pc =/= 0.U,
+      "pc must not be zero"
     )
   }
 

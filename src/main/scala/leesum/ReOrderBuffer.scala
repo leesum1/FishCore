@@ -53,6 +53,8 @@ class ReOrderBuffer(
       val fu_lsu_wb_port = Flipped(Decoupled(new LSUResp))
       //  mul_div_port
       val fu_mul_div_wb_port = Flipped(Decoupled(new FuMulDivResp))
+      //  csr_port
+      val fu_csr_wb_port = Flipped(Decoupled(new FuCsrResp))
     }
   )
 
@@ -143,7 +145,6 @@ class ReOrderBuffer(
     }
   }
 
-  // TODO: exception for branch? rvc?
   def branch_write_back(branch_resp: FuBranchResp, en: Bool): Unit = {
     when(en) {
       val rob_idx = branch_resp.trans_id
@@ -156,9 +157,15 @@ class ReOrderBuffer(
         .bp
         .is_miss_predict := branch_resp.is_miss_predict
       rob.content(rob_idx).bits.bp.predict_pc := branch_resp.redirect_pc
+      rob.content(rob_idx).bits.exception := branch_resp.exception
+
       assert(
         rob.create_read_port(rob_idx).valid,
         "rob entry must be valid"
+      )
+      assert(
+        !(branch_resp.exception.valid && branch_resp.wb_valid),
+        "result and exception can't be valid at the same time"
       )
     }
   }
@@ -181,10 +188,28 @@ class ReOrderBuffer(
     }
   }
 
+  def csr_write_back(csr_resp: FuCsrResp, en: Bool) = {
+
+    when(en) {
+      val rob_idx = csr_resp.trans_id
+      rob.content(rob_idx).bits.complete := true.B
+      rob.content(rob_idx).bits.result := csr_resp.data
+      rob.content(rob_idx).bits.result_valid := !csr_resp.exception.valid
+      rob.content(rob_idx).bits.exception := csr_resp.exception
+
+      assert(
+        rob.create_read_port(rob_idx).valid,
+        "rob entry must be valid"
+      )
+    }
+
+  }
+
   io.fu_alu_wb_port.foreach(_.ready := true.B)
   io.fu_branch_wb_port.ready := true.B
   io.fu_lsu_wb_port.ready := true.B
   io.fu_mul_div_wb_port.ready := true.B
+  io.fu_csr_wb_port.ready := true.B
 
   io.fu_alu_wb_port.foreach(alu_resp =>
     alu_write_back(alu_resp.bits, alu_resp.fire)
@@ -192,6 +217,7 @@ class ReOrderBuffer(
   mul_div_write_back(io.fu_mul_div_wb_port.bits, io.fu_mul_div_wb_port.fire)
   lsu_write_back(io.fu_lsu_wb_port.bits, io.fu_lsu_wb_port.fire)
   branch_write_back(io.fu_branch_wb_port.bits, io.fu_branch_wb_port.fire)
+  csr_write_back(io.fu_csr_wb_port.bits, io.fu_csr_wb_port.fire)
 
   // ------------------------------------------
   // register rename logic, renaming in rob

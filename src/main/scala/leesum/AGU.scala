@@ -27,8 +27,13 @@ class AGUResp extends Bundle {
 }
 
 class AGU(
-    addr_map: Seq[(Long, Long)] = Seq(
-      (0, 0xffffffffffffffffL) // default addr map, 0x0 -> 0xffffffffffffffff
+    // ADDR_START, ADDR_END, mmio
+    addr_map: Seq[(Long, Long, Boolean)] = Seq(
+      (
+        0,
+        0xffffffffffffffffL,
+        false
+      ) // default addr map, 0x0 -> 0xffffffffffffffff, mmio = false
     )
 ) extends Module {
   val io = IO(new Bundle {
@@ -72,6 +77,9 @@ class AGU(
   io.store_bypass.paddr := DontCare
 
   // TODO: use a queue optimize timing?
+
+  /** when tlb ready, accept the request from agu
+    */
   def send_tlb_req(): Unit = {
     agu_req.ready := io.tlb_req.ready && !io.flush
 
@@ -93,7 +101,7 @@ class AGU(
 
   def check_addr_range(addr: UInt): Bool = {
     val in_range = addr_map
-      .map { case (start, end) =>
+      .map { case (start, end, _) =>
         addr >= Long2UInt64(start) && addr <= Long2UInt64(end)
       }
       .reduce(_ || _)
@@ -110,7 +118,19 @@ class AGU(
 
   // TODO: not implemented now
   def check_mmio(tlb_rsp: TLBResp): Bool = {
-    false.B
+
+    val is_mmio = WireInit(false.B)
+    addr_map
+      .foreach { case (start, end, ismmio) =>
+        when(
+          tlb_rsp.paddr >= Long2UInt64(start) && tlb_rsp.paddr < Long2UInt64(
+            end
+          )
+        ) {
+          is_mmio := ismmio.B
+        }
+      }
+    is_mmio
   }
 
   // TODO: not implemented now

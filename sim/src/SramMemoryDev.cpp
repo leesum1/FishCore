@@ -12,33 +12,35 @@
 
 namespace SimDevices {
 
-    SynReadMemoryDev::SynReadMemoryDev(uint32_t mem_size) : mem_size(mem_size) {
+    SynReadMemoryDev::SynReadMemoryDev(uint64_t base_addr, uint32_t mem_size) {
+        this->base_addr = base_addr;
+        this->addr_lenth = mem_size;
         mem = std::vector<uint8_t>(mem_size);
         MY_ASSERT(mem.size() == mem_size);
     }
 
 
     uint64_t SynReadMemoryDev::read(uint64_t addr) {
-        if (addr >= mem_size) {
-            return 0;
-        }
-        MY_ASSERT(addr < mem_size);
+//        if (in_range(addr)) {
+//            return 0;
+//        }
+        MY_ASSERT(in_range(addr));
         MY_ASSERT(Utils::check_aligned(addr, 8));
         uint64_t result = 0;
-        std::memcpy(&result, &mem[addr], sizeof(uint64_t));
+        std::memcpy(&result, &mem[addr - base_addr], sizeof(uint64_t));
         return result;
     }
 
 
     void SynReadMemoryDev::write(uint64_t addr, uint64_t wdata, uint8_t wstrb) {
 
-        MY_ASSERT(addr < mem_size);
+        MY_ASSERT(in_range(addr));
         MY_ASSERT(Utils::check_aligned(addr, 8));
         auto wdata_seq = std::bit_cast<std::array<uint8_t, 8>>(wdata);
 
         for (int i = 0; i < 8; i++) {
             if (wstrb & (1 << i)) {
-                mem[addr + i] = wdata_seq[i];
+                mem[addr - base_addr + i] = wdata_seq[i];
             }
         }
     }
@@ -50,9 +52,9 @@ namespace SimDevices {
             bool write_en
     ) {
         if (read_en) {
-            read_req_seq.emplace_back(  read_addr);
+            read_req_seq.emplace_back(read_addr);
         }
-        if (write_en){
+        if (write_en) {
             write_req_seq.emplace_back((write_req));
         }
 
@@ -192,7 +194,7 @@ namespace SimDevices {
     void SynReadMemoryDev::check_to_host(const std::function<void(void)> &exit_callback) {
         auto to_host_addr = elf_symbol_map.find("tohost");
         if (to_host_addr != this->elf_symbol_map.end()) {
-            auto to_host_value = read((to_host_addr->second) - 0x80000000);
+            auto to_host_value = read((to_host_addr->second));
             if (to_host_value != 0) {
                 std::cout << std::format("tohost value: 0x{:x}\n", to_host_value);
                 exit_callback();

@@ -2,6 +2,7 @@ package leesum
 
 import chisel3.util.{Decoupled, ListLookup, MuxLookup}
 import chisel3.{Bundle, Input, Module, _}
+import leesum.RVinst._
 
 class InstDecoder extends Module {
   val io = IO(new Bundle {
@@ -14,7 +15,7 @@ class InstDecoder extends Module {
     ListLookup(
       io.in.bits.inst,
       RVinst.inst_default,
-      RVinst.i_common_map ++ RVinst.i64_map ++ RVinst.i_special_map ++ RVinst.m_map ++ RVinst.m64_map
+      i_common_map ++ i64_map ++ m_map ++ m64_map ++ zicsr_map ++ privilege_map
     )
   val decode_sigs = Wire(new DecoderSignals())
 
@@ -54,7 +55,7 @@ class InstDecoder extends Module {
 
   val scoreboard_entry = Wire(new ScoreBoardEntry())
 
-  val inst_base = Module(new InstBase(io.in.bits.inst))
+  val inst_base = new InstBase(io.in.bits.inst)
 
   scoreboard_entry.inst := decode_sigs.inst
   scoreboard_entry.pc := decode_sigs.inst_pc
@@ -103,6 +104,12 @@ class InstDecoder extends Module {
     scoreboard_entry.exception.valid := true.B
     scoreboard_entry.exception.cause := ExceptionCause.breakpoint
     scoreboard_entry.exception.tval := io.in.bits.pc
+  }.elsewhen(decode_sigs.fu_op === FuOP.Ecall) {
+    // ecall
+    scoreboard_entry.exception.valid := true.B
+    // temporary cause, the real cause will be set in commit stage
+    scoreboard_entry.exception.cause := ExceptionCause.unknown
+    scoreboard_entry.exception.tval := 0.U
   }.elsewhen(!decode_sigs.inst_valid) {
     // exception happened in decode stage
     scoreboard_entry.exception.valid := true.B
@@ -117,11 +124,12 @@ class InstDecoder extends Module {
 
   // TODO: refactor me!!!
   val exception_valid = scoreboard_entry.exception.valid
-  val is_store = FuOP.is_store(scoreboard_entry.fu_op)
-  val is_fence = scoreboard_entry.fu_op === FuOP.Fence
 
-  // TODO : if a exception happened, complete should be true?
-  scoreboard_entry.complete := exception_valid | is_store | is_fence
+  scoreboard_entry.complete := exception_valid || FuOP.is_xret(
+    scoreboard_entry.fu_op
+  ) || FuOP.is_fence(scoreboard_entry.fu_op) || FuOP.is_store(
+    scoreboard_entry.fu_op
+  )
 
   // ------------------------------------------
   //  scoreboard branch predictor information
@@ -132,6 +140,15 @@ class InstDecoder extends Module {
   io.in.ready := io.out.ready
 
   io.out.bits := scoreboard_entry
+
+  // -------------------
+  // assert
+  // -------------------
+  assert(
+    !(scoreboard_entry.use_immz && scoreboard_entry.use_imm),
+    "use_immz and use_imm should not be true at the same time"
+  )
+
 }
 
 object gen_verilog4 extends App {

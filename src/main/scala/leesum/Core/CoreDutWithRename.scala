@@ -1,14 +1,24 @@
 package leesum.Core
 import chisel3._
 import chisel3.util.{Valid, log2Ceil}
-import leesum.axi4.{AXI4SlaveBrige, AxiReadArbiter, BasicMemoryIO}
+import leesum.axi4.{AXI4SlaveBridge, AxiReadArbiter, BasicMemoryIO}
 import leesum.moniter.{DifftestPort, MonitorTop}
 import leesum._
 class CoreDutWithRename(random_latency: Boolean = false) extends Module {
-  val base_addr = 0x80000000L
-  val mem_size = 0x100000L
+  val mem_addr = 0x80000000L
+  val mem_size = 0x8000000L
   val monitor_en = true
-  val addr_width = log2Ceil(0x80000000L + 0x100000L)
+  val addr_width = log2Ceil(mem_addr + mem_size)
+
+  val DEVICE_BASE = 0xa0000000L;
+  val SERIAL_PORT = DEVICE_BASE + 0x00003f8L;
+  val RTC_ADDR = DEVICE_BASE + 0x0000048L;
+
+  val addr_map = Seq(
+    (mem_addr, mem_addr + mem_size, false),
+    (SERIAL_PORT, SERIAL_PORT + 0x8, true),
+    (RTC_ADDR, RTC_ADDR + 0x8, true)
+  )
 
   val io = IO(new Bundle {
     val difftest = Output(Valid(new DifftestPort))
@@ -33,15 +43,23 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
 
   val commit_stage = Module(new CommitStage(2, monitor_en))
   val reg_file = Module(new GPRs(2, 2, monitor_en))
+  val csr_regs = Module(new CSRRegs)
 
   val fetch_tlb = Module(new DummyTLB(random_latency))
   val lsu_tlb = Module(new DummyTLB(random_latency))
+
+  // fu
+  val alu_seq = Seq.fill(2)(Module(new FuAlu))
+  val lsu = Module(new LSU(addr_map))
+  val bru = Module(new FuBranch)
+  val mul_div = Module(new FuMulDiv)
+  val csr = Module(new FuCSR)
 
   val dcache = Module(new DummyDCache)
   val icache = Module(new DummyICache)
   val axi_r_arb = Module(new AxiReadArbiter)
   val axi_mem = Module(
-    new AXI4SlaveBrige(
+    new AXI4SlaveBridge(
       AXI_AW = 32,
       AXI_DW = 64,
       INTERNAL_MEM_SIZE = 0x100000,
@@ -77,12 +95,6 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
   axi_mem.io.axi_slave.w <> dcache.io.axi_mem.w
   axi_mem.io.axi_slave.b <> dcache.io.axi_mem.b
 
-  // fu
-  val alu_seq = Seq.fill(2)(Module(new FuAlu))
-  val lsu = Module(new LSU)
-  val bru = Module(new FuBranch)
-  val mul_div = Module(new FuMulDiv)
-
   // flush
   fetch_stage.io.flush := commit_stage.io.flush
   inst_fifo.io.flush := commit_stage.io.flush
@@ -96,6 +108,7 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
   inst_realign.flush := commit_stage.io.flush
   bru.io.flush := commit_stage.io.flush
   mul_div.io.flush := commit_stage.io.flush
+  csr.io.flush := commit_stage.io.flush
 
   // pc_gen_stage <> fetch_stage
   pc_gen_stage.io.pc <> fetch_stage.io.pc_in
@@ -152,38 +165,45 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
 
   // issue stage <> fu
   require(issue_stage_rob.io.fu_port.alu.length == alu_seq.length)
-  for (i <- 0 until alu_seq.length) {
+  for (i <- alu_seq.indices) {
     issue_stage_rob.io.fu_port.alu(i) <> alu_seq(i).io.in
   }
   issue_stage_rob.io.fu_port.lsu_0 <> lsu.io.lsu_req
   issue_stage_rob.io.fu_port.branch_0 <> bru.io.in
   issue_stage_rob.io.fu_port.mul_0 <> mul_div.io.mul_req
   issue_stage_rob.io.fu_port.div_0 <> mul_div.io.div_req
+  issue_stage_rob.io.fu_port.csr_0 <> csr.io.csr_req
 
-  // TODO: CSR NOT IMPLEMENTED
-  issue_stage_rob.io.fu_port.csr_0.ready := false.B
+  // csr <> csr_regs
+  csr.io.csr_read_port <> csr_regs.io.read_port
+  csr.io.csr_write_port <> csr_regs.io.write_port
+
   // issue stage <> reg file
   issue_stage_rob.io.gpr_read_port <> reg_file.io.read_ports
 
   // scoreboard <> fu
   require(rob.io.fu_alu_wb_port.length == alu_seq.length)
-  for (i <- 0 until alu_seq.length) {
+  for (i <- alu_seq.indices) {
     rob.io.fu_alu_wb_port(i) <> alu_seq(i).io.out
   }
   rob.io.fu_lsu_wb_port <> lsu.io.lsu_resp
   rob.io.fu_branch_wb_port <> bru.io.out
-
   rob.io.fu_mul_div_wb_port <> mul_div.io.fu_div_mul_resp
+  rob.io.fu_csr_wb_port <> csr.io.csr_resp
 
   // scoreboard <> commit stage
   rob.io.pop_ports <> commit_stage.io.rob_commit_ports
 
   // commit stage <> reg file
   commit_stage.io.gpr_commit_ports <> reg_file.io.write_ports
+  // commit stage <> csr file
+  commit_stage.io.direct_read_ports <> csr_regs.io.direct_read_ports
+  commit_stage.io.direct_write_ports <> csr_regs.io.direct_write_ports
 
   // commit stage <> fu
   commit_stage.io.store_commit <> lsu.io.store_commit
   commit_stage.io.mmio_commit <> lsu.io.mmio_commit
+  commit_stage.io.csr_commit <> csr.io.csr_commit
 
   // commit stage <> pc gen
   pc_gen_stage.io.redirect_pc <> commit_stage.io.branch_commit
@@ -193,6 +213,9 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
 
   // regfile <> monitor
   reg_file.io.gpr_monitor.get <> monitor.io.gpr_monitor
+
+  // csr <> monitor
+  csr_regs.io.direct_read_ports <> monitor.io.csr_monitor
 
   // lsu <> tlb
   lsu.io.tlb_req <> lsu_tlb.io.tlb_req

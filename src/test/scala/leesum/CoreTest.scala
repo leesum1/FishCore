@@ -4,7 +4,7 @@ import chisel3.util.{Valid, log2Ceil}
 import chiseltest._
 import com.sun.jna._
 import leesum.TestUtils.long2UInt64
-import leesum.axi4.{AXI4Memory, AXI4SlaveBrige, AxiReadArbiter, BasicMemoryIO}
+import leesum.axi4.{AXI4Memory, AXI4SlaveBridge, AxiReadArbiter, BasicMemoryIO}
 import leesum.moniter.{DifftestPort, MonitorTop}
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -230,7 +230,7 @@ class CoreTestDut_NoM extends Module {
   val icache = Module(new DummyICache)
   val axi_r_arb = Module(new AxiReadArbiter)
   val axi_mem = Module(
-    new AXI4SlaveBrige(
+    new AXI4SlaveBridge(
       AXI_AW = 32,
       AXI_DW = 64,
       INTERNAL_MEM_SIZE = 0x100000,
@@ -425,7 +425,7 @@ class CoreTestDut2 extends Module {
   val icache = Module(new DummyICache)
   val axi_r_arb = Module(new AxiReadArbiter)
   val axi_mem = Module(
-    new AXI4SlaveBrige(
+    new AXI4SlaveBridge(
       AXI_AW = 32,
       AXI_DW = 64,
       INTERNAL_MEM_SIZE = 0x100000,
