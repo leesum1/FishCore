@@ -7,6 +7,9 @@
 #include <new>
 #include <vector>
 #include <ranges>
+#include "Utils.h"
+#include "Vtop.h"
+#include <format>
 
 struct Rv64emuBridge {
     void *sim;

@@ -3,7 +3,7 @@
 #include "verilated.h"
 #include <string>
 
-#ifdef VM_TRACE_FST
+#if VM_TRACE_FST==1
 
 #include "verilated_fst_c.h"
 
@@ -18,7 +18,7 @@ class SimBase {
     bool finish_flag = false;
 
 
-#ifdef VM_TRACE_FST
+#if VM_TRACE_FST==1
     VerilatedFstC *tfp;
     bool wave_trace_flag = false;
 #endif
@@ -51,7 +51,7 @@ SimBase::SimBase() {
 
 void SimBase::dump_wave() {
 
-#ifdef VM_TRACE_FST
+#if VM_TRACE_FST==1
     if (wave_trace_flag) {
         if (tfp->isOpen()) {
             tfp->dump(top->contextp()->time());
@@ -62,7 +62,7 @@ void SimBase::dump_wave() {
 }
 
 void SimBase::enable_wave_trace(std::string file_name) {
-#ifdef VM_TRACE_FST
+#if VM_TRACE_FST==1
     wave_trace_flag = true;
     tfp = new VerilatedFstC;
     Verilated::traceEverOn(true);
@@ -73,7 +73,7 @@ void SimBase::enable_wave_trace(std::string file_name) {
 
 SimBase::~SimBase() {
 
-#ifdef VM_TRACE_FST
+#if VM_TRACE_FST==1
     if (wave_trace_flag) {
         std::cout << "close wave trace file" << std::endl;
         if (tfp->isOpen()) {

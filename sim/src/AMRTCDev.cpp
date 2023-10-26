@@ -36,16 +36,14 @@ namespace SimDevices {
             read_req_seq.pop_back();
             auto offset = read_addr - base_addr;
 
+            MY_ASSERT(offset == 0 || offset == 4, "read offset not supported");
+
             if (offset == 0) {
                 auto milliseconds_since_epoch = std::chrono::duration_cast<std::chrono::microseconds>(
                         std::chrono::system_clock::now().time_since_epoch()).count();
                 rtc_time = milliseconds_since_epoch;
-           last_read = rtc_time & 0xffffffffl;
-            } else if (offset == 4) {
-                last_read = (rtc_time >> 32) & 0xffffffffl;
-            } else {
-                MY_ASSERT(false, "read address out of range");
             }
+            last_read = rtc_time;
         }
         return last_read;
     }

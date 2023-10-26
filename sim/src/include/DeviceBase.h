@@ -20,7 +20,7 @@ namespace SimDevices {
         uint64_t base_addr = 0;
         uint64_t addr_lenth = 0;
 
-        bool in_range(uint64_t addr) {
+        virtual bool in_range(uint64_t addr) {
             return addr >= base_addr && addr < base_addr + addr_lenth;
         }
 

@@ -4,11 +4,11 @@
 -- set_policy("build.sanitizer.leak", true)
 
 
-add_requires("verilator")
 add_requires("cli11",{system = false})
 add_requires("catch2",{system = false})
 add_requires("assert",{system = true})
 add_requires("elfio",{system = false})
+add_requires("libsdl",{system = false})
 
 -- set_policy("build.warning", true)
 -- set_warnings("all", "extra")dd
@@ -24,9 +24,10 @@ target("Vtop")
     set_toolchains("@verilator")
     add_files("src/*.cpp")
     add_files("vsrc/*.sv")
-    add_values("verilator.flags","--top","CoreDutWithRename","--trace-fst")
+    add_values("verilator.flags","--top","CoreDutWithRename")
+--     add_values("verilator.flags","--trace-fst")
     add_includedirs("src/include/")
-    add_packages("catch2","cli11","assert","elfio")
+    add_packages("catch2","cli11","assert","elfio","libsdl")
     add_links("rv64emu_cbinding")
 
 
