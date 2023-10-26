@@ -254,6 +254,7 @@ class CSRRegs extends Module {
   val mtval = RegInit(0.U(64.W))
   val mscratch = RegInit(0.U(64.W))
   val misa = RegInit(Long2UInt64(0x8000000000001100L))
+  val mhartid = RegInit(0.U(64.W))
 
   val m_map =
     Seq(
@@ -265,7 +266,8 @@ class CSRRegs extends Module {
       (CSRs.mepc, mepc),
       (CSRs.mip, mip),
       (CSRs.mscratch, mscratch),
-      (CSRs.misa, misa)
+      (CSRs.misa, misa),
+      (CSRs.mhartid, mhartid)
     )
   m_map.foreach({ case (addr, reg) =>
     csr_map.add_csr(addr, reg)
