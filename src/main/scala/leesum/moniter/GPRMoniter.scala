@@ -12,6 +12,7 @@ class CommitMonitorPort extends Bundle {
   val fu_type = FuType()
   val fu_op = FuOP()
   val exception = new ExceptionEntry()
+  val is_mmio = Bool()
 }
 
 class DifftestCsr extends Bundle {}
@@ -19,11 +20,12 @@ class DifftestCsr extends Bundle {}
 class DifftestPort extends Bundle {
   val pc = UInt(64.W)
   val inst = UInt(32.W)
-  val gpr = Vec(32, UInt(64.W))
   val exception = new ExceptionEntry()
   val commited_num = UInt(8.W)
+  val contain_mmio = Bool()
   // csr port
   val csr = new CSRDirectReadPorts
+  val gpr = Vec(32, UInt(64.W))
 }
 class MonitorTop(commit_port_num: Int) extends Module {
   val io = IO(new Bundle {
@@ -46,6 +48,9 @@ class MonitorTop(commit_port_num: Int) extends Module {
     commit_monitor_next.map(_.bits.exception).reverse
   )
 
+  val contain_mmio =
+    commit_monitor_next.map(x => x.valid && x.bits.is_mmio).reduce(_ || _)
+
   io.difftest.valid := commit_monitor_count > 0.U
   io.difftest.bits.gpr := io.gpr_monitor.gpr
   io.difftest.bits.csr := io.csr_monitor
@@ -53,4 +58,5 @@ class MonitorTop(commit_port_num: Int) extends Module {
   io.difftest.bits.pc := last_commit_inst.pc
   io.difftest.bits.inst := last_commit_inst.inst
   io.difftest.bits.exception := last_exception
+  io.difftest.bits.contain_mmio := contain_mmio & !last_exception.valid
 }

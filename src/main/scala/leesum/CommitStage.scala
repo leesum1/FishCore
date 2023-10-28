@@ -366,26 +366,22 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   if (monitor_en) {
     val commitMonitorSignals = io.commit_monitor.get
 
-    commitMonitorSignals(0).valid := io.rob_commit_ports(0).fire
-    commitMonitorSignals(0).bits.pc := rob_data_seq(0).pc
-    commitMonitorSignals(0).bits.inst := rob_data_seq(0).inst
-    commitMonitorSignals(0).bits.fu_type := rob_data_seq(0).fu_type
-    commitMonitorSignals(0).bits.fu_op := rob_data_seq(0).fu_op
-    commitMonitorSignals(0).bits.exception := rob_data_seq(0).exception
+    for (idx <- 0 until num_commit_port) {
+      commitMonitorSignals(idx).valid := io.rob_commit_ports(idx).fire
+      commitMonitorSignals(idx).bits.pc := rob_data_seq(idx).pc
+      commitMonitorSignals(idx).bits.inst := rob_data_seq(idx).inst
+      commitMonitorSignals(idx).bits.fu_type := rob_data_seq(idx).fu_type
+      commitMonitorSignals(idx).bits.fu_op := rob_data_seq(idx).fu_op
+      commitMonitorSignals(idx).bits.exception := rob_data_seq(idx).exception
+      commitMonitorSignals(idx).bits.is_mmio := rob_data_seq(idx).lsu_io_space
 
-    // override exception cause
-    commitMonitorSignals(0).bits.exception.cause := Mux(
-      rob_data_seq(0).fu_op === FuOP.Ecall,
-      ExceptionCause.get_call_cause(privilege_mode),
-      rob_data_seq(0).exception.cause
-    )
-
-    commitMonitorSignals(1).valid := io.rob_commit_ports(1).fire
-    commitMonitorSignals(1).bits.pc := rob_data_seq(1).pc
-    commitMonitorSignals(1).bits.inst := rob_data_seq(1).inst
-    commitMonitorSignals(1).bits.fu_type := rob_data_seq(1).fu_type
-    commitMonitorSignals(1).bits.fu_op := rob_data_seq(1).fu_op
-    commitMonitorSignals(1).bits.exception := rob_data_seq(1).exception
+      // override exception cause
+      commitMonitorSignals(idx).bits.exception.cause := Mux(
+        rob_data_seq(idx).fu_op === FuOP.Ecall,
+        ExceptionCause.get_call_cause(privilege_mode),
+        rob_data_seq(idx).exception.cause
+      )
+    }
   }
 
   // -----------------------

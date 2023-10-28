@@ -7,9 +7,10 @@
 #include <new>
 #include <vector>
 #include <ranges>
+#include <format>
+#include "CSREncode.h"
 #include "Utils.h"
 #include "Vtop.h"
-#include <format>
 
 struct Rv64emuBridge {
     void *sim;
@@ -49,16 +50,7 @@ void set_csr(Rv64emuBridge *rv64emu, uint64_t addr, uint64_t val);
 class DiffTest {
 private:
 
-    static constexpr uint64_t MSTATUS = 0x300;
-    static constexpr uint64_t MCAUSE = 0x342;
-    static constexpr uint64_t MTVAL = 0x343;
-    static constexpr uint64_t MTVEC = 0x305;
-    static constexpr uint64_t MIP = 0x344;
-    static constexpr uint64_t MIE = 0x304;
-    static constexpr uint64_t MIDELEG = 0x303;
-    static constexpr uint64_t MEDELEG = 0x302;
-    static constexpr uint64_t MSCRATCH = 0x340;
-    static constexpr uint64_t MEPC = 0x341;
+
 
 
     std::string_view get_csr_name(uint64_t addr) {
@@ -129,12 +121,15 @@ public:
     }
 
     using read_gpr_fuc = std::function<uint64_t(size_t idx)>;
+    using read_csr_fuc = std::function<uint64_t(size_t idx)>;
 
     bool check_gprs(read_gpr_fuc dut_gpr, read_gpr_fuc ref_gpr, bool debug_en);
 
-    bool check_csrs(Vtop *dut, bool debug_en);
+    bool check_csrs(read_csr_fuc dut_csr, bool debug_en);
 
     bool check_pc(uint64_t ref_pc, uint64_t dut_pc, bool debug_en);
+
+    void ref_skip(read_gpr_fuc dut_gpr,uint64_t dut_pc);
 
     ~DiffTest();
 
@@ -214,32 +209,38 @@ bool DiffTest::check_pc(uint64_t ref_pc, uint64_t dut_pc, bool debug_en = false)
     return fail;
 }
 
-bool DiffTest::check_csrs(Vtop *dut, bool debug_en = false) {
+
+// TODO: do not  pass Vtop
+bool DiffTest::check_csrs(DiffTest::read_csr_fuc dut_csr, bool debug_en = false) {
     using csr_pair = std::pair<uint64_t, uint64_t>;
-
-    auto dut_csrs = std::array{csr_pair{dut->io_difftest_bits_csr_mcause, MCAUSE},
-                               csr_pair{dut->io_difftest_bits_csr_mepc, MEPC},
-                               csr_pair{dut->io_difftest_bits_csr_mtvec, MTVEC},
-                               csr_pair{dut->io_difftest_bits_csr_mstatus, MSTATUS},
-                               csr_pair{dut->io_difftest_bits_csr_mie, MIE},
-                               csr_pair{dut->io_difftest_bits_csr_mtval, MTVAL}};
-
+    const auto need_csr = std::array{MCAUSE, MEPC, MTVEC, MSTATUS, MIE, MTVAL};
     auto ref_csrs = std::vector<uint64_t>();
-    for (auto dut_csr: dut_csrs) {
-        ref_csrs.emplace_back(get_csr(dut_csr.second));
+    auto dut_csrs = std::vector<uint64_t>();
+
+
+    for (auto csr_addr: need_csr) {
+        ref_csrs.emplace_back(get_csr(csr_addr));
+        dut_csrs.emplace_back(dut_csr(csr_addr));
     }
 
     bool mismatch = false;
-    for (auto idx  = 0; idx < dut_csrs.size(); idx++){
-        if (dut_csrs[idx].first != ref_csrs[idx]) {
+    for (auto idx  = 0; idx < need_csr.size(); idx++){
+        if (dut_csrs[idx] != ref_csrs[idx]) {
             mismatch = true;
-            std::cout << std::format("csr {:x},{:s} mismatch: ref: 0x{:016x}, dut: 0x{:016x}\n",dut_csrs[idx].second,
-                                     get_csr_name(dut_csrs[idx].second), ref_csrs[idx],
-                                     dut_csrs[idx].first);
+            std::cout << std::format("csr {:x},{:s} mismatch: ref: 0x{:016x}, dut: 0x{:016x}\n",need_csr[idx],
+                                     get_csr_name(need_csr[idx]), ref_csrs[idx],
+                                     dut_csrs[idx]);
         }
     }
 
     return mismatch;
+}
+
+void DiffTest::ref_skip(DiffTest::read_gpr_fuc dut_gpr, uint64_t dut_pc) {
+    set_pc(dut_pc);
+    for (auto idx: std::views::iota(0, 32)) {
+        set_reg(idx, dut_gpr(idx));
+    }
 }
 
 

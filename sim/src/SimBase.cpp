@@ -1,49 +1,11 @@
 #pragma once
+
+#include "include/SimBase.h"
 #include "Vtop.h"
-#include "verilated.h"
-#include <string>
+#include "CSREncode.h"
+#include <memory>
+#include <iostream>
 
-#if VM_TRACE_FST==1
-
-#include "verilated_fst_c.h"
-
-#endif
-
-#include <functional>
-#include <Utils.h>
-#include <format>
-
-class SimBase {
-    std::shared_ptr<Vtop> top;
-    bool finish_flag = false;
-
-
-#if VM_TRACE_FST==1
-    VerilatedFstC *tfp;
-    bool wave_trace_flag = false;
-#endif
-
-public:
-    SimBase();
-
-    void enable_wave_trace(std::string file_name);
-
-    void dump_wave();
-
-    void step(std::function<bool(std::shared_ptr<Vtop>)> func);
-
-    void reset();
-
-    uint64_t get_pc();
-
-    uint64_t get_reg(int idx);
-
-    bool finished() {
-        return finish_flag;
-    }
-
-    ~SimBase();
-};
 
 SimBase::SimBase() {
     top = std::make_shared<Vtop>();
@@ -51,7 +13,7 @@ SimBase::SimBase() {
 
 void SimBase::dump_wave() {
 
-#if VM_TRACE_FST==1
+#if VM_TRACE_FST == 1
     if (wave_trace_flag) {
         if (tfp->isOpen()) {
             tfp->dump(top->contextp()->time());
@@ -62,7 +24,7 @@ void SimBase::dump_wave() {
 }
 
 void SimBase::enable_wave_trace(std::string file_name) {
-#if VM_TRACE_FST==1
+#if VM_TRACE_FST == 1
     wave_trace_flag = true;
     tfp = new VerilatedFstC;
     Verilated::traceEverOn(true);
@@ -73,7 +35,7 @@ void SimBase::enable_wave_trace(std::string file_name) {
 
 SimBase::~SimBase() {
 
-#if VM_TRACE_FST==1
+#if VM_TRACE_FST == 1
     if (wave_trace_flag) {
         std::cout << "close wave trace file" << std::endl;
         if (tfp->isOpen()) {
@@ -174,6 +136,28 @@ uint64_t SimBase::get_reg(int idx) {
 
 }
 
+
+uint64_t SimBase::get_csr(int addr) {
+    MY_ASSERT(addr < 4096, "csr index out of range");
+#define GET_CSR(top, name) (top->io_difftest_bits_csr_##name)
+    switch (addr) {
+        case MSTATUS:
+            return GET_CSR(top, mstatus);
+        case MIE:
+            return GET_CSR(top, mie);
+        case MTVEC:
+            return GET_CSR(top, mtvec);
+        case MEPC:
+            return GET_CSR(top, mepc);
+        case MCAUSE:
+            return GET_CSR(top, mcause);
+        case MTVAL:
+            return GET_CSR(top, mtval);
+        default:
+            MY_ASSERT(false);
+            return 0;
+    }
+}
 
 void SimBase::step(
         std::function<bool(std::shared_ptr<Vtop>)> func
