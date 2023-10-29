@@ -1,7 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util.{Decoupled, Enum, PriorityMux, is, switch}
-import leesum.axi4.{SkidBufferWithFLush, StreamJoin}
+import leesum.axi4.{SkidBufferWithFLush, StreamFork2, StreamJoin}
 
 class AGUReq extends Bundle {
   val op_a = UInt(64.W)
@@ -20,10 +20,17 @@ class ExceptionQueueIn extends Bundle {
   val exception = new ExceptionEntry()
 }
 
+class AGUWriteBack extends Bundle {
+  val trans_id = UInt(32.W)
+  val is_mmio = Bool()
+  val is_store = Bool()
+  val exception = new ExceptionEntry()
+}
+
 class AGUResp extends Bundle {
   val load_pipe = Decoupled(new LoadQueueIn())
   val store_pipe = Decoupled(new StoreQueueIn())
-  val exception_pipe = Decoupled(new ExceptionQueueIn())
+  val agu_pipe = Decoupled(new AGUWriteBack())
 }
 
 class AGU(
@@ -69,7 +76,7 @@ class AGU(
   io.tlb_resp.nodeq()
   agu_req.nodeq()
 
-  io.out.exception_pipe.noenq()
+  io.out.agu_pipe.noenq()
 
   io.out.store_pipe.noenq()
   io.out.load_pipe.noenq()
@@ -136,10 +143,10 @@ class AGU(
   // TODO: not implemented now
   def dispatch_to_exception(tlb_rsp: TLBResp): Unit = {
 
-    io.out.exception_pipe.valid := true.B
-    when(io.out.exception_pipe.fire) {
-      io.out.exception_pipe.bits.exception.valid := true.B
-      io.out.exception_pipe.bits.trans_id := agu_req_buf.trans_id
+    io.out.agu_pipe.valid := true.B
+    when(io.out.agu_pipe.fire) {
+      io.out.agu_pipe.bits.exception.valid := true.B
+      io.out.agu_pipe.bits.trans_id := agu_req_buf.trans_id
 
       val is_misaligned = !CheckAligned(tlb_rsp.paddr, tlb_rsp.size)
       val out_of_range = !check_addr_range(tlb_rsp.paddr)
@@ -148,7 +155,7 @@ class AGU(
       // 2. tlb exception
       // 3. out of range
       // 4. defeat unknown
-      io.out.exception_pipe.bits.exception.cause := PriorityMux(
+      io.out.agu_pipe.bits.exception.cause := PriorityMux(
         Seq(
           is_misaligned -> ExceptionCause.get_misaigned_cause(tlb_rsp.req_type),
           tlb_rsp.exception.valid -> tlb_rsp.exception.cause,
@@ -160,7 +167,7 @@ class AGU(
       // If mtval is written with a nonzero value when a misaligned load or store causes an access-fault or
       // page-fault exception, then mtval will contain the virtual address of the portion of the access that
       // caused the fault.
-      io.out.exception_pipe.bits.exception.tval := tlb_rsp.paddr
+      io.out.agu_pipe.bits.exception.tval := tlb_rsp.paddr
 
       // back to back
       send_tlb_req()
@@ -168,82 +175,129 @@ class AGU(
       state := sWaitFifo
     }
   }
+
   def dispatch_to_load(tlb_rsp: TLBResp): Unit = {
     // when current load addr conflict with uncommitted store addr, and the store is a mmio operation
     // then stall the current load.
     val need_stall = io.store_bypass.data.valid && io.store_bypass.data.is_mmio
     val is_mmio = check_mmio(tlb_rsp)
 
-    val load_pipe_join = Wire(Decoupled(new LoadQueueIn))
-    val exception_pipe_join = Wire(Decoupled(new ExceptionQueueIn))
+    val load_fork_in = Wire(Decoupled(Bool()))
+    load_fork_in.valid := !need_stall && tlb_rsp.req_type === TLBReqType.LOAD
+    load_fork_in.bits := DontCare // not used
+
+    val (load_fork_out1, load_fork_out2) = StreamFork2(load_fork_in)
+
+    load_fork_out1.ready := io.out.load_pipe.ready
+    load_fork_out2.ready := Mux(is_mmio, io.out.agu_pipe.ready, true.B)
     // -----------------------
-    // load pile join
+    // load pipe fork
     // -----------------------
-    load_pipe_join.valid := !need_stall
-    load_pipe_join.bits.paddr := tlb_rsp.paddr
-    load_pipe_join.bits.size := agu_req_buf.size
-    load_pipe_join.bits.trans_id := agu_req_buf.trans_id
-    load_pipe_join.bits.store_bypass := Mux(
+    io.out.load_pipe.valid := load_fork_out1.valid
+    io.out.load_pipe.bits.paddr := tlb_rsp.paddr
+    io.out.load_pipe.bits.size := agu_req_buf.size
+    io.out.load_pipe.bits.trans_id := agu_req_buf.trans_id
+    io.out.load_pipe.bits.store_bypass := Mux(
       io.store_bypass.data.valid,
       io.store_bypass.data,
       0.U.asTypeOf(new StoreBypassData)
     )
-    load_pipe_join.bits.sign_ext := agu_req_buf.sign_ext
-    load_pipe_join.bits.is_mmio := is_mmio
+    io.out.load_pipe.bits.sign_ext := agu_req_buf.sign_ext
+    io.out.load_pipe.bits.is_mmio := is_mmio
     // -----------------------
-    // exception pile join
+    // exception pipe fork
     // -----------------------
     // if the load is mmio, then write back
-    exception_pipe_join.valid := is_mmio
-    exception_pipe_join.bits.is_mmio := is_mmio
-    exception_pipe_join.bits.trans_id := agu_req_buf.trans_id
-    exception_pipe_join.bits.exception := DontCare
-    exception_pipe_join.bits.exception.valid := false.B
+    io.out.agu_pipe.valid := load_fork_out2.valid && is_mmio
+    io.out.agu_pipe.bits.is_mmio := is_mmio
+    io.out.agu_pipe.bits.is_store := false.B
+    io.out.agu_pipe.bits.trans_id := agu_req_buf.trans_id
+    io.out.agu_pipe.bits.exception.valid := false.B
+    io.out.agu_pipe.bits.exception.cause := ExceptionCause.unknown
+    io.out.agu_pipe.bits.exception.tval := 0.U
 
-    val join2_with_cond =
-      StreamJoin(load_pipe_join, exception_pipe_join, true.B, is_mmio)
-
-    join2_with_cond.ready := io.out.load_pipe.ready && Mux(
-      is_mmio,
-      io.out.exception_pipe.ready,
-      true.B
-    )
-
-    io.out.load_pipe.valid := join2_with_cond.valid
-    io.out.load_pipe.bits := join2_with_cond.bits.element1
-    io.out.exception_pipe.valid := join2_with_cond.valid & is_mmio
-    io.out.exception_pipe.bits := join2_with_cond.bits.element2
-
-    when(join2_with_cond.fire) {
+    when(load_fork_in.fire) {
       // back to back
       send_tlb_req()
     }.otherwise {
       state := sWaitFifo
     }
   }
+
+//  def dispatch_to_store(tlb_rsp: TLBResp): Unit = {
+//    // when current store addr conflict with uncommitted store addr.
+//    // than stall dispatch the current store
+//    io.out.store_pipe.valid := true.B && !io.store_bypass.data.valid
+//
+//    // mmio do not affect the store op
+//
+//    when(io.out.store_pipe.fire) {
+//      io.out.store_pipe.bits.paddr := tlb_rsp.paddr
+//      io.out.store_pipe.bits.size := agu_req_buf.size
+//
+//      // convert store_data to axi wdata
+//      io.out.store_pipe.bits.wdata := GenAxiWdata(
+//        agu_req_buf.store_data,
+//        tlb_rsp.paddr
+//      )
+//      io.out.store_pipe.bits.wstrb := GenAxiWstrb(
+//        tlb_rsp.paddr,
+//        agu_req_buf.size
+//      )
+//      io.out.store_pipe.bits.trans_id := agu_req_buf.trans_id
+//      // TODO: is_mmio is not implemented
+//      io.out.store_pipe.bits.is_mmio := check_mmio(tlb_rsp)
+//      // back to back
+//      send_tlb_req()
+//    }.otherwise {
+//      state := sWaitFifo
+//    }
+//  }
+
   def dispatch_to_store(tlb_rsp: TLBResp): Unit = {
     // when current store addr conflict with uncommitted store addr.
     // than stall dispatch the current store
-    io.out.store_pipe.valid := true.B && !io.store_bypass.data.valid
 
-    // mmio do not affect the store op
+    val need_stall = io.store_bypass.data.valid
+    val is_mmio = check_mmio(tlb_rsp)
 
-    when(io.out.store_pipe.fire) {
-      io.out.store_pipe.bits.paddr := tlb_rsp.paddr
-      io.out.store_pipe.bits.size := agu_req_buf.size
+    val store_fork_in = Wire(Decoupled(Bool()))
+    store_fork_in.valid := !need_stall && tlb_rsp.req_type === TLBReqType.STORE
+    store_fork_in.bits := DontCare // not used
 
-      // convert store_data to axi wdata
-      io.out.store_pipe.bits.wdata := GenAxiWdata(
-        agu_req_buf.store_data,
-        tlb_rsp.paddr
-      )
-      io.out.store_pipe.bits.wstrb := GenAxiWstrb(
-        tlb_rsp.paddr,
-        agu_req_buf.size
-      )
-      io.out.store_pipe.bits.trans_id := agu_req_buf.trans_id
-      // TODO: is_mmio is not implemented
-      io.out.store_pipe.bits.is_mmio := check_mmio(tlb_rsp)
+    val (store_fork_out1, store_fork_out2) = StreamFork2(store_fork_in)
+    store_fork_out1.ready := io.out.store_pipe.ready
+    store_fork_out2.ready := io.out.agu_pipe.ready
+
+    // -----------------------
+    // store pipe fork
+    // -----------------------
+    io.out.store_pipe.valid := store_fork_out1.valid
+    io.out.store_pipe.bits.paddr := tlb_rsp.paddr
+    io.out.store_pipe.bits.size := agu_req_buf.size
+    // convert store_data to axi wdata
+    io.out.store_pipe.bits.wdata := GenAxiWdata(
+      agu_req_buf.store_data,
+      tlb_rsp.paddr
+    )
+    io.out.store_pipe.bits.wstrb := GenAxiWstrb(
+      tlb_rsp.paddr,
+      agu_req_buf.size
+    )
+    io.out.store_pipe.bits.trans_id := agu_req_buf.trans_id
+    io.out.store_pipe.bits.is_mmio := is_mmio
+    // --------------------------
+    // exception pipe fork
+    // --------------------------
+    io.out.agu_pipe.valid := store_fork_out2.valid
+    io.out.agu_pipe.bits.is_mmio := is_mmio
+    io.out.agu_pipe.bits.is_store := true.B
+    io.out.agu_pipe.bits.trans_id := agu_req_buf.trans_id
+    io.out.agu_pipe.bits.exception.valid := false.B
+    io.out.agu_pipe.bits.exception.cause := ExceptionCause.unknown
+    io.out.agu_pipe.bits.exception.tval := 0.U
+
+    when(store_fork_in.fire) {
       // back to back
       send_tlb_req()
     }.otherwise {
@@ -308,7 +362,6 @@ class AGU(
       }
     }
   }
-
 }
 
 object gen_agu_verilog extends App {

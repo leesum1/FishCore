@@ -2,6 +2,7 @@ package leesum
 import chisel3._
 import chiseltest._
 import leesum.axi4.StreamFork
+import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
 class StreamForkTest extends AnyFreeSpec with ChiselScalatestTester {
@@ -14,35 +15,48 @@ class StreamForkTest extends AnyFreeSpec with ChiselScalatestTester {
         dut.io.input.initSource().setSourceClock(dut.clock)
         dut.io.outputs.foreach(_.initSink().setSinkClock(dut.clock))
 
-        dut.clock.step(5)
-        fork {
-          dut.clock.step(2)
-          dut.io.input.enqueueSeq(Seq(1.U, 2.U, 3.U, 4.U))
-          dut.clock.step(4)
-          dut.io.input.enqueue(5.U)
-          dut.clock.step(1)
-          dut.io.input.enqueue(6.U)
-          dut.clock.step(1)
-        }.fork {
-          dut.clock.step(3)
-          dut.io.outputs(0).expectDequeueSeq(Seq(1.U, 2.U))
-          dut.clock.step(1)
-          dut.io.outputs(0).expectDequeueSeq(Seq(3.U, 4.U))
-          dut.clock.step(4)
-          dut.io.outputs(0).expectDequeue(5.U)
-          dut.clock.step(1)
-          dut.io.outputs(0).expectDequeue(6.U)
-          dut.clock.step(1)
-        }.fork {
-          dut.clock.step(1)
-          dut.io.outputs(1).expectDequeueSeq(Seq(1.U, 2.U))
-          dut.clock.step(1)
-          dut.io.outputs(1).expectDequeueSeq(Seq(3.U, 4.U, 5.U, 6.U))
-          dut.clock.step(1)
-        }.joinAndStep(dut.clock)
-        dut.clock.step(5)
+        // -------------------
+        // prepare data
+        // -------------------
+        val input_seq = Gen.listOfN(100, TestUtils.gen_rand_uint(64)).sample.get
+        val output_seq = input_seq
+
+        val test_template = (with_bubble: Seq[Boolean]) => {
+          require(with_bubble.length == 3)
+          fork {
+            input_seq.foreach(in => {
+              dut.io.input.enqueue(in)
+              if (with_bubble(0))
+                dut.clock.step(Gen.chooseNum(1, 10).sample.get)
+            })
+          }.fork {
+            output_seq.foreach(out => {
+              dut.io.outputs(0).expectDequeue(out)
+              if (with_bubble(1))
+                dut.clock.step(Gen.chooseNum(1, 10).sample.get)
+            })
+          }.fork {
+            output_seq.foreach(out => {
+              dut.io.outputs(1).expectDequeue(out)
+              if (with_bubble(2))
+                dut.clock.step(Gen.chooseNum(1, 10).sample.get)
+            })
+          }.joinAndStep(dut.clock)
+          dut.clock.step(5)
+        }
+
+        // -------------------
+        // test
+        // -------------------
+        val combinations = for {
+          a <- Seq(true, false)
+          b <- Seq(true, false)
+          c <- Seq(true, false)
+        } yield Seq(a, b, c)
+        combinations.foreach(test_template)
       }
   }
+
   "StreamFork_test2" in {
     test(new StreamFork(UInt(64.W), 2, synchronous = true))
       .withAnnotations(
@@ -51,33 +65,46 @@ class StreamForkTest extends AnyFreeSpec with ChiselScalatestTester {
         dut.io.input.initSource().setSourceClock(dut.clock)
         dut.io.outputs.foreach(_.initSink().setSinkClock(dut.clock))
 
-        dut.clock.step(5)
-        fork {
-          dut.clock.step(2)
-          dut.io.input.enqueueSeq(Seq(1.U, 2.U, 3.U, 4.U))
-          dut.clock.step(4)
-          dut.io.input.enqueue(5.U)
-          dut.clock.step(1)
-          dut.io.input.enqueue(6.U)
-          dut.clock.step(1)
-        }.fork {
-          dut.clock.step(3)
-          dut.io.outputs(0).expectDequeueSeq(Seq(1.U, 2.U))
-          dut.clock.step(1)
-          dut.io.outputs(0).expectDequeueSeq(Seq(3.U, 4.U))
-          dut.clock.step(4)
-          dut.io.outputs(0).expectDequeue(5.U)
-          dut.clock.step(1)
-          dut.io.outputs(0).expectDequeue(6.U)
-          dut.clock.step(1)
-        }.fork {
-          dut.clock.step(1)
-          dut.io.outputs(1).expectDequeueSeq(Seq(1.U, 2.U))
-          dut.clock.step(1)
-          dut.io.outputs(1).expectDequeueSeq(Seq(3.U, 4.U, 5.U, 6.U))
-          dut.clock.step(1)
-        }.joinAndStep(dut.clock)
-        dut.clock.step(5)
+        // -------------------
+        // prepare data
+        // -------------------
+        val input_seq = Gen.listOfN(100, TestUtils.gen_rand_uint(64)).sample.get
+        val output_seq = input_seq
+
+        val test_template = (with_bubble: Seq[Boolean]) => {
+          require(with_bubble.length == 3)
+          fork {
+            input_seq.foreach(in => {
+              dut.io.input.enqueue(in)
+              if (with_bubble(0))
+                dut.clock.step(Gen.chooseNum(1, 10).sample.get)
+            })
+          }.fork {
+            output_seq.foreach(out => {
+              dut.io.outputs(0).expectDequeue(out)
+              if (with_bubble(1))
+                dut.clock.step(Gen.chooseNum(1, 10).sample.get)
+            })
+          }.fork {
+            output_seq.foreach(out => {
+              dut.io.outputs(1).expectDequeue(out)
+              if (with_bubble(2))
+                dut.clock.step(Gen.chooseNum(1, 10).sample.get)
+            })
+          }.joinAndStep(dut.clock)
+          dut.clock.step(5)
+        }
+
+        // -------------------
+        // test
+        // -------------------
+        val combinations = for {
+          a <- Seq(true, false)
+          b <- Seq(true, false)
+          c <- Seq(true, false)
+        } yield Seq(a, b, c)
+        combinations.foreach(test_template)
       }
   }
+
 }

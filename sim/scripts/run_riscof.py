@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 riscof_path = os.path.join("/home/leesum/workhome/riscof-test")
 Vtop_path = os.path.join("../build/linux/x86_64/release/Vtop")
 
+utilts.execute_command("xmake f -m release")
 build_ret = utilts.execute_command("xmake")
 
 if build_ret["return_code"] != 0:

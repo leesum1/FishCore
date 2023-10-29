@@ -4,6 +4,16 @@ import chisel3._
 import chisel3.util._
 import leesum.GenVerilogHelper
 
+/** This module forks a stream into multiple streams.For each input stream
+  * handshake, every output stream handshakes exactly once. The input stream
+  * only handshakes when all output streams have handshake, but the output
+  * streams do not have to handshake simultaneously.
+  *
+  * @param gen
+  * @param size
+  * @param synchronous
+  * @tparam T
+  */
 class StreamFork[T <: Data](
     gen: T,
     size: Int,

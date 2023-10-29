@@ -10,7 +10,6 @@
 namespace SimDevices {
     AMVGADev::AMVGADev(uint64_t fb_addr_start, uint64_t ctrl_addr_start)
             : fb_addr_start(fb_addr_start), ctrl_addr_start(ctrl_addr_start) {
-        init_screen("npc_v2_vga");
     }
 
     bool AMVGADev::in_range(uint64_t addr) {
@@ -97,7 +96,6 @@ namespace SimDevices {
     }
 
     void AMVGADev::init_screen(std::string_view name) {
-        SDL_Window *window = nullptr;
         SDL_Init(SDL_INIT_VIDEO);
         SDL_CreateWindowAndRenderer(get_witdh() * 2, get_height() * 2, 0, &window,
                                     &renderer);
@@ -106,7 +104,6 @@ namespace SimDevices {
         texture =
                 SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                   SDL_TEXTUREACCESS_STATIC, get_witdh(), get_height());
-        fbbuff_lock = SDL_CreateMutex();
         fbbuff = new uint8_t[get_fb_size()];
     }
 
@@ -121,12 +118,21 @@ namespace SimDevices {
     }
 
     AMVGADev::~AMVGADev() {
-        SDL_DestroyMutex(fbbuff_lock);
-        SDL_DestroyTexture(texture);
-        SDL_DestroyRenderer(renderer);
+        if (fbbuff != nullptr){
+            delete[] fbbuff;
+        }
+        if(renderer != nullptr){
+            SDL_DestroyTexture(texture);
+        }
+        if(texture != nullptr){
+            SDL_DestroyRenderer(renderer);
+        }
 
-        delete fbbuff;
-        SDL_Quit();
+        if(window != nullptr){
+            SDL_DestroyWindow(window);
+        }
+        SDL_VideoQuit();
+        std::cout << "AMVGADev exit\n";
     }
 } // namespace SimDevices
 

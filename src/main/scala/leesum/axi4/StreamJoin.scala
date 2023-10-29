@@ -2,7 +2,21 @@ package leesum.axi4
 import chisel3._
 import chisel3.util._
 import leesum.GenVerilogHelper
-//class DecoupledIOJoin[T <: Data](gen: T) extends Module {}
+
+/** This module joins (num) streams into a stream, the payload was
+  * ignored.Because we can use the payload form the source stream directly.
+  * @param num
+  */
+class StreamJoin(num: Int) extends Module {
+  val io = IO(new Bundle {
+    val in = Vec(num, Flipped(Decoupled(Bool())))
+    val out = Decoupled(Bool())
+  })
+  io.out.valid := io.in.map(_.valid).reduce(_ && _)
+  io.out.bits := io.in.map(_.bits).reduce(_ ^ _) // not used, just for test
+  io.in.foreach(_.ready := io.out.fire)
+}
+
 class JoinBundle[T1 <: Data, T2 <: Data](gen1: T1, gen2: T2) extends Bundle {
   val element1 = gen1
   val element2 = gen2
@@ -35,16 +49,6 @@ object StreamJoin {
 
 }
 
-class DummyStreamJoin extends Module {
-  val io = IO(new Bundle {
-    val in1 = Flipped(Decoupled(UInt(2.W)))
-    val in2 = Flipped(Decoupled(UInt(64.W)))
-    val out = Decoupled(new JoinBundle(UInt(2.W), UInt(64.W)))
-  })
-
-  io.out <> StreamJoin(io.in1, io.in2)
-}
-
 object gen_stream_join_verilog extends App {
-  GenVerilogHelper(new DummyStreamJoin)
+  GenVerilogHelper(new StreamJoin(2))
 }

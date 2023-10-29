@@ -127,9 +127,7 @@ class InstDecoder extends Module {
 
   scoreboard_entry.complete := exception_valid || FuOP.is_xret(
     scoreboard_entry.fu_op
-  ) || FuOP.is_fence(scoreboard_entry.fu_op) || FuOP.is_store(
-    scoreboard_entry.fu_op
-  )
+  ) || FuOP.is_fence(scoreboard_entry.fu_op)
 
   // ------------------------------------------
   //  scoreboard branch predictor information

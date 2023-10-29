@@ -1,7 +1,16 @@
--- set_policy("build.sanitizer.address", true)
--- set_policy("build.sanitizer.undefined", true)
--- set_policy("build.sanitizer.memory", true)
--- set_policy("build.sanitizer.leak", true)
+add_rules("mode.release", "mode.debug")
+
+if is_mode("release") then
+    set_optimize("faster")
+end
+
+if is_mode("debug") then
+    set_symbols("debug")
+    set_optimize("none")
+    set_policy("build.sanitizer.address", true)
+end
+
+
 
 
 add_requires("cli11",{system = false})
@@ -15,8 +24,7 @@ add_requires("libsdl",{system = false})
 
 -- 设置 C++20 标准
 set_languages("cxx20")
--- 最快运行速度的优化
-set_optimize("fastest")
+
 
 add_rules("plugin.compile_commands.autoupdate", {outputdir = "."})
 target("Vtop")

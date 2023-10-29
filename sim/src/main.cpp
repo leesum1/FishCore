@@ -3,9 +3,9 @@
 #include "AMVGADev.h"
 #include "CLI/CLI.hpp"
 #include "DeviceMange.h"
+#include "SimBase.h"
 #include "difftest.hpp"
 #include "include/SramMemoryDev.h"
-#include "SimBase.h"
 #include <iostream>
 #include <ranges>
 
@@ -50,14 +50,16 @@ int main(int argc, char **argv) {
     auto sim_mem = SimDevices::SynReadMemoryDev(MEM_BASE, MEM_SIZE);
     auto sim_am_uart = SimDevices::AMUartDev(SERIAL_PORT, 8);
     auto sim_am_rtc = SimDevices::AMRTCDev(RTC_ADDR, 8);
+    auto sim_am_vga = std::optional<SimDevices::AMVGADev>();
 
     device_manager.add_device(&sim_mem);
     device_manager.add_device(&sim_am_uart);
     device_manager.add_device(&sim_am_rtc);
 
-    if (vga_en){
-        auto sim_am_vga = SimDevices::AMVGADev(FB_ADDR, VGACTL_ADDR);
-        device_manager.add_device(&sim_am_vga);
+    if (vga_en) {
+        sim_am_vga.emplace(VGACTL_ADDR, FB_ADDR);
+        sim_am_vga.value().init_screen("npc_v2_sdl");
+        device_manager.add_device(&sim_am_vga.value());
     }
 
     auto createDiffTest = [&]() -> std::optional<DiffTest> {
@@ -99,7 +101,6 @@ int main(int argc, char **argv) {
                 int step_num = top->io_difftest_bits_commited_num;
                 commit_num += step_num;
 
-
                 if (top->io_difftest_bits_exception_valid) {
                     auto cause = top->io_difftest_bits_exception_cause;
 
@@ -118,13 +119,13 @@ int main(int argc, char **argv) {
 
                     // TODO: NOT IMPLEMENTED
                     if (top->io_difftest_bits_contain_mmio) {
-                        MY_ASSERT(false, "mmio not implemented");
-                        std::cout << std::format("mmio at pc: 0x{:016x}\n",
-                                                 sim_base.get_pc());
-                        MY_ASSERT(top->io_difftest_bits_exception_valid == 0, "mmio and exception at the same time");
-                        diff_ref->ref_skip([&](size_t idx) {
-                            return sim_base.get_reg(idx);
-                        }, sim_base.get_pc() + 4);
+                        //    std::cout << std::format("mmio at pc: 0x{:016x}\n",
+                        //                         sim_base.get_pc());
+                        MY_ASSERT(top->io_difftest_bits_exception_valid == 0,
+                                  "mmio and exception at the same time");
+                        diff_ref->ref_skip(
+                                [&](size_t idx) { return sim_base.get_reg(idx); },
+                                sim_base.get_pc() + 4);
                     } else {
                         diff_ref->step(step_num);
                         bool pc_mismatch = diff_ref->check_pc(diff_ref->get_pc(),
@@ -132,15 +133,14 @@ int main(int argc, char **argv) {
                         bool gpr_mismatch = diff_ref->check_gprs(
                                 [&](size_t idx) { return sim_base.get_reg(idx); },
                                 [&](size_t idx) { return diff_ref->get_reg(idx); }, debug_en);
-                        bool csr_mismatch = diff_ref->check_csrs([&](size_t idx) {
-                            return sim_base.get_csr(idx);
-                        }, debug_en);
+                        bool csr_mismatch = diff_ref->check_csrs(
+                                [&](size_t idx) { return sim_base.get_csr(idx); }, debug_en);
                         bool mismatch = pc_mismatch | gpr_mismatch | csr_mismatch;
 
                         if (mismatch) {
-                            std::cout << std::format(
-                                    "pc mismatch: ref: 0x{:016x}, dut: 0x{:016x}\n\n",
-                                    diff_ref->get_pc(), sim_base.get_pc());
+                            std::cout << std::format("pc mismatch: ref: 0x{:016x}, dut: "
+                                                     "0x{:016x}\n\n",
+                                                     diff_ref->get_pc(), sim_base.get_pc());
                             sim_abort = true;
                         }
                         return mismatch;

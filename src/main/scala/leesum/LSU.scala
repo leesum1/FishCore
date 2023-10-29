@@ -1,15 +1,13 @@
 package leesum
 import chisel3._
-import chisel3.util.{Arbiter, Decoupled}
+import chisel3.util.Decoupled
 
 class LSUReq extends AGUReq {}
 class LSUResp extends Bundle {
   val trans_id = UInt(32.W)
   val wb_data = UInt(64.W)
-  val is_mmio = Bool()
-  val exception = new ExceptionEntry(has_valid = true)
 
-  def wb_data_valid = !exception.valid && !is_mmio
+  def wb_data_valid = true.B
 }
 
 class LSU(
@@ -42,13 +40,12 @@ class LSU(
 
     // write-back interface
     val lsu_resp = Decoupled(new LSUResp)
+    val agu_writeback = Decoupled(new AGUWriteBack)
   })
 
   val agu = Module(new AGU(addr_map))
   val load_queue = Module(new LoadQueue)
   val store_queue = Module(new StoreQueue)
-
-  val agu_write_back = Wire(Decoupled(new LSUResp))
 
   val load_write_back = Wire(Decoupled(new LSUResp))
 
@@ -67,12 +64,7 @@ class LSU(
   agu.io.out.store_pipe <> store_queue.io.in
   agu.io.store_bypass <> store_queue.io.store_bypass
   // agu <> write-back
-  agu_write_back.valid := agu.io.out.exception_pipe.valid
-  agu_write_back.bits.exception := agu.io.out.exception_pipe.bits.exception
-  agu_write_back.bits.trans_id := agu.io.out.exception_pipe.bits.trans_id
-  agu_write_back.bits.is_mmio := agu.io.out.exception_pipe.bits.is_mmio
-  agu_write_back.bits.wb_data := DontCare
-  agu.io.out.exception_pipe.ready := agu_write_back.ready
+  io.agu_writeback <> agu.io.out.agu_pipe
 
   // load queue <> dcache
   load_queue.io.dcache_req <> io.dcache_load_req
@@ -81,12 +73,8 @@ class LSU(
   load_queue.io.mmio_commit <> io.mmio_commit
   // load queue <> write-back
   load_write_back.valid := load_queue.io.load_wb.valid
-  load_write_back.bits.exception.valid := false.B
-  load_write_back.bits.exception.cause := DontCare
-  load_write_back.bits.exception.tval := DontCare
   load_write_back.bits.wb_data := load_queue.io.load_wb.bits.rdata
   load_write_back.bits.trans_id := load_queue.io.load_wb.bits.tran_id
-  load_write_back.bits.is_mmio := false.B
   load_queue.io.load_wb.ready := load_write_back.ready
 
   // store queue <> dcache
@@ -95,14 +83,7 @@ class LSU(
   // store queue <> commit
   store_queue.io.store_commit <> io.store_commit
 
-  // ---------------------
-  // select write-back
-  // ---------------------
-  val arb = Module(new Arbiter(new LSUResp, 2))
-  // load write-back has higher priority
-  arb.io.in(0) <> load_write_back
-  arb.io.in(1) <> PipeLine(agu_write_back, io.flush)
-  arb.io.out <> io.lsu_resp
+  io.lsu_resp <> load_write_back
 }
 
 object gen_lsu_verilog extends App {

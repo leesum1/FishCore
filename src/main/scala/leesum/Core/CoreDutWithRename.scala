@@ -185,12 +185,13 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
   // issue stage <> reg file
   issue_stage_rob.io.gpr_read_port <> reg_file.io.read_ports
 
-  // scoreboard <> fu
+  // rob <> fu
   require(rob.io.fu_alu_wb_port.length == alu_seq.length)
   for (i <- alu_seq.indices) {
     rob.io.fu_alu_wb_port(i) <> alu_seq(i).io.out
   }
   rob.io.fu_lsu_wb_port <> lsu.io.lsu_resp
+  rob.io.fu_lsu_agu_wb_port <> lsu.io.agu_writeback
   rob.io.fu_branch_wb_port <> bru.io.out
   rob.io.fu_mul_div_wb_port <> mul_div.io.fu_div_mul_resp
   rob.io.fu_csr_wb_port <> csr.io.csr_resp

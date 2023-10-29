@@ -155,24 +155,13 @@ class ScoreBoard(
     }
   }
 
-  // exception for agu
   def lsu_write_back(lsu_resp: LSUResp, en: Bool): Unit = {
     when(en) {
       val rob_idx = lsu_resp.trans_id
-      when(lsu_resp.exception.valid) {
-        // 1. exception happened in AGU
-        rob.content(rob_idx).bits.complete := true.B
-        rob.content(rob_idx).bits.exception := lsu_resp.exception
-      }.elsewhen(lsu_resp.is_mmio) {
-        // 2. detect mmio access in AGU
-        rob.content(rob_idx).bits.complete := false.B
-        rob.content(rob_idx).bits.lsu_io_space := lsu_resp.is_mmio
-      }.otherwise {
-        // 3. normal write-back in LoadQueue
-        rob.content(rob_idx).bits.complete := true.B
-        rob.content(rob_idx).bits.result := lsu_resp.wb_data
-        rob.content(rob_idx).bits.result_valid := true.B
-      }
+      // normal write-back in LoadQueue, no exception
+      rob.content(rob_idx).bits.complete := true.B
+      rob.content(rob_idx).bits.result := lsu_resp.wb_data
+      rob.content(rob_idx).bits.result_valid := true.B
       assert(
         rob.create_read_port(rob_idx).valid,
         "rob entry must be valid"
