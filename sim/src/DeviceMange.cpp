@@ -1,10 +1,23 @@
 
 #include "include/DeviceMange.h"
 #include "Utils.h"
-#include <ranges>
+#include <format>
+#include <iostream>
 
 namespace SimDevices {
     void DeviceMange::add_device(DeviceBase *device) {
+
+        bool conflict = false;
+        auto addr_info = device->get_addr_info();
+        for (auto info: addr_info) {
+            if (is_conflit(info.start, info.end)) {
+                conflict = true;
+                break;
+            }
+        }
+
+        MY_ASSERT(conflict == false, "device: {} address conflict", device->get_addr_info()[0].name);
+
         device_pool.push_back(device);
     }
 
@@ -22,11 +35,22 @@ namespace SimDevices {
             return item->in_range(write_req.waddr);
         });
 
-        if (rdevice != device_pool.end() && read_en) {
-            (*rdevice)->update_inputs(read_addr, read_en, write_req, false);
+        if (read_en) {
+            if (rdevice != device_pool.end()) {
+                (*rdevice)->update_inputs(read_addr, read_en, write_req, false);
+            } else {
+                std::cout << std::format("read address: {:#010X}\n", read_addr);
+                MY_ASSERT(false, "read address out of range");
+            }
         }
-        if (wdevice != device_pool.end() && write_en) {
-            (*wdevice)->update_inputs(read_addr, false, write_req, write_en);
+
+        if (write_en) {
+            if (wdevice != device_pool.end()) {
+                (*wdevice)->update_inputs(read_addr, false, write_req, write_en);
+            } else {
+                std::cout << std::format("write address: {:#010X}\n", write_req.waddr);
+                MY_ASSERT(false,"write address out of range");
+            }
         }
     }
 
@@ -41,6 +65,34 @@ namespace SimDevices {
             }
         }
         return last_read;
+    }
+
+
+    void DeviceMange::print_device_info() {
+        std::cout << "Device Info:\n";
+        for (auto device: device_pool) {
+            auto addr_info = device->get_addr_info();
+            for (auto info: addr_info) {
+                std::cout << std::format("device: {:<15} {:#010X} ----> {:#010X}\n",
+                                         info.name,
+                                         info.start,
+                                         info.end);
+            }
+        }
+        std::cout << "---------------------------------------------\n";
+    }
+
+    bool DeviceMange::is_conflit(uint64_t start, uint64_t end) {
+        for (auto device: device_pool) {
+            auto addr_info = device->get_addr_info();
+            for (auto info: addr_info) {
+                // Check if there is any overlap between [start, end) and [info.start, info.end)
+                if (start < info.end && end > info.start) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }
 

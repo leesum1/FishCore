@@ -11,8 +11,6 @@ if is_mode("debug") then
 end
 
 
-
-
 add_requires("cli11",{system = false})
 add_requires("catch2",{system = false})
 add_requires("assert",{system = true})

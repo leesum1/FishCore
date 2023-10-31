@@ -7,9 +7,9 @@
 namespace SimDevices {
 
 
-    AMUartDev::AMUartDev(uint64_t base_addr, uint64_t addr_lenth) {
-        this->base_addr = base_addr;
-        this->addr_lenth = addr_lenth;
+    AMUartDev::AMUartDev(uint64_t base) {
+        mem_addr = base;
+        mem_size = 8;
     }
 
     void AMUartDev::update_inputs(
@@ -32,13 +32,23 @@ namespace SimDevices {
         if (!write_req_seq.empty()) {
             auto write_req = write_req_seq.back();
             write_req_seq.pop_back();
-            auto offset = write_req.waddr - base_addr;
+            auto offset = write_req.waddr - mem_addr;
             MY_ASSERT(offset == 0);
             char c = static_cast<char>(write_req.wdata & 0xff);
             std::cout << c;
         }
-        
+
         uint64_t ret = 0;
         return ret;
+    }
+
+    std::vector<AddrInfo> AMUartDev::get_addr_info() {
+        return {
+                {mem_addr, mem_addr + mem_size, "am_uart"}
+        };
+    }
+
+    bool AMUartDev::in_range(uint64_t addr) {
+        return addr >= mem_addr && addr < mem_addr + mem_size;
     }
 }

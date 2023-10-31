@@ -14,46 +14,46 @@ import leesum.GenVerilogHelper
   * @param synchronous
   * @tparam T
   */
-class StreamFork[T <: Data](
-    gen: T,
-    size: Int,
-    synchronous: Boolean = false
-) extends Module {
+class StreamFork[T <: Data](gen: T, size: Int, synchronous: Boolean = false)
+    extends Module {
   val io = IO(new Bundle {
     val input = Flipped(Decoupled(gen))
     val outputs = Vec(size, Decoupled(gen))
   })
 
   val portCount = io.outputs.size
-  /* Used for async, Store if an output stream already has taken its value or not */
-  val linkEnable =
-    if (!synchronous) RegInit(VecInit(Seq.fill(portCount)(true.B))) else null
 
   if (synchronous) {
+    // In synchronous mode, all outputs are valid when the input is ready and valid.
     io.input.ready := io.outputs.map(_.ready).reduce(_ && _)
-    io.outputs.foreach(_.valid := io.input.valid && io.input.ready)
-    io.outputs.foreach(_.bits := io.input.bits)
+    io.outputs.foreach { o =>
+      o.valid := io.input.valid && io.input.ready
+      o.bits := io.input.bits
+    }
   } else {
-    /* Ready is true when every output stream takes or has taken its value */
-    io.input.ready := true.B
-    for (i <- 0 until portCount) {
-      when(!io.outputs(i).ready && linkEnable(i)) {
-        io.input.ready := false.B
+    // In asynchronous mode, use a register to track which outputs have accepted the input.
+    val linkEnable = RegInit(VecInit(Seq.fill(portCount)(true.B)))
+
+    // The input is ready if all outputs are ready or have accepted the input.
+    io.input.ready := linkEnable
+      .zip(io.outputs)
+      .map { case (enable, output) =>
+        output.ready || !enable
+      }
+      .reduce(_ && _)
+
+    // Outputs are valid if the input is valid and they haven't taken their value yet.
+    // When an output fires, mark its value as taken.
+    io.outputs.zip(linkEnable).foreach { case (output, enable) =>
+      output.valid := io.input.valid && enable
+      output.bits := io.input.bits
+      when(output.fire) {
+        enable := false.B
       }
     }
 
-    /* Outputs are valid if the input is valid and they haven't taken their value yet.
-     * When an output fires, mark its value as taken. */
-    for (i <- 0 until portCount) {
-      io.outputs(i).valid := io.input.valid && linkEnable(i)
-      io.outputs(i).bits := io.input.bits
-      when(io.outputs(i).fire) {
-        linkEnable(i) := false.B
-      }
-    }
-
-    /* Reset the storage for each new value */
-    when(io.input.ready) {
+    // Reset the storage for each new value when the input is ready.
+    when(io.input.fire) {
       linkEnable.foreach(_ := true.B)
     }
   }

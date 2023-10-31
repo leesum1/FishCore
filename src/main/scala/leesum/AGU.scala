@@ -186,7 +186,8 @@ class AGU(
     load_fork_in.valid := !need_stall && tlb_rsp.req_type === TLBReqType.LOAD
     load_fork_in.bits := DontCare // not used
 
-    val (load_fork_out1, load_fork_out2) = StreamFork2(load_fork_in)
+    // MUST USE SYNC FORK
+    val (load_fork_out1, load_fork_out2) = StreamFork2(load_fork_in, true)
 
     load_fork_out1.ready := io.out.load_pipe.ready
     load_fork_out2.ready := Mux(is_mmio, io.out.agu_pipe.ready, true.B)
@@ -265,7 +266,8 @@ class AGU(
     store_fork_in.valid := !need_stall && tlb_rsp.req_type === TLBReqType.STORE
     store_fork_in.bits := DontCare // not used
 
-    val (store_fork_out1, store_fork_out2) = StreamFork2(store_fork_in)
+    // MUST USE SYNC FORK
+    val (store_fork_out1, store_fork_out2) = StreamFork2(store_fork_in, true)
     store_fork_out1.ready := io.out.store_pipe.ready
     store_fork_out2.ready := io.out.agu_pipe.ready
 

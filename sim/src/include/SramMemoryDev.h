@@ -12,8 +12,9 @@ namespace SimDevices {
     private:
         std::vector<uint8_t> mem;
         std::unordered_map<std::string, uint64_t> elf_symbol_map;
-
-
+        uint64_t mem_addr;
+        uint64_t mem_size;
+        
     private:
         bool load_elf(const char *file_name);
 
@@ -35,9 +36,13 @@ namespace SimDevices {
 
         void write(uint64_t addr, uint64_t wdata, uint8_t wstrb);
 
-        uint64_t update_outputs();
+        uint64_t update_outputs() override;
 
-        void update_inputs(uint64_t read_addr, bool read_en, WriteReq write_req, bool write_en);
+        void update_inputs(uint64_t read_addr, bool read_en, WriteReq write_req, bool write_en) override;
+
+        bool in_range(uint64_t addr) override;
+
+        std::vector<AddrInfo> get_addr_info() override;
 
 
         ~SynReadMemoryDev() override = default;

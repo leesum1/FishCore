@@ -1,6 +1,5 @@
 #include "include/AMVGADev.h"
 #include "SDL.h"
-#include "SDL_thread.h"
 #include "SDL_video.h"
 #include "include/Utils.h"
 #include <array>
@@ -110,29 +109,36 @@ namespace SimDevices {
     void AMVGADev::update_screen() {
         if ((vga_ctrl_reg >> 32) != 0) {
             vga_ctrl_reg &= 0xFFFFFFFFL;
-            SDL_UpdateTexture(texture, NULL, fbbuff, get_witdh() * sizeof(uint32_t));
+            SDL_UpdateTexture(texture, nullptr, fbbuff, get_witdh() * sizeof(uint32_t));
             SDL_RenderClear(renderer);
-            SDL_RenderCopy(renderer, texture, NULL, NULL);
+            SDL_RenderCopy(renderer, texture, nullptr, nullptr);
             SDL_RenderPresent(renderer);
         }
     }
 
     AMVGADev::~AMVGADev() {
-        if (fbbuff != nullptr){
+        if (fbbuff != nullptr) {
             delete[] fbbuff;
         }
-        if(renderer != nullptr){
+        if (renderer != nullptr) {
             SDL_DestroyTexture(texture);
         }
-        if(texture != nullptr){
+        if (texture != nullptr) {
             SDL_DestroyRenderer(renderer);
         }
 
-        if(window != nullptr){
+        if (window != nullptr) {
             SDL_DestroyWindow(window);
         }
         SDL_VideoQuit();
         std::cout << "AMVGADev exit\n";
+    }
+
+    std::vector<AddrInfo> AMVGADev::get_addr_info() {
+        return {
+                {fb_addr_start,   fb_addr_start + fb_addr_lenth,     "am_vga_fb"},
+                {ctrl_addr_start, ctrl_addr_start + ctrl_addr_lenth, "am_vga_ctrl"}
+        };
     }
 } // namespace SimDevices
 

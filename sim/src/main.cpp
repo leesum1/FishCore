@@ -9,18 +9,19 @@
 #include <iostream>
 #include <ranges>
 
+
+constexpr auto MEM_BASE = 0x80000000L;
+constexpr auto MEM_SIZE = 0x8000000L;
+constexpr auto DEVICE_BASE = 0xa0000000L;
+constexpr auto SERIAL_PORT = DEVICE_BASE + 0x00003f8L;
+constexpr auto RTC_ADDR = DEVICE_BASE + 0x0000048L;
+constexpr auto VGACTL_ADDR = DEVICE_BASE + 0x0000100L;
+constexpr auto FB_ADDR = DEVICE_BASE + 0x1000000L;
+constexpr auto BOOT_PC = 0x80000000L;
+
+
+
 int main(int argc, char **argv) {
-
-    constexpr auto MEM_BASE = 0x80000000L;
-    constexpr auto MEM_SIZE = 0x8000000L;
-    constexpr auto DEVICE_BASE = 0xa0000000L;
-    constexpr auto SERIAL_PORT = DEVICE_BASE + 0x00003f8L;
-    constexpr auto RTC_ADDR = DEVICE_BASE + 0x0000048L;
-    constexpr auto VGACTL_ADDR = DEVICE_BASE + 0x0000100L;
-    constexpr auto FB_ADDR = DEVICE_BASE + 0x1000000L;
-
-    constexpr auto BOOT_PC = 0x80000000L;
-
     std::string file_name;
     bool wave_en = false;
     bool difftest_en = false;
@@ -45,11 +46,13 @@ int main(int argc, char **argv) {
     app.add_flag("--vga", vga_en, "enable vga")->default_val(false);
 
     CLI11_PARSE(app, argc, argv)
-    auto sim_base = SimBase();
+
+
     auto device_manager = SimDevices::DeviceMange();
+    auto sim_base = SimBase();
     auto sim_mem = SimDevices::SynReadMemoryDev(MEM_BASE, MEM_SIZE);
-    auto sim_am_uart = SimDevices::AMUartDev(SERIAL_PORT, 8);
-    auto sim_am_rtc = SimDevices::AMRTCDev(RTC_ADDR, 8);
+    auto sim_am_uart = SimDevices::AMUartDev(SERIAL_PORT);
+    auto sim_am_rtc = SimDevices::AMRTCDev(RTC_ADDR);
     auto sim_am_vga = std::optional<SimDevices::AMVGADev>();
 
     device_manager.add_device(&sim_mem);
@@ -57,10 +60,12 @@ int main(int argc, char **argv) {
     device_manager.add_device(&sim_am_rtc);
 
     if (vga_en) {
-        sim_am_vga.emplace(VGACTL_ADDR, FB_ADDR);
+        sim_am_vga.emplace( FB_ADDR,VGACTL_ADDR);
         sim_am_vga.value().init_screen("npc_v2_sdl");
         device_manager.add_device(&sim_am_vga.value());
     }
+
+    device_manager.print_device_info();
 
     auto createDiffTest = [&]() -> std::optional<DiffTest> {
         return difftest_en
@@ -170,7 +175,7 @@ int main(int argc, char **argv) {
     std::cout << std::format("clk_num: {}, commit_num: {}, IPC: {}\n", clk_num,
                              commit_num, double_t(commit_num) / clk_num);
 
-    bool success = am_en ? sim_base.get_reg(10) == 0 : true;
+    bool success = !am_en || sim_base.get_reg(10) == 0;
 
     // zero means success
     bool return_code = !(success & !sim_abort);

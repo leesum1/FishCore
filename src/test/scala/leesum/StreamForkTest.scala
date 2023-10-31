@@ -57,6 +57,60 @@ class StreamForkTest extends AnyFreeSpec with ChiselScalatestTester {
       }
   }
 
+  "StreamFork_test3" in {
+    test(new StreamFork(UInt(64.W), 2, synchronous = false))
+      .withAnnotations(
+        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+      ) { dut =>
+        dut.io.input.initSource().setSourceClock(dut.clock)
+        dut.io.outputs.foreach(_.initSink().setSinkClock(dut.clock))
+
+        // -------------------
+        // prepare data
+        // -------------------
+        val input_seq = Gen.listOfN(100, TestUtils.gen_rand_uint(64)).sample.get
+        val output_seq = input_seq
+
+        // -------------------
+        // test
+        // -------------------
+        dut.io.outputs(1).ready.poke(true.B)
+        dut.clock.step(2)
+        fork {
+          dut.io.input.enqueue(input_seq(0))
+          dut.io.input.enqueue(input_seq(1))
+          dut.io.input.enqueue(input_seq(2))
+        }.fork {
+          dut.io.outputs(0).ready.poke(false.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(true.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(false.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(true.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(false.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(true.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(false.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(true.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(false.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(true.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(false.B)
+          dut.clock.step(1)
+          dut.io.outputs(0).ready.poke(true.B)
+          dut.clock.step(1)
+        }.joinAndStep(dut.clock)
+        dut.clock.step(5)
+      }
+
+  }
+
   "StreamFork_test2" in {
     test(new StreamFork(UInt(64.W), 2, synchronous = true))
       .withAnnotations(

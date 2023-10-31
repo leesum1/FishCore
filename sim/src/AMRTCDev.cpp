@@ -8,9 +8,9 @@
 namespace SimDevices {
 
 
-    AMRTCDev::AMRTCDev(uint64_t base_addr, uint64_t addr_lenth) {
-        this->base_addr = base_addr;
-        this->addr_lenth = addr_lenth;
+    AMRTCDev::AMRTCDev(uint64_t base_addr) {
+        mem_addr = base_addr;
+        mem_size = 8;
     }
 
     void AMRTCDev::update_inputs(
@@ -34,7 +34,7 @@ namespace SimDevices {
         if (!read_req_seq.empty()) {
             auto read_addr = read_req_seq.back();
             read_req_seq.pop_back();
-            auto offset = read_addr - base_addr;
+            auto offset = read_addr - mem_addr;
 
             MY_ASSERT(offset == 0 || offset == 4, "read offset not supported");
 
@@ -46,5 +46,15 @@ namespace SimDevices {
             last_read = rtc_time;
         }
         return last_read;
+    }
+
+    bool AMRTCDev::in_range(uint64_t addr) {
+        return addr >= mem_addr && addr < mem_addr + mem_size;
+    }
+
+    std::vector<AddrInfo> AMRTCDev::get_addr_info() {
+        return {
+                {mem_addr, mem_addr+mem_size, "am_rtc"}
+        };
     }
 }

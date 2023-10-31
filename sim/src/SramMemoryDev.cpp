@@ -13,8 +13,8 @@
 namespace SimDevices {
 
     SynReadMemoryDev::SynReadMemoryDev(uint64_t base_addr, uint32_t mem_size) {
-        this->base_addr = base_addr;
-        this->addr_lenth = mem_size;
+        this->mem_addr = base_addr;
+        this->mem_size = mem_size;
         mem = std::vector<uint8_t>(mem_size);
         MY_ASSERT(mem.size() == mem_size);
     }
@@ -27,7 +27,7 @@ namespace SimDevices {
         MY_ASSERT(in_range(addr));
         MY_ASSERT(Utils::check_aligned(addr, 8));
         uint64_t result = 0;
-        std::memcpy(&result, &mem[addr - base_addr], sizeof(uint64_t));
+        std::memcpy(&result, &mem[addr - mem_addr], sizeof(uint64_t));
         return result;
     }
 
@@ -40,7 +40,7 @@ namespace SimDevices {
 
         for (int i = 0; i < 8; i++) {
             if (wstrb & (1 << i)) {
-                mem[addr - base_addr + i] = wdata_seq[i];
+                mem[addr - mem_addr + i] = wdata_seq[i];
             }
         }
     }
@@ -200,5 +200,15 @@ namespace SimDevices {
                 exit_callback();
             }
         }
+    }
+
+    bool SynReadMemoryDev::in_range(uint64_t addr) {
+        return addr >= mem_addr && addr < mem_addr + mem_size;
+    }
+
+    std::vector<AddrInfo> SynReadMemoryDev::get_addr_info() {
+        return {
+                {mem_addr,   mem_addr + mem_size,     "syn_read_mem"},
+        };
     }
 }

@@ -6,8 +6,12 @@ namespace SimDevices {
     class DeviceMange {
         std::vector<DeviceBase *> device_pool;
 
+        bool is_conflit(uint64_t start, uint64_t end);
+
     public:
         void add_device(DeviceBase *device);
+
+        void print_device_info();
 
         uint64_t update_outputs();
 
