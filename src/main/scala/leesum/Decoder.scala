@@ -1,7 +1,7 @@
 package leesum
 
 import chisel3.util.{Decoupled, ListLookup, MuxLookup}
-import chisel3.{Bundle, Input, Module, _}
+import chisel3._
 import leesum.RVinst._
 
 class InstDecoder extends Module {

@@ -24,15 +24,13 @@ class FuBranchResp extends Bundle {
   def wb_valid = !is_miss_predict && !exception.valid
 }
 
-class FuBranch(isa_c_en: Boolean = false) extends Module {
+class FuBranch(rvc_en: Boolean = false) extends Module {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new FuBranchReq))
     val out = Decoupled(new FuBranchResp)
     val flush = Input(Bool())
   })
 
-  // TODO: need optimize, use alu to calculate vaddr
-  val pc_rs1 = io.in.bits.pc + io.in.bits.rs1
   val pc_imm = io.in.bits.pc + io.in.bits.imm
   val rs1_imm = io.in.bits.rs1 + io.in.bits.imm
   val ra_target = io.in.bits.pc + Mux(io.in.bits.is_rvc, 2.U, 4.U)
@@ -72,7 +70,7 @@ class FuBranch(isa_c_en: Boolean = false) extends Module {
   val is_miss_predict = (io.in.bits.bp.is_taken =/= branch_taken) ||
     (io.in.bits.bp.is_taken && io.in.bits.bp.predict_pc =/= taraget_pc)
 
-  val exception_valid = if (isa_c_en) {
+  val exception_valid = if (rvc_en) {
     false.B
   } else {
     taraget_pc(1)

@@ -21,19 +21,23 @@ class FetchStage extends Module {
     val flush = Input(Bool())
   })
 
-  val tlb_fifo_enq = Wire(DecoupledIO(new TLBResp))
-  val tlb_fifo_deq =
-    Queue(tlb_fifo_enq, 4, flow = true, flush = Some(io.flush))
+  val tlb_resp_fifo = Module(
+    new Queue(new TLBResp, 16, flow = true, hasFlush = true)
+  )
+  val fetch_resp_fifo = Module(
+    new Queue(new FetchResp, 16, flow = true, hasFlush = true)
+  )
+  val tlb_fifo_almost_full = tlb_resp_fifo.io.count > 14.U
+  val fetch_resp_fifo_almost_full = fetch_resp_fifo.io.count > 14.U
 
-  val fetch_resp_fifo_enq = Wire(DecoupledIO(new FetchResp))
-  val fetch_resp_fifo_deq =
-    Queue(fetch_resp_fifo_enq, 4, flow = true, flush = Some(io.flush))
+  tlb_resp_fifo.io.flush.get := io.flush
+  fetch_resp_fifo.io.flush.get := io.flush
 
-  io.fetch_resp <> fetch_resp_fifo_deq
+  io.fetch_resp <> fetch_resp_fifo.io.deq
 
-  tlb_fifo_enq.noenq()
-  fetch_resp_fifo_enq.noenq()
-  tlb_fifo_deq.nodeq()
+  tlb_resp_fifo.io.enq.noenq()
+  tlb_resp_fifo.io.deq.nodeq()
+  fetch_resp_fifo.io.enq.noenq()
   io.pc_in.nodeq()
   io.tlb_req.noenq()
   io.tlb_resp.nodeq()
@@ -47,8 +51,8 @@ class FetchStage extends Module {
   val tlb_state = RegInit(sIdle)
 
   def send_tlb_req() = {
-    io.pc_in.ready := io.tlb_req.ready
-    io.tlb_req.valid := io.pc_in.valid && !io.flush
+    io.pc_in.ready := !tlb_fifo_almost_full
+    io.tlb_req.valid := io.pc_in.valid && !io.flush && !tlb_fifo_almost_full
 
     io.tlb_req.bits.req_type := TLBReqType.Fetch
     io.tlb_req.bits.vaddr := io.pc_in.bits
@@ -66,7 +70,8 @@ class FetchStage extends Module {
       send_tlb_req()
     }
     is(sWaitTLBResp) {
-      io.tlb_resp <> tlb_fifo_enq
+      io.tlb_resp <> tlb_resp_fifo.io.enq
+
       when(io.tlb_resp.fire && !io.flush) {
         // 1. flush: false, tlb_resp.fire: true
         send_tlb_req()
@@ -106,19 +111,21 @@ class FetchStage extends Module {
   }
 
   def send_icache_req() = {
-    when(tlb_fifo_deq.valid && !io.flush) {
-      assert(tlb_fifo_deq.bits.req_type === TLBReqType.Fetch)
-      assert(tlb_fifo_deq.bits.exception.valid === false.B)
+    when(
+      tlb_resp_fifo.io.deq.valid && !io.flush && !fetch_resp_fifo_almost_full
+    ) {
+      assert(tlb_resp_fifo.io.deq.bits.req_type === TLBReqType.Fetch)
+      assert(tlb_resp_fifo.io.deq.bits.exception.valid === false.B)
 
-      val is_mmio = check_mmio(tlb_fifo_deq.bits)
+      val is_mmio = check_mmio(tlb_resp_fifo.io.deq.bits)
       io.icache_req.valid := true.B
-      io.icache_req.bits.paddr := tlb_fifo_deq.bits.paddr
-      io.icache_req.bits.size := tlb_fifo_deq.bits.size
+      io.icache_req.bits.paddr := tlb_resp_fifo.io.deq.bits.paddr
+      io.icache_req.bits.size := tlb_resp_fifo.io.deq.bits.size
       io.icache_req.bits.is_mmio := is_mmio
 
       when(io.icache_req.fire) {
-        tlb_buf := tlb_fifo_deq.bits
-        tlb_fifo_deq.ready := true.B
+        tlb_buf := tlb_resp_fifo.io.deq.bits
+        tlb_resp_fifo.io.deq.ready := true.B
         Icache_state := sWaitIcacheResp
       }.otherwise {
         Icache_state := sIcacheIdle
@@ -129,16 +136,19 @@ class FetchStage extends Module {
   }
 
   def bypass_exception() = {
-    when(tlb_fifo_deq.valid && !io.flush) {
-      assert(tlb_fifo_deq.bits.req_type === TLBReqType.Fetch)
-      assert(tlb_fifo_deq.bits.exception.valid === true.B)
-      fetch_resp_fifo_enq.valid := true.B
-      fetch_resp_fifo_enq.bits.exception := tlb_fifo_deq.bits.exception
-      fetch_resp_fifo_enq.bits.data := 0.U
-      fetch_resp_fifo_enq.bits.pc := tlb_fifo_deq.bits.paddr
+    when(
+      tlb_resp_fifo.io.deq.valid && !io.flush && !fetch_resp_fifo_almost_full
+    ) {
+      assert(tlb_resp_fifo.io.deq.bits.req_type === TLBReqType.Fetch)
+      assert(tlb_resp_fifo.io.deq.bits.exception.valid === true.B)
 
-      when(fetch_resp_fifo_enq.fire) {
-        tlb_fifo_deq.ready := true.B
+      fetch_resp_fifo.io.enq.valid := true.B
+      fetch_resp_fifo.io.enq.bits.exception := tlb_resp_fifo.io.deq.bits.exception
+      fetch_resp_fifo.io.enq.bits.data := 0.U
+      fetch_resp_fifo.io.enq.bits.pc := tlb_resp_fifo.io.deq.bits.paddr
+
+      when(fetch_resp_fifo.io.enq.fire) {
+        tlb_resp_fifo.io.deq.ready := true.B
       }
       Icache_state := sIcacheIdle
     }.otherwise {
@@ -148,7 +158,7 @@ class FetchStage extends Module {
 
   switch(Icache_state) {
     is(sIcacheIdle) {
-      when(tlb_fifo_deq.bits.exception.valid) {
+      when(tlb_resp_fifo.io.deq.bits.exception.valid) {
         bypass_exception()
       }.otherwise {
         send_icache_req()
@@ -156,17 +166,17 @@ class FetchStage extends Module {
     }
     is(sWaitIcacheResp) {
 
-      fetch_resp_fifo_enq.valid := io.icache_resp.valid
-      fetch_resp_fifo_enq.bits.pc := tlb_buf.paddr
-      fetch_resp_fifo_enq.bits.data := io.icache_resp.bits.data
-      fetch_resp_fifo_enq.bits.exception.valid := false.B
-      fetch_resp_fifo_enq.bits.exception.tval := 0.U
-      fetch_resp_fifo_enq.bits.exception.cause := ExceptionCause.misaligned_fetch // 0
-      io.icache_resp.ready := fetch_resp_fifo_enq.ready
+      fetch_resp_fifo.io.enq.valid := io.icache_resp.valid
+      fetch_resp_fifo.io.enq.bits.pc := tlb_buf.paddr
+      fetch_resp_fifo.io.enq.bits.data := io.icache_resp.bits.data
+      fetch_resp_fifo.io.enq.bits.exception.valid := false.B
+      fetch_resp_fifo.io.enq.bits.exception.tval := 0.U
+      fetch_resp_fifo.io.enq.bits.exception.cause := ExceptionCause.misaligned_fetch // 0
+      io.icache_resp.ready := fetch_resp_fifo.io.enq.ready
 
       when(io.icache_resp.fire && !io.flush) {
         // 1. flush: false, icache_resp.fire: true
-        when(tlb_fifo_deq.bits.exception.valid) {
+        when(tlb_resp_fifo.io.deq.bits.exception.valid) {
           bypass_exception()
         }.otherwise {
           send_icache_req()

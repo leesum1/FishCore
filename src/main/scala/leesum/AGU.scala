@@ -225,36 +225,6 @@ class AGU(
     }
   }
 
-//  def dispatch_to_store(tlb_rsp: TLBResp): Unit = {
-//    // when current store addr conflict with uncommitted store addr.
-//    // than stall dispatch the current store
-//    io.out.store_pipe.valid := true.B && !io.store_bypass.data.valid
-//
-//    // mmio do not affect the store op
-//
-//    when(io.out.store_pipe.fire) {
-//      io.out.store_pipe.bits.paddr := tlb_rsp.paddr
-//      io.out.store_pipe.bits.size := agu_req_buf.size
-//
-//      // convert store_data to axi wdata
-//      io.out.store_pipe.bits.wdata := GenAxiWdata(
-//        agu_req_buf.store_data,
-//        tlb_rsp.paddr
-//      )
-//      io.out.store_pipe.bits.wstrb := GenAxiWstrb(
-//        tlb_rsp.paddr,
-//        agu_req_buf.size
-//      )
-//      io.out.store_pipe.bits.trans_id := agu_req_buf.trans_id
-//      // TODO: is_mmio is not implemented
-//      io.out.store_pipe.bits.is_mmio := check_mmio(tlb_rsp)
-//      // back to back
-//      send_tlb_req()
-//    }.otherwise {
-//      state := sWaitFifo
-//    }
-//  }
-
   def dispatch_to_store(tlb_rsp: TLBResp): Unit = {
     // when current store addr conflict with uncommitted store addr.
     // than stall dispatch the current store

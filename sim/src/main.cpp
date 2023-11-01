@@ -88,10 +88,17 @@ int main(int argc, char **argv) {
 
     uint64_t clk_num = 0;
     uint64_t commit_num = 0;
+    uint8_t no_commit_num = 0;
+
+
     bool sim_abort = false;
     while (!sim_base.finished() && (clk_num < max_cycles)) {
         sim_base.step([&](auto top) -> bool {
+            no_commit_num +=1;
             clk_num += 1;
+            if(no_commit_num>150){
+                return true;
+            }
             // memory
             uint64_t rdata = device_manager.update_outputs();
             device_manager.update_inputs(
@@ -105,7 +112,7 @@ int main(int argc, char **argv) {
             if (top->io_difftest_valid) {
                 int step_num = top->io_difftest_bits_commited_num;
                 commit_num += step_num;
-
+                no_commit_num = 0;
                 if (top->io_difftest_bits_exception_valid) {
                     auto cause = top->io_difftest_bits_exception_cause;
 

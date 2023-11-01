@@ -29,9 +29,7 @@ class RspPacket extends Bundle {
     require(x.getWidth == 16)
     x
   }
-  def last_inst_packet: UInt = {
-    inst_packet(max_inst_packet - 1)
-  }
+
 }
 
 class InstsItem extends Bundle {
@@ -40,16 +38,7 @@ class InstsItem extends Bundle {
   def insts(idx: UInt): UInt = {
     insts_vec(idx).inst
   }
-  def insts_pc(idx: UInt): UInt = {
-    insts_vec(idx).pc
-  }
-  def insts_valid_mask(idx: UInt): Bool = {
-    insts_vec(idx).valid
-  }
-  def insts_rvc_mask(idx: UInt): Bool = {
 
-    insts_vec(idx).rvc
-  }
   def clear(): Unit = {
     for (i <- 0 until 4) {
       val tmp = Wire(new INSTEntry)
@@ -59,12 +48,11 @@ class InstsItem extends Bundle {
   }
 }
 
-// TODO: NEED CHECK!!!!!!!!!!!!
 /** This module convert a RspPacket(8 byte size) to InstsItem. The InstsItem may
   * contain 1 to 4 insts, and the insts may be 16 bits or 32 bits. This module
   * is combination logic,Return the InstsItem at the same cycle when input fire.
   */
-class InstReAlign extends Module {
+class InstReAlign(rvc_en: Boolean = false) extends Module {
   val input = IO(Flipped(Decoupled(new RspPacket)))
   val output = IO(
     Decoupled(new InstsItem)
@@ -76,32 +64,49 @@ class InstReAlign extends Module {
 
   val aligned_pc = Cat(input.bits.pc(63, 3), 0.U(3.W))
 
+  def inst_mask(pc: UInt): Vec[Bool] = {
+    val ret = MuxLookup(
+      pc(2, 0),
+      VecInit(Seq.fill(4)(false.B))
+    )(
+      Seq(
+        0.U -> VecInit(Seq(true.B, true.B, true.B, true.B)),
+        2.U -> VecInit(Seq(false.B, true.B, true.B, true.B)),
+        4.U -> VecInit(Seq(false.B, false.B, true.B, true.B)),
+        6.U -> VecInit(Seq(false.B, false.B, false.B, true.B))
+      )
+    )
+    ret
+  }
+
+  val inst_mask_vec = inst_mask(input.bits.pc)
+
   def is_occupied(idx: Int): Bool = {
     val ret = idx match {
-      case -1 => !last_half_valid;
+      case -1 => !last_half_valid
       case 0 =>
         val pre_inst_is_32bits =
-          (!is_occupied(idx - 1)) & (!RiscvTools.is_rvc(
+          (!is_occupied(idx - 1)) & (!RISCVPkg.is_rvc(
             Cat(
               input.bits.inst_packet(idx)(15, 0),
               last_half_inst
             )
           ));
-        val current_is_rvc = (is_occupied(idx - 1)) & RiscvTools.is_rvc(
+        val current_is_rvc = (is_occupied(idx - 1)) & RISCVPkg.is_rvc(
           input.bits.inst_packet(idx)
         );
 
-        pre_inst_is_32bits || current_is_rvc;
+        pre_inst_is_32bits || current_is_rvc || !inst_mask_vec(idx)
       case _ =>
         val pre_inst_is_32bits =
-          (!is_occupied(idx - 1)) & (!RiscvTools.is_rvc(
+          (!is_occupied(idx - 1)) & (!RISCVPkg.is_rvc(
             input.bits.inst_packet(idx - 1)
           ))
-        val current_is_rvc = is_occupied(idx - 1) & RiscvTools.is_rvc(
+        val current_is_rvc = is_occupied(idx - 1) & RISCVPkg.is_rvc(
           input.bits.inst_packet(idx)
         )
 
-        pre_inst_is_32bits || current_is_rvc
+        pre_inst_is_32bits || current_is_rvc || !inst_mask_vec(idx)
     }
 
     if (idx < 0) {
@@ -126,21 +131,6 @@ class InstReAlign extends Module {
     last_half_valid := false.B
   }
 
-  def inst_mask(pc: UInt): Vec[Bool] = {
-    val ret = MuxLookup(
-      pc(2, 0),
-      VecInit(Seq.fill(4)(false.B))
-    )(
-      Seq(
-        0.U -> VecInit(Seq(true.B, true.B, true.B, true.B)),
-        2.U -> VecInit(Seq(false.B, true.B, true.B, true.B)),
-        4.U -> VecInit(Seq(false.B, false.B, true.B, true.B)),
-        6.U -> VecInit(Seq(false.B, false.B, false.B, true.B))
-      )
-    )
-    ret
-  }
-
   def realign_inst(
       cur_pc: UInt,
       pre_packet: UInt,
@@ -148,6 +138,8 @@ class InstReAlign extends Module {
       pre_is_occupied: Bool,
       cur_is_occupied: Bool
   ): INSTEntry = {
+    require(cur_packet.getWidth == 16)
+    require(pre_packet.getWidth == 16)
     val aligned_inst = Wire(new INSTEntry)
     aligned_inst.clear()
 
@@ -155,11 +147,10 @@ class InstReAlign extends Module {
       when(pre_is_occupied) {
         // 16 bits inst
         aligned_inst.valid := true.B
-        aligned_inst.inst := RiscvTools.expand_rvc(cur_packet)
+        aligned_inst.inst := RVCExpander(cur_packet, rvc_en)
         aligned_inst.rvc := true.B
         aligned_inst.pc := cur_pc
-
-        assert(RiscvTools.is_rvc(cur_packet), "cur_packet must be rvc")
+//        assert(RISCVPkg.is_rvc(cur_packet), "cur_packet must be rvc")
 
       }.otherwise {
         // 32 bits inst
@@ -168,16 +159,14 @@ class InstReAlign extends Module {
         aligned_inst.rvc := false.B
         aligned_inst.pc := cur_pc - 2.U
 
-        assert(
-          !RiscvTools.is_rvc(Cat(cur_packet(15, 0), pre_packet(15, 0))),
-          "inst must be 32 bits"
-        )
+//        assert(
+//          !RISCVPkg.is_rvc(Cat(cur_packet(15, 0), pre_packet(15, 0))),
+//          "inst must be 32 bits"
+//        )
       }
     }
     aligned_inst
   }
-
-  val inst_mask_vec = inst_mask(input.bits.pc)
 
   output.bits.insts_vec(0) := realign_inst(
     aligned_pc,

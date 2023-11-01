@@ -135,7 +135,7 @@ public:
 DiffTest::DiffTest(uint64_t boot_pc,
                    uintptr_t memory_size,
                    uintptr_t memory_base) {
-    rv64emu_ref = create_rv64emu("rv64im", "bare", boot_pc, memory_size, memory_base, 0, false);
+    rv64emu_ref = create_rv64emu("rv64imc", "bare", boot_pc, memory_size, memory_base, 0, false);
 }
 
 DiffTest::~DiffTest() {

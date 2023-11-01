@@ -4,17 +4,22 @@ import chisel3.util.{Valid, log2Ceil}
 import leesum.axi4.{AXI4SlaveBridge, AxiReadArbiter, BasicMemoryIO}
 import leesum.moniter.{DifftestPort, MonitorTop}
 import leesum._
-class CoreDutWithRename(random_latency: Boolean = false) extends Module {
+class CoreDutFull(
+    random_latency: Boolean = false,
+    muldiv_en: Boolean = true,
+    rvc_en: Boolean = false
+) extends Module {
+  val boot_pc = 0x80000000L
   val mem_addr = 0x80000000L
   val mem_size = 0x8000000L
   val monitor_en = true
   val addr_width = log2Ceil(mem_addr + mem_size)
 
-  val DEVICE_BASE = 0xa0000000L;
-  val SERIAL_PORT = DEVICE_BASE + 0x00003f8L;
-  val RTC_ADDR = DEVICE_BASE + 0x0000048L;
-  val VGACTRL_ADDR = DEVICE_BASE + 0x0000100L;
-  val FB_ADDR = DEVICE_BASE + 0x1000000L;
+  val DEVICE_BASE = 0xa0000000L
+  val SERIAL_PORT = DEVICE_BASE + 0x00003f8L
+  val RTC_ADDR = DEVICE_BASE + 0x0000048L
+  val VGACTRL_ADDR = DEVICE_BASE + 0x0000100L
+  val FB_ADDR = DEVICE_BASE + 0x1000000L
 
   val addr_map = Seq(
     (mem_addr, mem_addr + mem_size, false),
@@ -34,9 +39,9 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
   io.difftest <> monitor.io.difftest
 
   // pipeline stage
-  val pc_gen_stage = Module(new PCGenStage(0x80000000L))
+  val pc_gen_stage = Module(new PCGenStage(boot_pc, rvc_en))
   val fetch_stage = Module(new FetchStage)
-  val inst_realign = Module(new InstReAlign)
+  val inst_realign = Module(new InstReAlign(rvc_en))
   val inst_fifo = Module(new InstsFIFO)
 
   val decode_stage = Module(new InstDecoder)
@@ -55,8 +60,8 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
   // fu
   val alu_seq = Seq.fill(2)(Module(new FuAlu))
   val lsu = Module(new LSU(addr_map))
-  val bru = Module(new FuBranch)
-  val mul_div = Module(new FuMulDiv)
+  val bru = Module(new FuBranch(rvc_en))
+  val mul_div = Module(new FuMulDiv(muldiv_en))
   val csr = Module(new FuCSR)
 
   val dcache = Module(new DummyDCache)
@@ -66,9 +71,9 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
     new AXI4SlaveBridge(
       AXI_AW = 32,
       AXI_DW = 64,
-      INTERNAL_MEM_SIZE = 0x100000,
+      INTERNAL_MEM_SIZE = mem_size,
       INTERNAL_MEM_DW = 64,
-      INTERNAL_MEM_BASE = 0x80000000L
+      INTERNAL_MEM_BASE = mem_addr
     )
   )
 
@@ -234,11 +239,25 @@ class CoreDutWithRename(random_latency: Boolean = false) extends Module {
 
 }
 
-object gen_CoreTestWithRename extends App {
-  //  GenVerilogHelper(new CoreTestDut("src/main/resources/random_file.bin"))
+object gen_CoreTestFull extends App {
   GenVerilogHelper(
-    new CoreDutWithRename,
-    "/home/leesum/workhome/chisel-fish/sim/vsrc"
+    new CoreDutFull(
+      random_latency = false,
+      muldiv_en = true,
+      rvc_en = true
+    ),
+    "/home/leesum/workhome/chisel-fish/sim/vsrc/ysyx_v2.sv"
   )
-  //  GenVerilogHelper(new CoreTestDut2)
+}
+
+/** This is a simplified version of CoreDutFull, which is used for VIVADO STA.
+  */
+object gen_CoreTestSTA extends App {
+  GenVerilogHelper(
+    new CoreDutFull(
+      random_latency = true,
+      muldiv_en = false
+    ),
+    "/home/leesum/vivado_project/ysyx_v2/ysyx_v2.srcs/sources_1/imports/ysyx_v2/ysyx_v2.sv"
+  )
 }

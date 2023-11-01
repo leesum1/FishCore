@@ -7,7 +7,7 @@ class FuMulDivResp extends Bundle {
   val trans_id = UInt(32.W)
 }
 
-class FuMulDiv extends Module {
+class FuMulDiv(en: Boolean = true) extends Module {
   val io = IO(new Bundle {
     val mul_req = Flipped(Decoupled(new MulReq))
     val div_req = Flipped(Decoupled(new DivReq))
@@ -16,24 +16,28 @@ class FuMulDiv extends Module {
 
     val flush = Input(Bool())
   })
-  val dummy_mul = Module(new DummyMul)
-  val dummy_div = Module(new DummyDiv)
 
-  val mul_resp = Wire(Decoupled(new MulResp))
-  val div_resp = Wire(Decoupled(new DivResp))
-
-  dummy_mul.io.mul_req <> io.mul_req
-  dummy_mul.io.mul_resp <> mul_resp
-  dummy_mul.io.flush := io.flush
-  dummy_div.io.div_req <> io.div_req
-  dummy_div.io.div_resp <> div_resp
-  dummy_div.io.flush := io.flush
-
-  val resp_arb = Module(new RRArbiter(new FuMulDivResp, 2))
-
-  resp_arb.io.in(0) <> mul_resp
-  resp_arb.io.in(1) <> div_resp
-  resp_arb.io.out <> io.fu_div_mul_resp
+  if (en) {
+    val dummy_mul = Module(new DummyMul)
+    val dummy_div = Module(new DummyDiv)
+    val mul_resp = Wire(Decoupled(new MulResp))
+    val div_resp = Wire(Decoupled(new DivResp))
+    dummy_mul.io.mul_req <> io.mul_req
+    dummy_mul.io.mul_resp <> mul_resp
+    dummy_mul.io.flush := io.flush
+    dummy_div.io.div_req <> io.div_req
+    dummy_div.io.div_resp <> div_resp
+    dummy_div.io.flush := io.flush
+    val resp_arb = Module(new RRArbiter(new FuMulDivResp, 2))
+    resp_arb.io.in(0) <> mul_resp
+    resp_arb.io.in(1) <> div_resp
+    resp_arb.io.out <> io.fu_div_mul_resp
+  } else {
+    io.fu_div_mul_resp.valid := false.B
+    io.fu_div_mul_resp.bits := DontCare
+    io.mul_req.ready := false.B
+    io.div_req.ready := false.B
+  }
 }
 
 object gen_fu_mul_div_verilog extends App {

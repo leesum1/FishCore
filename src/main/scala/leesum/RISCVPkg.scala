@@ -3,7 +3,7 @@ package leesum
 import chisel3.util.{BitPat, Cat, Fill, MuxLookup}
 import chisel3.{ChiselEnum, _}
 
-object RiscvTools {
+object RISCVPkg {
 
   def is_rvc(inst: UInt): Bool = {
     inst(1, 0) =/= 3.U

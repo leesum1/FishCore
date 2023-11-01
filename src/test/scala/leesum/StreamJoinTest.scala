@@ -11,7 +11,7 @@ class StreamJoinTest extends AnyFreeSpec with ChiselScalatestTester {
   "StreamJoin_test1" in {
     test(new StreamJoin(2))
       .withAnnotations(
-        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+        Seq(VcsBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
         // -------------------
         // init ports

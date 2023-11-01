@@ -10,7 +10,6 @@ if is_mode("debug") then
     set_policy("build.sanitizer.address", true)
 end
 
-
 add_requires("cli11",{system = false})
 add_requires("catch2",{system = false})
 add_requires("assert",{system = true})
@@ -30,13 +29,11 @@ target("Vtop")
     set_toolchains("@verilator")
     add_files("src/*.cpp")
     add_files("vsrc/*.sv")
-    add_values("verilator.flags","--top","CoreDutWithRename")
+    add_values("verilator.flags","--top","CoreDutFull")
     add_values("verilator.flags","--trace-fst")
     add_includedirs("src/include/")
     add_packages("catch2","cli11","assert","elfio","libsdl")
     add_links("rv64emu_cbinding")
-
-
 
 for _, file in ipairs(os.files("test/*.cpp")) do
     local name = path.basename(file)

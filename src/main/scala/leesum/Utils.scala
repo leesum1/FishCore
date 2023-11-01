@@ -5,6 +5,7 @@ import chisel3.util._
 import _root_.circt.stage.ChiselStage
 
 import java.io.{File, FileOutputStream, PrintWriter}
+import scala.collection.IterableOnce.iterableOnceExtensionMethods
 import scala.sys.process._
 
 object GenVerilogHelper {
@@ -13,12 +14,12 @@ object GenVerilogHelper {
     val result = command.!! // execute the command
     println(result)
   }
-  def apply(gen: => RawModule, location: String = ""): Unit = {
+  def apply(gen: => RawModule, path: String = ""): Unit = {
     val projectDir = System.getProperty("user.dir")
 
     val verilogDir = s"$projectDir/gen_verilog"
-    val file_path = if (location.trim().nonEmpty) {
-      location + '/' + "test.sv"
+    val file_path = if (path.trim().nonEmpty) {
+      path
     } else {
       verilogDir + '/' + "test.sv"
     }
@@ -503,6 +504,28 @@ object Long2UInt64 {
       hex_string.U(64.W)
     } else {
       x.U(64.W)
+    }
+  }
+}
+object ToAugmented {
+  implicit class SeqToAugmentedSeq[T <: Data](private val x: Seq[T])
+      extends AnyVal {
+    def apply(idx: UInt): T = {
+      if (x.size <= 1) {
+        x.head
+      } else if (!isPow2(x.size)) {
+        // For non-power-of-2 seqs, reflect elements to simplify decoder
+        val new_seq = x ++ x.takeRight(x.size & -x.size)
+        new_seq(idx)
+      } else {
+        // Ignore MSBs of idx
+        val truncIdx =
+          if (idx.isWidthKnown && idx.getWidth <= log2Ceil(x.size)) idx
+          else (idx | 0.U(log2Ceil(x.size).W))(log2Ceil(x.size) - 1, 0)
+        x.zipWithIndex.tail.foldLeft(x.head) { case (prev, (cur, i)) =>
+          Mux(truncIdx === i.U, cur, prev)
+        }
+      }
     }
   }
 }

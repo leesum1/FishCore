@@ -2,11 +2,10 @@ package leesum
 import chisel3._
 import chisel3.util.{Cat, Decoupled}
 
-class PCGenStage(boot_pc: Long) extends Module {
+class PCGenStage(boot_pc: Long, rvc_en: Boolean = false) extends Module {
 
   require(boot_pc % 8 == 0, "boot_pc must be aligned to 8")
 
-  val support_rvc = false
   val fetch_size = 8
 
   val io = IO(new Bundle {
@@ -37,8 +36,8 @@ class PCGenStage(boot_pc: Long) extends Module {
   // ---------------------
 
   assert(
-    CheckAligned(pc_reg, if (support_rvc) 1.U else 2.U),
-    "pc_reg must be aligned to %d".format(if (support_rvc) 2 else 4)
+    CheckAligned(pc_reg, if (rvc_en) 1.U(2.W) else 2.U(2.W)),
+    "pc_reg must be aligned to %d".format(if (rvc_en) 2 else 4)
   )
 
 }
