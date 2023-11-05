@@ -1,5 +1,6 @@
 add_rules("mode.release", "mode.debug")
 
+
 if is_mode("release") then
     set_optimize("faster")
 end

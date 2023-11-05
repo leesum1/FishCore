@@ -1,8 +1,11 @@
 import glob
 import os
+
+from tqdm import tqdm
+
 import utilts
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 am_test_path = os.path.join("/home/leesum/workhome/ysyx/am-kernels/tests/cpu-tests/build")
 
@@ -41,7 +44,8 @@ def print_result(result):
 results = []
 with ThreadPoolExecutor() as executor:
     futures = [executor.submit(execute_am_test, bin_file) for bin_file in bin_files]
-    for future in futures:
+    # Iterate over the futures as they complete (in the order they complete)
+    for future in tqdm(as_completed(futures), total=len(bin_files), desc="Processing files"):
         result = future.result()
         results.append(result)
 
@@ -51,4 +55,4 @@ results.sort(key=lambda x: x["return_code"])
 for result in results:
     bin_name = os.path.basename(result["bin_file"])
     ret_code = result["return_code"]
-    print(f"bin_name: {bin_name}, ret_code: {ret_code}")
+    print(f"{bin_name}, ret_code: {ret_code}")

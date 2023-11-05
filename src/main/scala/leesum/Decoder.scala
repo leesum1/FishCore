@@ -1,6 +1,6 @@
 package leesum
 
-import chisel3.util.{Decoupled, ListLookup, MuxLookup}
+import chisel3.util.{Cat, Decoupled, ListLookup, MuxLookup}
 import chisel3._
 import leesum.RVinst._
 
@@ -57,7 +57,11 @@ class InstDecoder extends Module {
 
   val inst_base = new InstBase(io.in.bits.inst)
 
-  scoreboard_entry.inst := decode_sigs.inst
+  scoreboard_entry.inst := Mux(
+    decode_sigs.inst_rvc,
+    Cat(0.U(16.W), io.in.bits.inst_c),
+    io.in.bits.inst
+  )
   scoreboard_entry.pc := decode_sigs.inst_pc
   scoreboard_entry.is_rvc := decode_sigs.inst_rvc
   scoreboard_entry.is_rv32 := decode_sigs.is_rv32
@@ -114,7 +118,11 @@ class InstDecoder extends Module {
     // exception happened in decode stage
     scoreboard_entry.exception.valid := true.B
     scoreboard_entry.exception.cause := ExceptionCause.illegal_instruction
-    scoreboard_entry.exception.tval := io.in.bits.inst
+    scoreboard_entry.exception.tval := Mux(
+      decode_sigs.inst_rvc,
+      Cat(0.U(16.W), io.in.bits.inst_c),
+      io.in.bits.inst
+    )
   }.otherwise {
     // no exception
     scoreboard_entry.exception.valid := false.B

@@ -1,8 +1,11 @@
 import glob
 import os
 import subprocess
+
+from tqdm import tqdm
+
 import utilts
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 tests_path = os.path.join("/opt/riscv-tests/share/riscv-tests/isa")
 Vtop_path = os.path.join("../build/linux/x86_64/release/Vtop")
@@ -24,8 +27,6 @@ all_tests = [os.path.join(tests_path, i) for i in all_tests]
 
 print("Total Test Count: {}".format(len(all_tests)))
 
-
-
 utilts.execute_command("xmake f -m release")
 build_ret = utilts.execute_command("xmake")
 
@@ -36,7 +37,6 @@ if build_ret["return_code"] != 0:
     exit(-1)
 
 print("Build Success!")
-
 
 
 def execute_riscv_test(bin_name):
@@ -54,13 +54,11 @@ def execute_riscv_test(bin_name):
     }
 
 
-
-
 # 使用 ThreadPoolExecutor 并行执行命令
 results = []
 with ThreadPoolExecutor() as executor:
     futures = [executor.submit(execute_riscv_test, bin_file) for bin_file in all_tests]
-    for future in futures:
+    for future in tqdm(as_completed(futures), total=len(all_tests), desc="Processing files"):
         result = future.result()
         results.append(result)
 

@@ -7,12 +7,14 @@ import chisel3.util._
 class INSTEntry extends Bundle {
   val pc = UInt(64.W)
   val inst = UInt(32.W)
+  val inst_c = UInt(16.W)
   val rvc = Bool()
   val valid = Bool()
 
   def clear() = {
     pc := 0.U
     inst := 0.U
+    inst_c := 0.U
     rvc := false.B
     valid := false.B
   }
@@ -89,6 +91,7 @@ class CompressInstsItem extends Module {
     io.out.insts_vec(i).inst := out_data_seq(i).inst
     io.out.insts_vec(i).rvc := out_data_seq(i).rvc
     io.out.insts_vec(i).pc := out_data_seq(i).pc
+    io.out.insts_vec(i).inst_c := out_data_seq(i).inst_c
   }
 
   assert(CheckOrder(out_valid_seq), "out_valid must be ordered")

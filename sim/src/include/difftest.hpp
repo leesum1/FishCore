@@ -24,7 +24,8 @@ Rv64emuBridge *create_rv64emu(const char *isa,
                               uintptr_t memory_size,
                               uintptr_t memory_base,
                               uintptr_t hartid,
-                              bool smode_enable);
+                              bool smode_enable,
+                              bool umode_enable);
 
 void destroy_rv64emu(Rv64emuBridge *rv64emu);
 
@@ -51,7 +52,7 @@ class DiffTest {
 private:
 
 
-    std::string_view get_csr_name(uint64_t addr) {
+    static std::string_view get_csr_name(uint64_t addr) {
         MY_ASSERT((addr < 4096), "csr index out of range");
         switch (addr) {
             case MSTATUS:
@@ -120,13 +121,13 @@ public:
     using read_gpr_fuc = std::function<uint64_t(size_t idx)>;
     using read_csr_fuc = std::function<uint64_t(size_t idx)>;
 
-    bool check_gprs(read_gpr_fuc dut_gpr, read_gpr_fuc ref_gpr, bool debug_en);
+    bool check_gprs(const read_gpr_fuc& dut_gpr, read_gpr_fuc ref_gpr, bool debug_en);
 
-    bool check_csrs(read_csr_fuc dut_csr, bool debug_en);
+    bool check_csrs(const read_csr_fuc& dut_csr, bool debug_en);
 
     bool check_pc(uint64_t ref_pc, uint64_t dut_pc, bool debug_en);
 
-    void ref_skip(read_gpr_fuc dut_gpr, uint64_t dut_pc);
+    void ref_skip(const read_gpr_fuc& dut_gpr, uint64_t dut_pc);
 
     ~DiffTest();
 
@@ -135,14 +136,14 @@ public:
 DiffTest::DiffTest(uint64_t boot_pc,
                    uintptr_t memory_size,
                    uintptr_t memory_base) {
-    rv64emu_ref = create_rv64emu("rv64imc", "bare", boot_pc, memory_size, memory_base, 0, false);
+    rv64emu_ref = create_rv64emu("rv64imc", "bare", boot_pc, memory_size, memory_base, 0, false,true);
 }
 
 DiffTest::~DiffTest() {
     destroy_rv64emu(rv64emu_ref);
 }
 
-bool DiffTest::check_gprs(const DiffTest::read_gpr_fuc dut_gpr, const DiffTest::read_gpr_fuc ref_gpr,
+bool DiffTest::check_gprs(const DiffTest::read_gpr_fuc& dut_gpr, const DiffTest::read_gpr_fuc ref_gpr,
                           bool debug_en = false) {
     const auto reg_names = std::array{
             "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
@@ -159,7 +160,7 @@ bool DiffTest::check_gprs(const DiffTest::read_gpr_fuc dut_gpr, const DiffTest::
         auto ref_val = ref_gpr(idx);
         auto dut_val = dut_gpr(idx);
         if (ref_val != dut_val) {
-            no_pass_vec.push_back({idx, dut_val});
+            no_pass_vec.emplace_back(idx, dut_val);
             fail = true;
         }
     }
@@ -208,8 +209,7 @@ bool DiffTest::check_pc(uint64_t ref_pc, uint64_t dut_pc, bool debug_en = false)
 }
 
 
-// TODO: do not  pass Vtop
-bool DiffTest::check_csrs(const DiffTest::read_csr_fuc dut_csr, bool debug_en = false) {
+bool DiffTest::check_csrs(const DiffTest::read_csr_fuc& dut_csr, bool debug_en = false) {
     const auto need_csr = std::array{MCAUSE, MEPC, MTVEC, MSTATUS, MIE, MTVAL};
     auto ref_csrs = std::vector<uint64_t>();
     auto dut_csrs = std::vector<uint64_t>();
@@ -233,7 +233,7 @@ bool DiffTest::check_csrs(const DiffTest::read_csr_fuc dut_csr, bool debug_en = 
     return mismatch;
 }
 
-void DiffTest::ref_skip(const DiffTest::read_gpr_fuc dut_gpr, uint64_t dut_pc) {
+void DiffTest::ref_skip(const DiffTest::read_gpr_fuc& dut_gpr, uint64_t dut_pc) {
     set_pc(dut_pc);
     for (int idx: std::views::iota(0, 32)) {
         set_reg(idx, dut_gpr(idx));

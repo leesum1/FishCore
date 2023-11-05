@@ -30,6 +30,9 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     val direct_read_ports = Input(new CSRDirectReadPorts)
     val direct_write_ports = Output(new CSRDirectWritePorts)
 
+    // privilege mode
+    val cur_privilege_mode = Output(UInt(2.W))
+
     val commit_monitor = if (monitor_en) {
       Some(Output(Vec(num_commit_port, Valid(new CommitMonitorPort))))
     } else {
@@ -44,6 +47,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
   val flush_next = RegInit(false.B)
   val privilege_mode = RegInit(3.U(2.W)) // machine mode
+
+  io.cur_privilege_mode := privilege_mode
 
   when(flush_next) {
     flush_next := false.B
@@ -156,6 +161,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
     val new_pc = mtvec.get_exception_pc(exception_mcause)
     io.branch_commit.valid := true.B
+
+    // TODO: DO NOT USE BRANCH_COMMIT
     when(io.branch_commit.fire) {
       io.branch_commit.bits.target := new_pc
       flush_next := true.B
@@ -171,6 +178,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       io.direct_write_ports.mstatus.bits := mstatus.get_exception_mstatus(
         privilege_mode
       )
+      // TODO: only support machine mode now!! delegate is not supported!!
+      privilege_mode := Privilegelevel.M.U
     }
     // ------------------
     // assert

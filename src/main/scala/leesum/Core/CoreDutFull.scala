@@ -44,8 +44,7 @@ class CoreDutFull(
   val inst_realign = Module(new InstReAlign(rvc_en))
   val inst_fifo = Module(new InstsFIFO)
 
-  val decode_stage = Module(new InstDecoder)
-  val decode_stage1 = Module(new InstDecoder)
+  val decode_stage = Seq.tabulate(2)(i => Module(new InstDecoder))
 
   val rob = Module(new ReOrderBuffer(8, 2, 2))
   val issue_stage_rob = Module(new IssueStageNew(2, 2))
@@ -140,31 +139,25 @@ class CoreDutFull(
   inst_fifo.io.push <> inst_realign.output
 
   // inst_fifo <> decode stage
-  inst_fifo.io.pop(0).ready := decode_stage.io.in.ready
-  decode_stage.io.in.valid := inst_fifo.io.pop(0).valid
-  decode_stage.io.in.bits.inst := inst_fifo.io.pop(0).bits.inst
-  decode_stage.io.in.bits.pc := inst_fifo.io.pop(0).bits.pc
-  decode_stage.io.in.bits.is_rvc := inst_fifo.io.pop(0).bits.rvc
-  decode_stage.io.in.bits.is_valid := inst_fifo.io.pop(0).bits.valid
-  decode_stage.io.in.bits.exception := DontCare
-  decode_stage.io.in.bits.bp := DontCare
-  decode_stage.io.in.bits.exception.valid := false.B
-  decode_stage.io.in.bits.bp.is_taken := false.B
 
-  inst_fifo.io.pop(1).ready := decode_stage1.io.in.ready
-  decode_stage1.io.in.valid := inst_fifo.io.pop(1).valid
-  decode_stage1.io.in.bits.inst := inst_fifo.io.pop(1).bits.inst
-  decode_stage1.io.in.bits.pc := inst_fifo.io.pop(1).bits.pc
-  decode_stage1.io.in.bits.is_rvc := inst_fifo.io.pop(1).bits.rvc
-  decode_stage1.io.in.bits.is_valid := inst_fifo.io.pop(1).bits.valid
-  decode_stage1.io.in.bits.exception := DontCare
-  decode_stage1.io.in.bits.bp := DontCare
-  decode_stage1.io.in.bits.exception.valid := false.B
-  decode_stage1.io.in.bits.bp.is_taken := false.B
+  for (i <- decode_stage.indices) {
+    inst_fifo.io.pop(i).ready := decode_stage(i).io.in.ready
+    decode_stage(i).io.in.valid := inst_fifo.io.pop(i).valid
+    decode_stage(i).io.in.bits.inst := inst_fifo.io.pop(i).bits.inst
+    decode_stage(i).io.in.bits.pc := inst_fifo.io.pop(i).bits.pc
+    decode_stage(i).io.in.bits.is_rvc := inst_fifo.io.pop(i).bits.rvc
+    decode_stage(i).io.in.bits.is_valid := inst_fifo.io.pop(i).bits.valid
+    decode_stage(i).io.in.bits.inst_c := inst_fifo.io.pop(i).bits.inst_c
+    decode_stage(i).io.in.bits.exception := DontCare
+    decode_stage(i).io.in.bits.bp := DontCare
+    decode_stage(i).io.in.bits.exception.valid := false.B
+    decode_stage(i).io.in.bits.bp.is_taken := false.B
+  }
 
   // decode stage <> issue stage
-  decode_stage.io.out <> issue_stage_rob.io.push_port(0)
-  decode_stage1.io.out <> issue_stage_rob.io.push_port(1)
+  for (i <- decode_stage.indices) {
+    decode_stage(i).io.out <> issue_stage_rob.io.push_port(i)
+  }
 
   // issue stage <> scoreboard
   issue_stage_rob.io.pop_port <> rob.io.push_ports
@@ -209,6 +202,7 @@ class CoreDutFull(
   // commit stage <> csr file
   commit_stage.io.direct_read_ports <> csr_regs.io.direct_read_ports
   commit_stage.io.direct_write_ports <> csr_regs.io.direct_write_ports
+  commit_stage.io.cur_privilege_mode <> csr_regs.io.cur_privilege_mode
 
   // commit stage <> fu
   commit_stage.io.store_commit <> lsu.io.store_commit

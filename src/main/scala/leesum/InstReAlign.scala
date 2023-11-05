@@ -148,6 +148,7 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
         // 16 bits inst
         aligned_inst.valid := true.B
         aligned_inst.inst := RVCExpander(cur_packet, rvc_en)
+        aligned_inst.inst_c := cur_packet
         aligned_inst.rvc := true.B
         aligned_inst.pc := cur_pc
 //        assert(RISCVPkg.is_rvc(cur_packet), "cur_packet must be rvc")

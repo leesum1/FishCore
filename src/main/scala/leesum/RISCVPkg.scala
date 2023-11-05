@@ -215,6 +215,82 @@ object Instructions {
 
 }
 
+class CSRBitField(private var value: Long) {
+  private def TrailingZeros(mask: Long) = {
+    var mask_var = mask
+    var i = 0
+    while ((mask_var & 1) == 0) {
+      mask_var = mask_var >>> 1
+      i += 1
+    }
+    i
+  }
+  def setField(mask: Long, fieldValue: Long): Unit = {
+    val offset = TrailingZeros(mask)
+    value = (value & ~mask) | ((fieldValue << offset) & mask)
+  }
+
+  def getField(mask: Long) = {
+    val offset = TrailingZeros(mask)
+    (value & mask) >> offset
+  }
+
+  def getRawValue = value
+}
+
+object MStatusMask {
+  final val UIE = 0x00000001L
+  final val SIE = 0x00000002L
+  final val HIE = 0x00000004L
+  final val MIE = 0x00000008L
+  final val UPIE = 0x00000010L
+  final val SPIE = 0x00000020L
+  final val UBE = 0x00000040L
+  final val MPIE = 0x00000080L
+  final val SPP = 0x00000100L
+  final val VS = 0x00000600L
+  final val MPP = 0x00001800L
+  final val FS = 0x00006000L
+  final val XS = 0x00018000L
+  final val MPRV = 0x00020000L
+  final val SUM = 0x00040000L
+  final val MXR = 0x00080000L
+  final val TVM = 0x00100000L
+  final val TW = 0x00200000L
+  final val TSR = 0x00400000L
+  final val MSTATUS32_SD = 0x80000000L
+  final val UXL = 0x0000000300000000L
+  final val SXL = 0x0000000c00000000L
+  final val SBE = 0x0000001000000000L
+  final val MBE = 0x0000002000000000L
+  final val GVA = 0x0000004000000000L
+  final val MPV = 0x0000008000000000L
+  final val MSTATUS64_SD = 0x8000000000000000L
+}
+
+object SatpMask {
+  final val SATP32_MODE = 0x80000000L
+  final val SATP32_ASID = 0x7fc00000L
+  final val SATP32_PPN = 0x003fffffL
+  final val SATP64_MODE = 0xf000000000000000L
+  final val SATP64_ASID = 0x0ffff00000000000L
+  final val SATP64_PPN = 0x00000fffffffffffL
+
+  final val MODE_OFF = 0L
+  final val MODE_SV32 = 1L
+  final val MODE_SV39 = 8L
+  final val MODE_SV48 = 9L
+  final val MODE_SV57 = 10L
+  final val MODE_SV64 = 11L
+}
+
+object TVECMask {
+  final val MODE = 0x0000000000000003L
+  final val BASE = ~0x0000000000000003L
+}
+
+object PTEMask {}
+
 object CSRs {
   val fflags = 0x1
   val frm = 0x2
@@ -2195,9 +2271,11 @@ class BpEntry extends Bundle {
   val is_miss_predict = Bool()
 }
 
+// TODO: RENAME THIS
 class FetchEntry extends Bundle {
   val pc = UInt(64.W)
   val inst = UInt(32.W)
+  val inst_c = UInt(16.W)
   val is_rvc = Bool()
   val is_valid = Bool()
   val exception = new ExceptionEntry(has_valid = true)
@@ -2211,7 +2289,7 @@ class ScoreBoardEntry extends Bundle {
   // 3. load/store (no exception)
   val complete = Bool()
   val pc = UInt(64.W) // pc of the instruction
-  val inst = UInt(32.W) // instruction
+  val inst = UInt(32.W) // instruction, may be compressed
   val is_rvc = Bool() // is rvc instruction
   val is_rv32 = Bool() // is rv32 instruction
   val fu_type = FuType() // function unit types
