@@ -486,11 +486,12 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
       csr.bits.rs1_or_zimm :=
         Mux(scb.use_immz, inst_base.imm_z, op_bundle.rs1_data)
       csr.bits.trans_id := trans_id
-      csr.bits.only_read := Mux(
+      csr.bits.read_en := !(scb.fu_op === FuOP.CSRRW && scb.rd_addr === 0.U)
+      csr.bits.write_en := !(scb.fu_op =/= FuOP.CSRRW && Mux(
         scb.use_immz,
         inst_base.imm_z === 0.U,
         scb.rs1_addr === 0.U
-      )
+      ))
     }
   }
 

@@ -99,6 +99,18 @@ class StoreQueue(
     speculate_store_fifo.peek().bits
   )
 
+  val dcache_req_buf = Reg(new Valid(new StoreQueueIn))
+
+  when(io.dcache_req.fire) {
+    dcache_req_buf.bits := commit_store_fifo.peek().bits
+    dcache_req_buf.valid := true.B
+  }.elsewhen(!io.dcache_req.fire && io.dcache_resp.fire) {
+    dcache_req_buf.valid := false.B
+  }.otherwise {
+    dcache_req_buf.valid := false.B
+    dcache_req_buf.bits := DontCare
+  }
+
   // ----------------------------
   // Dcache logic & memory logic
   // ----------------------------
@@ -167,7 +179,7 @@ class StoreQueue(
       speculate_store_fifo.create_read_port(i.U)
     } ++ 0.until(commit_store_queue_size).indices.map { i =>
       commit_store_fifo.create_read_port(i.U)
-    }
+    } ++ Seq(dcache_req_buf)
 
   val addr_match_mask = all_fifo.map { entry =>
     addr_match(

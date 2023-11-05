@@ -169,9 +169,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       io.direct_write_ports.mtval.bits := entry.exception.tval
       io.direct_write_ports.mstatus.valid := true.B
       io.direct_write_ports.mstatus.bits := mstatus.get_exception_mstatus(
-        Privilegelevel.M.U(2.W)
+        privilege_mode
       )
-
     }
     // ------------------
     // assert
@@ -343,8 +342,11 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
   // second inst
   when(rob_valid_seq(1) && rob_data_seq(1).complete && !flush_next) {
+
+    // TODO: more constraint on the second inst?
     when(
-      pop_ack.head && !rob_data_seq.head.exception.valid && rob_data_seq.head.fu_type =/= FuType.Br
+      pop_ack.head && !rob_data_seq.head.exception.valid
+        && rob_data_seq.head.fu_type =/= FuType.Br && rob_data_seq.head.fu_type =/= FuType.None
     ) {
       val retire_fu_type_seq = VecInit(
         Seq(

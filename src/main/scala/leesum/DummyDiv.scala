@@ -99,7 +99,7 @@ class DummyDiv extends Module {
         GenMaskZero(64, 32 - 1),
         GenMaskZero(64, 64 - 1)
       ),
-      FuOP.DivRem.asUInt -> op_a
+      FuOP.DivRem.asUInt -> 0.U
     )
   )
 

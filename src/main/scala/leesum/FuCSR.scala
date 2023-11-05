@@ -5,7 +5,8 @@ import chisel3.util.{Decoupled, Enum, MuxLookup, is, switch}
 class FuCsrReq extends Bundle {
   val csr_addr = UInt(12.W)
   val rs1_or_zimm = UInt(64.W) // zimm or rs1_data
-  val only_read = Bool() // only read, no write, rs1 == x0, or zimm = 0
+  val read_en = Bool()
+  val write_en = Bool()
   val trans_id = UInt(32.W)
   val csr_op = FuOP()
 }
@@ -45,15 +46,15 @@ class FuCSR extends Module {
       rs_or_imm: UInt
   ): UInt = {
     assert(FuOP.is_csr(csr_op), "csr_op should be csr")
-    val offset = csr_rdata(5, 0)
+    require(csr_rdata.getWidth == rs_or_imm.getWidth, "width should be equal")
     val csr_result = MuxLookup(
       csr_op.asUInt,
       0.U
     )(
       Seq(
-        FuOP.CSRRC.asUInt -> csr_rdata.bitSet(offset, false.B),
+        FuOP.CSRRC.asUInt -> (csr_rdata & (~rs_or_imm).asUInt),
         FuOP.CSRRW.asUInt -> rs_or_imm,
-        FuOP.CSRRS.asUInt -> csr_rdata.bitSet(offset, true.B)
+        FuOP.CSRRS.asUInt -> (csr_rdata | rs_or_imm)
       )
     )
     csr_result
@@ -73,7 +74,9 @@ class FuCSR extends Module {
     io.csr_resp.bits.data := csr_read_buf
     io.csr_resp.bits.exception.valid := exception_valid
     io.csr_resp.bits.exception.cause := ExceptionCause.illegal_instruction
-    io.csr_resp.bits.exception.tval := csr_peek.bits.csr_addr
+    // TODO: shall we set tval to csr_addr?
+    //    io.csr_resp.bits.exception.tval := csr_peek.bits.csr_addr
+    io.csr_resp.bits.exception.tval := 0.U
   }
 
   io.csr_resp.noenq()
@@ -94,8 +97,12 @@ class FuCSR extends Module {
     is(sIdleRead) {
       when(csr_peek.valid && io.csr_commit.valid) {
         io.csr_read_port.addr := csr_peek.bits.csr_addr
-        io.csr_read_port.read_en := true.B
-        csr_read_buf := io.csr_read_port.read_data
+        io.csr_read_port.read_en := csr_peek.bits.read_en
+        csr_read_buf := Mux(
+          csr_peek.bits.read_en,
+          io.csr_read_port.read_data,
+          0.U
+        )
 
         when(io.csr_read_port.read_ex_resp) {
           state := sException
@@ -111,9 +118,9 @@ class FuCSR extends Module {
         csr_peek.bits.rs1_or_zimm
       )
       io.csr_write_port.addr := csr_peek.bits.csr_addr
-      io.csr_write_port.write_en := !csr_peek.bits.only_read
+      io.csr_write_port.write_en := csr_peek.bits.write_en
       io.csr_write_port.write_data := csr_wdata
-      when(io.csr_write_port.write_ex_resp && !csr_peek.bits.only_read) {
+      when(io.csr_write_port.write_ex_resp) {
         send_csr_resp(true.B)
       }.otherwise {
         send_csr_resp(false.B)
@@ -133,6 +140,10 @@ class FuCSR extends Module {
     assert(!csr_fifo.empty, "csr_fifo should not be empty")
     assert(csr_peek.valid, "csr_fifo should be valid")
     assert(FuOP.is_csr(csr_peek.bits.csr_op), "csr_op should be csr")
+    assert(
+      csr_peek.bits.read_en | csr_peek.bits.write_en,
+      "csr should be read or write"
+    )
   }
 }
 

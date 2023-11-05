@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
                 if (top->io_difftest_bits_exception_valid) {
                     auto cause = top->io_difftest_bits_exception_cause;
 
-                    auto valid_cause = std::array{0, 3, 4, 6, 11};
+                    auto valid_cause = std::array{0, 2, 3, 4, 6, 8, 11};
                     if (std::ranges::find(valid_cause, cause) == valid_cause.end()) {
                         std::cout << std::format("exception cause 0x{:x},pc 0x{:016x}\n",
                                                  cause, sim_base.get_pc());

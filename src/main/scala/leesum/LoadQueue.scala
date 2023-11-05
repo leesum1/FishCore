@@ -27,15 +27,16 @@ class LoadQueue extends Module {
     val dcache_req = Decoupled(new LoadDcacheReq)
     val dcache_resp = Flipped(Decoupled(new LoadDcacheResp))
   })
-  val load_queue_size = 4
+  val load_queue_size = 8
   val load_queue_out = Queue(
     io.in,
     load_queue_size,
+    flow = true,
     flush = Some(io.flush)
   )
 
   // push a pipeline to the output
-  val wb_pipe = Module(new PipeLine(new LoadWriteBack))
+  val wb_pipe = Module(new FlowLine(new LoadWriteBack))
   wb_pipe.io.out <> io.load_wb
   wb_pipe.io.flush := io.flush
 

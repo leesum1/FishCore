@@ -13,6 +13,17 @@ class PipeLine[T <: Data](gen: T) extends Module {
   io.out <> pipe_fifo
 }
 
+class FlowLine[T <: Data](gen: T) extends Module {
+  val io = IO(new Bundle {
+    val in = Flipped(Decoupled(gen))
+    val out = Decoupled(gen)
+    val flush = Input(Bool())
+  })
+
+  val pipe_fifo = Queue(io.in, 1, flow = true, flush = Some(io.flush))
+  io.out <> pipe_fifo
+}
+
 object PipeLine {
   def apply[T <: Data](in: DecoupledIO[T], flush: Bool): DecoupledIO[T] = {
     val pipe = Module(new PipeLine(in.bits.cloneType))

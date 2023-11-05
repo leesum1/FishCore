@@ -256,6 +256,12 @@ class CSRRegs extends Module {
   val misa = RegInit(Long2UInt64(0x8000000000001100L))
   val mhartid = RegInit(0.U(64.W))
 
+  // TODO: added but not used now
+  val satp = RegInit(0.U(64.W))
+  val mideleg = RegInit(0.U(64.W))
+  val medeleg = RegInit(0.U(64.W))
+
+  // TODO: warl field
   val m_map =
     Seq(
       (CSRs.mstatus, mstatus),
@@ -267,7 +273,10 @@ class CSRRegs extends Module {
       (CSRs.mip, mip),
       (CSRs.mscratch, mscratch),
       (CSRs.misa, misa),
-      (CSRs.mhartid, mhartid)
+      (CSRs.mhartid, mhartid),
+      (CSRs.satp, satp),
+      (CSRs.mideleg, mideleg),
+      (CSRs.medeleg, medeleg)
     )
   m_map.foreach({ case (addr, reg) =>
     csr_map.add_csr(addr, reg)

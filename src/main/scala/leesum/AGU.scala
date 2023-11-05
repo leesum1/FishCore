@@ -1,6 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, Enum, PriorityMux, is, switch}
+import chisel3.util.{Decoupled, Enum, PriorityMux, Queue, is, switch}
 import leesum.axi4.{SkidBufferWithFLush, StreamFork2, StreamJoin}
 
 class AGUReq extends Bundle {
@@ -54,15 +54,17 @@ class AGU(
     val store_bypass = Flipped(new StoreBypassIO)
   })
 
-  val agu_req = Wire(Flipped(Decoupled(new AGUReq)))
+//  val agu_req = Wire(Flipped(Decoupled(new AGUReq)))
 
-  SkidBufferWithFLush(
-    io.in,
-    agu_req,
-    io.flush,
-    CUT_VALID = false,
-    CUT_READY = true
-  )
+  val agu_req = Queue(io.in, 4, flow = true, flush = Some(io.flush))
+
+//  SkidBufferWithFLush(
+//    io.in,
+//    agu_req,
+//    io.flush,
+//    CUT_VALID = false,
+//    CUT_READY = true
+//  )
 
   // TODO: need optimize, use alu to calculate vaddr?
   val vaddr = agu_req.bits.op_a.asSInt + agu_req.bits.op_b.asSInt
