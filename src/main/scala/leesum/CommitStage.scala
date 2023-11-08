@@ -21,6 +21,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     // lsu
     val mmio_commit = Decoupled(Bool())
     val store_commit = Decoupled(Bool())
+    val amo_commit = Decoupled(Bool())
     // csr
     val csr_commit = Decoupled(Bool())
     // branch
@@ -222,7 +223,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     }
   }
 
-  // TODO: CSR NOT IMPLEMENTED
+  // TODO: implement not correct!!!!!!!!!
   def retire_csr(
       entry: ScoreBoardEntry,
       gpr_commit_port: GPRsWritePort,
@@ -234,6 +235,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
     val sIdle :: sACK :: Nil = Enum(2)
     val state = RegInit(sIdle)
+    state.suggestName("csr_state")
 
     switch(state) {
       is(sIdle) {
@@ -253,8 +255,24 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     }
   }
 
+  def retire_amo(
+      entry: ScoreBoardEntry,
+      gpr_commit_port: GPRsWritePort,
+      amo_commit_port: DecoupledIO[Bool],
+      ack: Bool
+  ): Unit = {
+    assert(entry.exception.valid === false.B)
+    assert(FuOP.is_lsu(entry.fu_op), "fu_op must be lsu")
+    when(FuOP.is_amo(entry.fu_op)) {
+      assert(entry.complete === true.B, "load must be complete")
+      gpr_commit_port.write(entry.rd_addr, entry.result)
+      ack := true.B
+    }
+  }
+
   io.mmio_commit.noenq()
   io.store_commit.noenq()
+  io.amo_commit.noenq()
   io.csr_commit.noenq()
   io.gpr_commit_ports.foreach(gpr => {
     gpr.addr := 0.U
@@ -296,16 +314,28 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
           )
         }
         is(FuType.Lsu) {
-          retire_load(
-            rob_data_seq.head,
-            io.gpr_commit_ports.head,
-            pop_ack.head
-          )
-          retire_store(
-            rob_data_seq.head,
-            io.store_commit,
-            pop_ack.head
-          )
+          when(FuOP.is_load(rob_data_seq.head.fu_op)) {
+            retire_load(
+              rob_data_seq.head,
+              io.gpr_commit_ports.head,
+              pop_ack.head
+            )
+          }.elsewhen(FuOP.is_store(rob_data_seq.head.fu_op)) {
+            retire_store(
+              rob_data_seq.head,
+              io.store_commit,
+              pop_ack.head
+            )
+          }.elsewhen(FuOP.is_amo(rob_data_seq.head.fu_op)) {
+            retire_amo(
+              rob_data_seq.head,
+              io.gpr_commit_ports.head,
+              io.amo_commit,
+              pop_ack.head
+            )
+          }.otherwise {
+            assert(false.B, "lsu op error")
+          }
         }
         is(FuType.Br) {
           retire_branch(
@@ -327,7 +357,10 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
         }
       }
     }
-  }.elsewhen(rob_valid_seq.head && !rob_data_seq.head.complete && !flush_next) {
+  }.elsewhen(
+    rob_valid_seq.head && !rob_data_seq.head.complete && !flush_next
+  ) {
+    // for csr, mmio, amo the complete flag is not set
     assert(
       rob_data_seq.head.exception.valid === false.B,
       "rob entry must be not exception"
@@ -341,10 +374,14 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
         ) {
           io.mmio_commit.valid := true.B
           io.mmio_commit.bits := true.B
+        }.elsewhen(FuOP.is_amo(rob_data_seq.head.fu_op)) {
+          io.amo_commit.valid := true.B
+          io.amo_commit.bits := true.B
         }
       }
       is(FuType.Csr) {
         io.csr_commit.valid := true.B
+        io.csr_commit.bits := true.B
       }
     }
   }

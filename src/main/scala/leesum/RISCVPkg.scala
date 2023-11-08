@@ -1268,6 +1268,17 @@ object FuOP extends ChiselEnum {
   val CSRRW = Value(46.U)
   val CSRRS = Value(47.U)
   val CSRRC = Value(48.U)
+  val LsuAMOADD = Value(49.U)
+  val LsuAMOAND = Value(50.U)
+  val LsuAMOMAX = Value(51.U)
+  val LsuAMOMAXU = Value(52.U)
+  val LsuAMOMIN = Value(53.U)
+  val LsuAMOMINU = Value(54.U)
+  val LsuAMOOR = Value(55.U)
+  val LsuAMOSWAP = Value(56.U)
+  val LsuAMOXOR = Value(57.U)
+  val LsuLR = Value(58.U)
+  val LsuSC = Value(59.U)
 
   def is_xret(op: FuOP.Type): Bool = {
     val system_op_map = Seq(
@@ -1343,6 +1354,25 @@ object FuOP extends ChiselEnum {
     val op_is_store = VecInit(store_op.map(_.asUInt)).contains(op.asUInt)
     op_is_store
   }
+
+  def is_amo(op: FuOP.Type): Bool = {
+    val amo_op = Seq(
+      FuOP.LsuAMOADD,
+      FuOP.LsuAMOAND,
+      FuOP.LsuAMOMAX,
+      FuOP.LsuAMOMAXU,
+      FuOP.LsuAMOMIN,
+      FuOP.LsuAMOMINU,
+      FuOP.LsuAMOOR,
+      FuOP.LsuAMOSWAP,
+      FuOP.LsuAMOXOR,
+      FuOP.LsuLR,
+      FuOP.LsuSC
+    )
+    val op_is_amo = VecInit(amo_op.map(_.asUInt)).contains(op.asUInt)
+    op_is_amo
+  }
+
   def is_load(op: FuOP.Type): Bool = {
     val load_op = Seq(
       FuOP.LsuLb,
@@ -1358,7 +1388,7 @@ object FuOP extends ChiselEnum {
   }
 
   def is_lsu(op: FuOP.Type): Bool = {
-    is_store(op) || is_load(op)
+    is_store(op) || is_load(op) || is_amo(op)
   }
 
   def lsu_need_sign_ext(op: FuOP.Type): Bool = {
@@ -2070,6 +2100,163 @@ object RVinst {
     ) ::: reg_reg_op)
   )
 
+  val a_map: Array[(BitPat, List[Element])] = Array(
+    Instructions.A64Type("AMOADD_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOADD,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.A64Type("AMOAND_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOAND,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.A64Type("AMOMAX_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOMAX,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.A64Type("AMOMAXU_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOMAXU,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.A64Type("AMOMIN_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOMIN,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.A64Type("AMOMINU_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOMINU,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.A64Type("AMOOR_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOOR,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.A64Type("AMOSWAP_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOSWAP,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.A64Type("AMOXOR_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOXOR,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.A64Type("LR_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuLR,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.A64Type("SC_D") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuSC,
+      false.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("AMOADD_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOADD,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("AMOAND_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOAND,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("AMOMAX_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOMAX,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("AMOMAXU_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOMAXU,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("AMOMIN_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOMIN,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("AMOMINU_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOMINU,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("AMOOR_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOOR,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("AMOSWAP_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOSWAP,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("AMOXOR_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuAMOXOR,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("LR_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuLR,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op),
+    Instructions.AType("SC_W") -> (List(
+      true.B,
+      FuType.Lsu,
+      FuOP.LsuSC,
+      true.B,
+      InstType.R
+    ) ::: reg_reg_op)
+  )
+
   val zicsr_map: Array[(BitPat, List[Element])] = Array(
     Instructions.ZICSRType("CSRRC") -> (List(
       true.B,
@@ -2211,7 +2398,7 @@ object ExceptionCause extends ChiselEnum {
     }
   }
 
-  def get_misaigned_cause(req_type: TLBReqType.Type): ExceptionCause.Type = {
+  def get_misaligned_cause(req_type: TLBReqType.Type): ExceptionCause.Type = {
     MuxLookup(req_type, unknown) {
       Seq(
         TLBReqType.Fetch -> misaligned_fetch,

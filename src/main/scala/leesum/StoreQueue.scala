@@ -54,6 +54,7 @@ class StoreQueue(
     val dcache_req = Decoupled(new StoreDcacheReq)
     val dcache_resp = Flipped(Decoupled(new StoreDcacheResp))
     val store_bypass = new StoreBypassIO
+    val st_queue_empty = Output(Bool())
   })
 
   // --------------------------
@@ -110,6 +111,9 @@ class StoreQueue(
     dcache_req_buf.valid := false.B
     dcache_req_buf.bits := DontCare
   }
+
+  // TODO: is this correct?
+  io.st_queue_empty := commit_store_fifo.empty && !dcache_req_buf.valid
 
   // ----------------------------
   // Dcache logic & memory logic

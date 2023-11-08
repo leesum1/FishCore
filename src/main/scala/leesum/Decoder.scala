@@ -15,7 +15,7 @@ class InstDecoder extends Module {
     ListLookup(
       io.in.bits.inst,
       RVinst.inst_default,
-      i_common_map ++ i64_map ++ m_map ++ m64_map ++ zicsr_map ++ privilege_map
+      i_common_map ++ i64_map ++ m_map ++ m64_map ++ a_map ++ zicsr_map ++ privilege_map
     )
   val decode_sigs = Wire(new DecoderSignals())
 

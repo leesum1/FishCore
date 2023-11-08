@@ -7,6 +7,7 @@ object TLBReqType extends ChiselEnum {
   val LOAD = Value(0.U)
   val STORE = Value(1.U)
   val Fetch = Value(2.U)
+  val AMO = Value(3.U)
 }
 
 class TLBReq extends Bundle {

@@ -1,7 +1,16 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, Enum, PriorityMux, Queue, is, switch}
-import leesum.axi4.{SkidBufferWithFLush, StreamFork2, StreamJoin}
+import chisel3.util.{
+  Decoupled,
+  Enum,
+  MuxCase,
+  MuxLookup,
+  PriorityMux,
+  Queue,
+  is,
+  switch
+}
+import leesum.axi4.StreamFork2
 
 class AGUReq extends Bundle {
   val op_a = UInt(64.W)
@@ -10,14 +19,9 @@ class AGUReq extends Bundle {
   val store_data = UInt(64.W)
   val trans_id = UInt(32.W)
   val is_store = Bool()
+  val amo_op = AMOOP()
   // need by load
   val sign_ext = Bool()
-}
-
-class ExceptionQueueIn extends Bundle {
-  val trans_id = UInt(32.W)
-  val is_mmio = Bool()
-  val exception = new ExceptionEntry()
 }
 
 class AGUWriteBack extends Bundle {
@@ -30,6 +34,7 @@ class AGUWriteBack extends Bundle {
 class AGUResp extends Bundle {
   val load_pipe = Decoupled(new LoadQueueIn())
   val store_pipe = Decoupled(new StoreQueueIn())
+  val amo_pipe = Decoupled(new AMOQueueIn())
   val agu_pipe = Decoupled(new AGUWriteBack())
 }
 
@@ -79,27 +84,34 @@ class AGU(
   agu_req.nodeq()
 
   io.out.agu_pipe.noenq()
-
   io.out.store_pipe.noenq()
   io.out.load_pipe.noenq()
+  io.out.amo_pipe.noenq()
   io.store_bypass.valid := false.B
   io.store_bypass.paddr := DontCare
-
-  // TODO: use a queue optimize timing?
 
   /** when tlb ready, accept the request from agu
     */
   def send_tlb_req(): Unit = {
-    agu_req.ready := io.tlb_req.ready && !io.flush
+    val is_amo = agu_req.bits.amo_op =/= AMOOP.None
 
+    assert(
+      !(agu_req.bits.is_store && is_amo),
+      "send_tlb_req error, is_store and is_amo should not be true at the same time"
+    )
+
+    agu_req.ready := io.tlb_req.ready && !io.flush
     io.tlb_req.valid := agu_req.valid
     io.tlb_req.bits.vaddr := vaddr.asUInt
     io.tlb_req.bits.size := agu_req.bits.size
-    io.tlb_req.bits.req_type := Mux(
-      agu_req.bits.is_store,
-      TLBReqType.STORE,
-      TLBReqType.LOAD
+    io.tlb_req.bits.req_type := MuxCase(
+      TLBReqType.LOAD,
+      Seq(
+        agu_req.bits.is_store -> TLBReqType.STORE,
+        (agu_req.bits.amo_op =/= AMOOP.None) -> TLBReqType.AMO
+      )
     )
+
     when(agu_req.fire && io.tlb_req.fire) {
       state := sWaitTLBRsp
       agu_req_buf := agu_req.bits
@@ -125,7 +137,6 @@ class AGU(
     Seq(tlb_rsp.exception.valid, !addr_align, !addr_in_range).reduce(_ || _)
   }
 
-  // TODO: not implemented now
   def check_mmio(tlb_rsp: TLBResp): Bool = {
 
     val is_mmio = WireInit(false.B)
@@ -142,7 +153,6 @@ class AGU(
     is_mmio
   }
 
-  // TODO: not implemented now
   def dispatch_to_exception(tlb_rsp: TLBResp): Unit = {
 
     io.out.agu_pipe.valid := true.B
@@ -159,7 +169,9 @@ class AGU(
       // 4. defeat unknown
       io.out.agu_pipe.bits.exception.cause := PriorityMux(
         Seq(
-          is_misaligned -> ExceptionCause.get_misaigned_cause(tlb_rsp.req_type),
+          is_misaligned -> ExceptionCause.get_misaligned_cause(
+            tlb_rsp.req_type
+          ),
           tlb_rsp.exception.valid -> tlb_rsp.exception.cause,
           out_of_range -> ExceptionCause.get_access_cause(tlb_rsp.req_type),
           true.B -> ExceptionCause.unknown
@@ -181,7 +193,8 @@ class AGU(
   def dispatch_to_load(tlb_rsp: TLBResp): Unit = {
     // when current load addr conflict with uncommitted store addr, and the store is a mmio operation
     // then stall the current load.
-    val need_stall = io.store_bypass.data.valid && io.store_bypass.data.is_mmio
+    val need_stall =
+      io.store_bypass.data.valid && io.store_bypass.data.is_mmio || !io.out.amo_pipe.ready
     val is_mmio = check_mmio(tlb_rsp)
 
     val load_fork_in = Wire(Decoupled(Bool()))
@@ -231,7 +244,7 @@ class AGU(
     // when current store addr conflict with uncommitted store addr.
     // than stall dispatch the current store
 
-    val need_stall = io.store_bypass.data.valid
+    val need_stall = io.store_bypass.data.valid || !io.out.amo_pipe.ready
     val is_mmio = check_mmio(tlb_rsp)
 
     val store_fork_in = Wire(Decoupled(Bool()))
@@ -279,6 +292,34 @@ class AGU(
     }
   }
 
+  def dispatch_to_amo(tlb_resp: TLBResp) = {
+    io.out.amo_pipe.valid := true.B
+    io.out.amo_pipe.bits.trans_id := agu_req_buf.trans_id
+    io.out.amo_pipe.bits.rs1_data := agu_req_buf.op_a
+    io.out.amo_pipe.bits.rs2_data := agu_req_buf.store_data // store_data is rs2_data
+    io.out.amo_pipe.bits.is_rv32 := agu_req_buf.size === DcacheConst.SIZE4.asUInt
+    io.out.amo_pipe.bits.amo_op := agu_req_buf.amo_op
+
+    when(io.out.amo_pipe.fire) {
+      assert(
+        !agu_req_buf.is_store,
+        "dispatch_to_amo error, should not be store"
+      )
+      assert(
+        agu_req_buf.amo_op =/= AMOOP.None,
+        "dispatch_to_amo error, amo_op should not be None"
+      )
+      assert(
+        agu_req_buf.size === DcacheConst.SIZE8.asUInt || agu_req_buf.size === DcacheConst.SIZE4.asUInt,
+        "dispatch_to_amo error, size should be 8 or 4"
+      )
+      // back to back
+      send_tlb_req()
+    }.otherwise {
+      state := sWaitFifo
+    }
+  }
+
   switch(state) {
     is(sIdle) {
       send_tlb_req()
@@ -297,6 +338,8 @@ class AGU(
           dispatch_to_store(io.tlb_resp.bits)
         }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.LOAD) {
           dispatch_to_load(io.tlb_resp.bits)
+        }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.AMO) {
+          dispatch_to_amo(io.tlb_resp.bits)
         }.otherwise {
           assert(false.B, "sWaitTLBRsp error, should not reach here")
         }
@@ -322,6 +365,8 @@ class AGU(
           dispatch_to_store(tlb_resp_buf)
         }.elsewhen(tlb_resp_buf.req_type === TLBReqType.LOAD) {
           dispatch_to_load(tlb_resp_buf)
+        }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.AMO) {
+          dispatch_to_amo(tlb_resp_buf)
         }.otherwise {
           assert(false.B, "sWaitFifo error, should not reach here")
         }

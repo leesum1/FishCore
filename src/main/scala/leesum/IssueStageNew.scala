@@ -436,12 +436,16 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
       trans_id: UInt
   ) = {
     when(scb.fu_type === FuType.Lsu && lsu_allow_dispatch) {
+      val is_amoop = FuOP.is_amo(scb.fu_op)
+      val amo_size = Mux(scb.is_rv32, DcacheConst.SIZE4, DcacheConst.SIZE8)
+
       lsu.valid := true.B
       lsu.bits.op_a := op_bundle.rs1_data
       lsu.bits.op_b := op_bundle.imm
-      lsu.bits.store_data := op_bundle.rs2_data
+      lsu.bits.store_data := op_bundle.rs2_data // store data or amo rs2
       lsu.bits.is_store := FuOP.is_store(scb.fu_op)
-      lsu.bits.size := FuOP.get_lsu_size(scb.fu_op)
+      lsu.bits.amo_op := AMOOP.FuOP2AMOOP(scb.fu_op)
+      lsu.bits.size := Mux(is_amoop, amo_size, FuOP.get_lsu_size(scb.fu_op))
       lsu.bits.sign_ext := FuOP.lsu_need_sign_ext(scb.fu_op)
       lsu.bits.trans_id := trans_id
     }

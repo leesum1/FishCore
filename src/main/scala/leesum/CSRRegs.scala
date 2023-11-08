@@ -342,7 +342,7 @@ class CSRRegs extends Module {
   val mtval = RegInit(0.U(64.W))
   val mscratch = RegInit(0.U(64.W))
   // TODO: make misa configurable
-  val misa = RegInit(Long2UInt64(0x8000000000101104L))
+  val misa = RegInit(Long2UInt64(0x8000000000101105L))
   val mimpid = RegInit(0.U(64.W))
   val mhartid = RegInit(0.U(64.W))
   val marchid = RegInit(0.U(64.W))

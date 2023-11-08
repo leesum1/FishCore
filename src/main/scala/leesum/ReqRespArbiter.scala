@@ -1,7 +1,16 @@
 package leesum
 import chisel3._
 import chisel3.util.{Decoupled, Enum, is, log2Ceil, switch}
-class ArbiterGeneral[T <: Data, U <: Data](
+
+/** This Module is a generic arbiter for request and response signals.The lowest
+  * index input has the highest priority.
+  * @param numInputs
+  * @param reqType
+  * @param respType
+  * @tparam T
+  * @tparam U
+  */
+class ReqRespArbiter[T <: Data, U <: Data](
     numInputs: Int,
     reqType: T,
     respType: U
@@ -53,6 +62,7 @@ class ArbiterGeneral[T <: Data, U <: Data](
     is(sIdle) {
       select_input()
     }
+
     is(sWaitResp) {
       io.resp_vec(sel_buf) <> io.resp_arb
       when(io.resp_arb.fire) {
@@ -63,5 +73,5 @@ class ArbiterGeneral[T <: Data, U <: Data](
 }
 
 object gen_DcacheArb_verilog extends App {
-  GenVerilogHelper(new ArbiterGeneral(4, new LoadDcacheReq, new LoadDcacheResp))
+  GenVerilogHelper(new ReqRespArbiter(4, new LoadDcacheReq, new LoadDcacheResp))
 }

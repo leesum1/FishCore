@@ -193,6 +193,7 @@ class CoreDutFull(
   rob.io.fu_branch_wb_port <> bru.io.out
   rob.io.fu_mul_div_wb_port <> mul_div.io.fu_div_mul_resp
   rob.io.fu_csr_wb_port <> csr.io.csr_resp
+  rob.io.fu_amo_wb_port <> lsu.io.amo_writeback
 
   // scoreboard <> commit stage
   rob.io.pop_ports <> commit_stage.io.rob_commit_ports
@@ -207,6 +208,7 @@ class CoreDutFull(
   // commit stage <> fu
   commit_stage.io.store_commit <> lsu.io.store_commit
   commit_stage.io.mmio_commit <> lsu.io.mmio_commit
+  commit_stage.io.amo_commit <> lsu.io.amo_commit
   commit_stage.io.csr_commit <> csr.io.csr_commit
 
   // commit stage <> pc gen
