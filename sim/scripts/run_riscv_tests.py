@@ -10,11 +10,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 tests_path = os.path.join("/opt/riscv-tests/share/riscv-tests/isa")
 Vtop_path = os.path.join("../build/linux/x86_64/release/Vtop")
 
-isa_patern = list("rv64u{}-p".format(i) for i in ['i', 'm', 'c'])
+isa_patern = list("rv64u{}-p".format(i) for i in ['i', 'm', 'a', 'c'])
 isa_patern.append("rv64mi-p")
 
 # 从 tests_path 找到所有以 isa_patern 中元素为开头的文件
-isa_patern = [glob.glob(os.path.join(tests_path, "{}*".format(i))) for i in isa_patern]
+isa_patern = [glob.glob(os.path.join(tests_path, "{}*".format(i)))
+              for i in isa_patern]
 
 # 将嵌套列表扁平化
 isa_patern = [item for sublist in isa_patern for item in sublist]
@@ -57,7 +58,8 @@ def execute_riscv_test(bin_name):
 # 使用 ThreadPoolExecutor 并行执行命令
 results = []
 with ThreadPoolExecutor() as executor:
-    futures = [executor.submit(execute_riscv_test, bin_file) for bin_file in all_tests]
+    futures = [executor.submit(execute_riscv_test, bin_file)
+               for bin_file in all_tests]
     for future in tqdm(as_completed(futures), total=len(all_tests), desc="Processing files"):
         result = future.result()
         results.append(result)

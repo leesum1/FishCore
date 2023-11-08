@@ -9,7 +9,6 @@
 #include <iostream>
 #include <ranges>
 
-
 constexpr auto MEM_BASE = 0x80000000L;
 constexpr auto MEM_SIZE = 0x8000000L;
 constexpr auto DEVICE_BASE = 0xa0000000L;
@@ -18,8 +17,6 @@ constexpr auto RTC_ADDR = DEVICE_BASE + 0x0000048L;
 constexpr auto VGACTL_ADDR = DEVICE_BASE + 0x0000100L;
 constexpr auto FB_ADDR = DEVICE_BASE + 0x1000000L;
 constexpr auto BOOT_PC = 0x80000000L;
-
-
 
 int main(int argc, char **argv) {
     std::string file_name;
@@ -47,7 +44,6 @@ int main(int argc, char **argv) {
 
     CLI11_PARSE(app, argc, argv)
 
-
     auto device_manager = SimDevices::DeviceMange();
     auto sim_base = SimBase();
     auto sim_mem = SimDevices::SynReadMemoryDev(MEM_BASE, MEM_SIZE);
@@ -60,7 +56,7 @@ int main(int argc, char **argv) {
     device_manager.add_device(&sim_am_rtc);
 
     if (vga_en) {
-        sim_am_vga.emplace( FB_ADDR,VGACTL_ADDR);
+        sim_am_vga.emplace(FB_ADDR, VGACTL_ADDR);
         sim_am_vga.value().init_screen("npc_v2_sdl");
         device_manager.add_device(&sim_am_vga.value());
     }
@@ -89,14 +85,16 @@ int main(int argc, char **argv) {
     uint64_t clk_num = 0;
     uint64_t commit_num = 0;
     uint8_t no_commit_num = 0;
-
+    uint64_t to_host_check_freq = 0;
 
     bool sim_abort = false;
     while (!sim_base.finished() && (clk_num < max_cycles)) {
         sim_base.step([&](auto top) -> bool {
-            no_commit_num +=1;
+            no_commit_num += 1;
             clk_num += 1;
-            if(no_commit_num>150){
+            to_host_check_freq +=1;
+            // stop run
+            if (no_commit_num > 150) {
                 return true;
             }
             // memory
@@ -160,9 +158,11 @@ int main(int argc, char **argv) {
                 }
                 return false;
             }
-
-            if ((clk_num % 1024) == 0) {
+            // for riscof and riscv-tests, use to_host to communicate with simulation
+            // environment
+            if (to_host_check_freq > 1024) {
                 bool to_host_ret = false;
+                to_host_check_freq = 0;
                 sim_mem.check_to_host([&]() { to_host_ret = true; });
                 if (to_host_ret) {
                     std::cout << std::format("to host at pc: 0x{:016x}\n",

@@ -104,10 +104,10 @@ namespace SimDevices {
 
 
         std::cout << "Loading elf file " << file_name << std::endl;
-//    // print symbols
-//    for (const auto &item: elf_symbol_map) {
-//        std::cout << std::format("symbol {} value: 0x{:x}\n", item.first, item.second);
-//    }
+//        // print symbols
+//        for (const auto &item: elf_symbol_map) {
+//            std::cout << std::format("symbol {} value: 0x{:x}\n", item.first, item.second);
+//        }
 
         return true;
     }
