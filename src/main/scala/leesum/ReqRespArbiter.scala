@@ -23,6 +23,8 @@ class ReqRespArbiter[T <: Data, U <: Data](
   )
 
   val io = IO(new Bundle {
+
+    val flush = Input(Bool())
     val req_vec = Vec(numInputs, Flipped(Decoupled(reqType)))
     val resp_vec = Vec(numInputs, Decoupled(respType))
 
@@ -31,7 +33,7 @@ class ReqRespArbiter[T <: Data, U <: Data](
   })
 
   val sel_buf = RegInit(0.U(log2Ceil(numInputs).W))
-  val sIdle :: sWaitResp :: Nil = Enum(2)
+  val sIdle :: sLock :: sWaitResp :: Nil = Enum(3)
 
   val state = RegInit(sIdle)
   val sel_idx = VecInit(io.req_vec.map(_.valid)).indexWhere(_ === true.B)
@@ -43,15 +45,16 @@ class ReqRespArbiter[T <: Data, U <: Data](
   io.resp_arb.nodeq()
 
   def select_input(): Unit = {
-    when(sel_idx_valid) {
+    when(sel_idx_valid && !io.flush) {
       assert(sel_idx < numInputs.U, "idx must less than %d".format(numInputs))
       assert(io.req_vec(sel_idx).valid, "in_req(idx) must be valid")
       io.req_arb <> io.req_vec(sel_idx)
+      sel_buf := sel_idx
+
       when(io.req_arb.fire) {
-        sel_buf := sel_idx
         state := sWaitResp
       }.otherwise {
-        state := sIdle
+        state := sLock
       }
     }.otherwise {
       state := sIdle
@@ -62,7 +65,17 @@ class ReqRespArbiter[T <: Data, U <: Data](
     is(sIdle) {
       select_input()
     }
-
+    is(sLock) {
+      when(!io.flush) {
+        assert(io.req_vec(sel_buf).valid, "in_req(idx) must be valid")
+        io.req_arb <> io.req_vec(sel_buf)
+        when(io.req_arb.fire) {
+          state := sWaitResp
+        }
+      }.otherwise {
+        state := sIdle
+      }
+    }
     is(sWaitResp) {
       io.resp_vec(sel_buf) <> io.resp_arb
       when(io.resp_arb.fire) {

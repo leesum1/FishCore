@@ -58,6 +58,8 @@ class LSU(
     new ReqRespArbiter(2, new StoreDcacheReq, new StoreDcacheResp)
   )
 
+  load_arb.io.flush := io.flush
+  store_arb.io.flush := io.flush
   load_arb.io.req_arb <> io.dcache_load_req
   load_arb.io.resp_arb <> io.dcache_load_resp
   store_arb.io.req_arb <> io.dcache_store_req

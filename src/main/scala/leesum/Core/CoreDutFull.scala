@@ -104,6 +104,7 @@ class CoreDutFull(
   axi_mem.io.axi_slave.b <> dcache.io.axi_mem.b
 
   // flush
+  axi_r_arb.io.flush := commit_stage.io.flush
   fetch_stage.io.flush := commit_stage.io.flush
   inst_fifo.io.flush := commit_stage.io.flush
   issue_stage_rob.io.flush := commit_stage.io.flush
