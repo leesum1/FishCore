@@ -18,6 +18,7 @@ class CoreDutFull(
   val DEVICE_BASE = 0xa0000000L
   val SERIAL_PORT = DEVICE_BASE + 0x00003f8L
   val RTC_ADDR = DEVICE_BASE + 0x0000048L
+  val KBD_ADDR = DEVICE_BASE + 0x0000060L
   val VGACTRL_ADDR = DEVICE_BASE + 0x0000100L
   val FB_ADDR = DEVICE_BASE + 0x1000000L
 
@@ -25,6 +26,7 @@ class CoreDutFull(
     (mem_addr, mem_addr + mem_size, false),
     (SERIAL_PORT, SERIAL_PORT + 0x8, true),
     (RTC_ADDR, RTC_ADDR + 0x8, true),
+    (KBD_ADDR, KBD_ADDR + 0x8, true),
     (VGACTRL_ADDR, VGACTRL_ADDR + 0x8, true),
     (FB_ADDR, FB_ADDR + 300 * 400 * 4, true)
   )

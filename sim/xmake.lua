@@ -16,9 +16,10 @@ add_requires("catch2",{system = false})
 add_requires("assert",{system = true})
 add_requires("elfio",{system = false})
 add_requires("libsdl",{system = false})
+add_requires("readerwriterqueue",{system = false})
 
--- set_policy("build.warning", true)
--- set_warnings("all", "extra")dd
+set_policy("build.warning", true)
+-- set_warnings("all", "extra")
 
 -- 设置 C++20 标准
 set_languages("cxx20")
@@ -31,9 +32,10 @@ target("Vtop")
     add_files("src/*.cpp")
     add_files("vsrc/*.sv")
     add_values("verilator.flags","--top","CoreDutFull")
-    add_values("verilator.flags","--trace-fst")
+--     add_values("verilator.flags","--trace-fst")
+--     add_values("verilator.flags","--threads","2")
     add_includedirs("src/include/")
-    add_packages("catch2","cli11","assert","elfio","libsdl")
+    add_packages("catch2","cli11","assert","elfio","libsdl","readerwriterqueue")
     add_links("rv64emu_cbinding")
 
 for _, file in ipairs(os.files("test/*.cpp")) do

@@ -14,7 +14,8 @@
 #include <Utils.h>
 #include <format>
 
-class SimBase {
+class SimBase
+{
     std::shared_ptr<Vtop> top;
     bool finish_flag = false;
 
@@ -31,7 +32,7 @@ public:
 
     void dump_wave();
 
-    void step(std::function<bool(std::shared_ptr<Vtop>)> func);
+    void step(const std::function<bool(std::shared_ptr<Vtop>)>& func);
 
     void reset();
 
@@ -42,11 +43,10 @@ public:
     uint64_t get_csr(int idx);
 
 
-    bool finished() {
+    bool finished()
+    {
         return finish_flag;
     }
 
     ~SimBase();
-
 };
-
