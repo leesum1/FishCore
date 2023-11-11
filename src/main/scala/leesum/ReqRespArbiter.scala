@@ -1,6 +1,9 @@
 package leesum
 import chisel3._
 import chisel3.util.{Decoupled, Enum, is, log2Ceil, switch}
+import chiseltest.ChiselScalatestTester
+import chiseltest.formal.{BoundedCheck, Formal, stable}
+import org.scalatest.flatspec.AnyFlatSpec
 
 /** This Module is a generic arbiter for request and response signals.The lowest
   * index input has the highest priority.
@@ -13,7 +16,8 @@ import chisel3.util.{Decoupled, Enum, is, log2Ceil, switch}
 class ReqRespArbiter[T <: Data, U <: Data](
     numInputs: Int,
     reqType: T,
-    respType: U
+    respType: U,
+    formal: Boolean = false
 ) extends Module {
 
   override def desiredName: String = "Arb_%d_%s_%s".format(
@@ -33,11 +37,17 @@ class ReqRespArbiter[T <: Data, U <: Data](
   })
 
   val sel_buf = RegInit(0.U(log2Ceil(numInputs).W))
-  val sIdle :: sLock :: sWaitResp :: Nil = Enum(3)
+  val sIdle :: sWaitResp :: Nil = Enum(2)
 
   val state = RegInit(sIdle)
   val sel_idx = VecInit(io.req_vec.map(_.valid)).indexWhere(_ === true.B)
   val sel_idx_valid = io.req_vec.map(_.valid).reduce(_ || _)
+
+  val lock_valid = RegInit(false.B)
+
+  when(io.req_arb.valid && !io.req_arb.ready) {
+    lock_valid := true.B
+  }
 
   io.req_vec.foreach(_.nodeq())
   io.resp_vec.foreach(_.noenq())
@@ -48,13 +58,19 @@ class ReqRespArbiter[T <: Data, U <: Data](
     when(sel_idx_valid && !io.flush) {
       assert(sel_idx < numInputs.U, "idx must less than %d".format(numInputs))
       assert(io.req_vec(sel_idx).valid, "in_req(idx) must be valid")
-      io.req_arb <> io.req_vec(sel_idx)
-      sel_buf := sel_idx
+
+      val idx = Mux(lock_valid, sel_buf, sel_idx)
+
+      io.req_arb <> io.req_vec(idx)
+
+      when(!lock_valid) {
+        sel_buf := sel_idx
+      }
 
       when(io.req_arb.fire) {
         state := sWaitResp
       }.otherwise {
-        state := sLock
+        state := sIdle
       }
     }.otherwise {
       state := sIdle
@@ -65,23 +81,57 @@ class ReqRespArbiter[T <: Data, U <: Data](
     is(sIdle) {
       select_input()
     }
-    is(sLock) {
-      when(!io.flush) {
-        assert(io.req_vec(sel_buf).valid, "in_req(idx) must be valid")
-        io.req_arb <> io.req_vec(sel_buf)
-        when(io.req_arb.fire) {
-          state := sWaitResp
-        }
-      }.otherwise {
-        state := sIdle
-      }
-    }
     is(sWaitResp) {
       io.resp_vec(sel_buf) <> io.resp_arb
       when(io.resp_arb.fire) {
         select_input()
       }
     }
+  }
+
+  // --------------------------
+  // formal
+  // --------------------------
+  if (formal) {
+    when(io.flush) {
+      for (i <- 0 until numInputs) {
+        assume(io.req_vec(i).valid === false.B)
+        assert(io.resp_vec(i).valid === false.B)
+      }
+      assert(io.req_arb.valid === false.B)
+      assume(io.resp_arb.valid === false.B)
+    }
+
+    for (i <- 0 until numInputs) {
+      when(FormalUtils.StreamShouldStable(io.req_vec(i))) {
+        assume(io.req_vec(i).valid)
+        assume(stable(io.req_vec(i).bits))
+      }
+      when(FormalUtils.StreamShouldStable(io.resp_vec(i))) {
+        assert(io.resp_vec(i).valid)
+        assert(stable(io.resp_vec(i).bits))
+      }
+    }
+    when(FormalUtils.StreamShouldStable(io.req_arb)) {
+      assert(io.req_arb.valid)
+      assert(stable(io.req_arb.bits))
+    }
+    when(FormalUtils.StreamShouldStable(io.resp_arb)) {
+      assume(io.resp_arb.valid)
+      assume(stable(io.resp_arb.bits))
+    }
+  }
+}
+
+class ReqRespArbFormal
+    extends AnyFlatSpec
+    with ChiselScalatestTester
+    with Formal {
+  "ReqRespArb" should "pass with assumption" in {
+    verify(
+      new ReqRespArbiter(2, UInt(32.W), UInt(32.W), formal = true),
+      Seq(BoundedCheck(50))
+    )
   }
 }
 

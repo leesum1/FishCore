@@ -10,16 +10,29 @@ class IssueFIFO extends Module {
     val flush = Input(Bool())
   })
 
-  val issue_fifo = Module(new MultiportFIFO(new ScoreBoardEntry, 8, 2, 2))
+  val issue_fifo = new MultiPortValidFIFO(
+    new ScoreBoardEntry,
+    8,
+    "issue_fifo",
+    2,
+    2
+  )
 
-  io.push.ready := issue_fifo.io.free_entries >= 2.U
-  issue_fifo.io.push_valid := VecInit(Seq.fill(2)(io.push.fire))
-  issue_fifo.io.push_data := io.push.bits
+  issue_fifo.push_pop_flush_cond_multi_port(
+    push_cond = VecInit(Seq.fill(2)(io.push.fire)),
+    pop_cond = io.pop_valid,
+    entry = io.push.bits,
+    flush_cond = io.flush
+  )
+  io.push.ready := issue_fifo.free_entries >= 2.U
 
-  io.pop_data := issue_fifo.io.pop_data
-  issue_fifo.io.pop_valid := io.pop_valid
-  io.occupied_entries := issue_fifo.io.occupied_entries
-  issue_fifo.io.flush := io.flush
+  val pop_peek = issue_fifo.peek()
+
+  for (i <- 0 until 2) {
+    io.pop_data(i) := pop_peek(i).bits
+  }
+
+  io.occupied_entries := issue_fifo.occupied_entries
 }
 
 object gen_IssueFIFO_verilog extends App {

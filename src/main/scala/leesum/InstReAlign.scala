@@ -32,37 +32,27 @@ class RspPacket extends Bundle {
 
 }
 
-class InstsItem extends Bundle {
-  val insts_vec = Output(Vec(4, new INSTEntry))
-
-  def insts(idx: UInt): UInt = {
-    insts_vec(idx).inst
-  }
-
-  def clear(): Unit = {
-    for (i <- 0 until 4) {
-      val tmp = Wire(new INSTEntry)
-      tmp.clear()
-      insts_vec(i) := tmp
-    }
-  }
-}
-
 /** This module convert a RspPacket(8 byte size) to InstsItem. The InstsItem may
   * contain 1 to 4 insts, and the insts may be 16 bits or 32 bits. This module
   * is combination logic,Return the InstsItem at the same cycle when input fire.
   */
 class InstReAlign(rvc_en: Boolean = false) extends Module {
-  val input = IO(Flipped(Decoupled(new RspPacket)))
-  val output = IO(
-    Decoupled(new InstsItem)
-  )
-  val flush = IO(Input(Bool()))
+
+  val io = IO(new Bundle {
+    val input = Flipped(Decoupled(new RspPacket))
+    val output = Decoupled(Vec(4, new INSTEntry))
+    val flush = Input(Bool())
+  })
+
+  io.input.ready := io.output.ready
+  io.output.valid := io.input.valid
+
+  val unaligned_insts = io.input
 
   val last_half_inst = RegInit(0.U(16.W));
   val last_half_valid = RegInit(false.B)
 
-  val aligned_pc = Cat(input.bits.pc(63, 3), 0.U(3.W))
+  val aligned_pc = Cat(unaligned_insts.bits.pc(63, 3), 0.U(3.W))
 
   def inst_mask(pc: UInt): Vec[Bool] = {
     val ret = MuxLookup(
@@ -79,7 +69,7 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
     ret
   }
 
-  val inst_mask_vec = inst_mask(input.bits.pc)
+  val inst_mask_vec = inst_mask(unaligned_insts.bits.pc)
 
   def is_occupied(idx: Int): Bool = {
     val ret = idx match {
@@ -88,22 +78,22 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
         val pre_inst_is_32bits =
           (!is_occupied(idx - 1)) & (!RISCVPkg.is_rvc(
             Cat(
-              input.bits.inst_packet(idx)(15, 0),
+              unaligned_insts.bits.inst_packet(idx)(15, 0),
               last_half_inst
             )
           ));
         val current_is_rvc = (is_occupied(idx - 1)) & RISCVPkg.is_rvc(
-          input.bits.inst_packet(idx)
+          unaligned_insts.bits.inst_packet(idx)
         );
 
         pre_inst_is_32bits || current_is_rvc || !inst_mask_vec(idx)
       case _ =>
         val pre_inst_is_32bits =
           (!is_occupied(idx - 1)) & (!RISCVPkg.is_rvc(
-            input.bits.inst_packet(idx - 1)
+            unaligned_insts.bits.inst_packet(idx - 1)
           ))
         val current_is_rvc = is_occupied(idx - 1) & RISCVPkg.is_rvc(
-          input.bits.inst_packet(idx)
+          unaligned_insts.bits.inst_packet(idx)
         )
 
         pre_inst_is_32bits || current_is_rvc || !inst_mask_vec(idx)
@@ -118,8 +108,8 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
   }
 
   // buffer last half inst
-  when(input.fire) {
-    last_half_inst := input.bits.inst_packet(3)
+  when(unaligned_insts.fire) {
+    last_half_inst := unaligned_insts.bits.inst_packet(3)
     when(is_occupied(3)) {
       last_half_valid := false.B
     }.otherwise {
@@ -127,7 +117,7 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
     }
   }
 
-  when(flush) {
+  when(io.flush) {
     last_half_valid := false.B
   }
 
@@ -169,47 +159,32 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
     aligned_inst
   }
 
-  output.bits.insts_vec(0) := realign_inst(
-    aligned_pc,
-    last_half_inst,
-    input.bits.inst_packet(0),
-    is_occupied(-1),
-    is_occupied(0)
-  )
+  def get_inst_pak(idx: Int): UInt = {
+    val inst_pak = idx match {
+      case -1 => last_half_inst
+      case _  => unaligned_insts.bits.inst_packet(idx)
+    }
+    inst_pak
+  }
 
-  output.bits.insts_vec(1) := realign_inst(
-    aligned_pc + 2.U,
-    input.bits.inst_packet(0),
-    input.bits.inst_packet(1),
-    is_occupied(0),
-    is_occupied(1)
-  )
+  val realign_insts = Wire(Vec(4, new INSTEntry))
 
-  output.bits.insts_vec(2) := realign_inst(
-    aligned_pc + 4.U,
-    input.bits.inst_packet(1),
-    input.bits.inst_packet(2),
-    is_occupied(1),
-    is_occupied(2)
-  )
+  for (i <- 0 until 4) {
+    realign_insts(i) := realign_inst(
+      aligned_pc + i.U * 2.U,
+      get_inst_pak(i - 1),
+      get_inst_pak(i),
+      is_occupied(i - 1),
+      is_occupied(i)
+    )
 
-  output.bits.insts_vec(3) := realign_inst(
-    aligned_pc + 6.U,
-    input.bits.inst_packet(2),
-    input.bits.inst_packet(3),
-    is_occupied(2),
-    is_occupied(3)
-  )
-
-  // override invalid insts
-  output.bits.insts_vec.zip(inst_mask_vec).foreach { case (inst, mask) =>
-    when(!mask) {
-      inst.valid := false.B
+    // override invalid insts
+    when(!inst_mask_vec(i)) {
+      realign_insts(i).valid := false.B
     }
   }
 
-  input.ready := output.ready
-  output.valid := input.valid
+  io.output.bits := realign_insts
 }
 
 object gen_verilog extends App {

@@ -29,6 +29,13 @@ class GPRsWritePort extends Bundle {
   }
 }
 
+class RegFileReadPort extends Bundle {
+  val rs1_addr = Output(UInt(5.W))
+  val rs2_addr = Output(UInt(5.W))
+  val rs1_data = Input(UInt(64.W))
+  val rs2_data = Input(UInt(64.W))
+}
+
 class GPRs(read_port_num: Int, write_port_num: Int, monitor_en: Boolean = false)
     extends Module {
   val io = IO(new Bundle {

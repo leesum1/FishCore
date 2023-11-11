@@ -116,7 +116,7 @@ class CoreDutFull(
   lsu_tlb.io.flush := commit_stage.io.flush
   dcache.io.flush := commit_stage.io.flush
   icache.io.flush := commit_stage.io.flush
-  inst_realign.flush := commit_stage.io.flush
+  inst_realign.io.flush := commit_stage.io.flush
   bru.io.flush := commit_stage.io.flush
   mul_div.io.flush := commit_stage.io.flush
   csr.io.flush := commit_stage.io.flush
@@ -125,10 +125,10 @@ class CoreDutFull(
   pc_gen_stage.io.pc <> fetch_stage.io.pc_in
 
   // fetch_stage <> inst_realign
-  inst_realign.input.valid := fetch_stage.io.fetch_resp.valid
-  fetch_stage.io.fetch_resp.ready := inst_realign.input.ready
-  inst_realign.input.bits.pc := fetch_stage.io.fetch_resp.bits.pc
-  inst_realign.input.bits.payload := fetch_stage.io.fetch_resp.bits.data
+  inst_realign.unaligned_insts.valid := fetch_stage.io.fetch_resp.valid
+  fetch_stage.io.fetch_resp.ready := inst_realign.unaligned_insts.ready
+  inst_realign.unaligned_insts.bits.pc := fetch_stage.io.fetch_resp.bits.pc
+  inst_realign.unaligned_insts.bits.payload := fetch_stage.io.fetch_resp.bits.data
 
   // fetch_stage <> tlb_arb
   fetch_tlb.io.tlb_req <> fetch_stage.io.tlb_req
@@ -139,7 +139,7 @@ class CoreDutFull(
   fetch_stage.io.icache_resp <> icache.io.load_resp
 
   // inst_realign <> inst_fifo
-  inst_fifo.io.push <> inst_realign.output
+  inst_fifo.io.push <> inst_realign.io.output
 
   // inst_fifo <> decode stage
 
