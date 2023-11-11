@@ -102,7 +102,8 @@ int main(int argc, char** argv)
     uint64_t to_host_check_freq = 0;
 
     bool sim_abort = false;
-    while (!sim_base.finished() && (clk_num < max_cycles))
+    auto start_time = std::chrono::utc_clock::now();
+    while (!sim_base.finished() && clk_num < max_cycles)
     {
         sim_base.step([&](auto top) -> bool
         {
@@ -158,7 +159,7 @@ int main(int argc, char** argv)
                         MY_ASSERT(top->io_difftest_bits_exception_valid == 0,
                                   "mmio and exception at the same time");
                         diff_ref->ref_skip(
-                            [&](size_t idx) { return sim_base.get_reg(idx); },
+                            [&](const size_t idx) { return sim_base.get_reg(idx); },
                             sim_base.get_pc() + 4);
                     }
                     else
@@ -166,12 +167,12 @@ int main(int argc, char** argv)
                         diff_ref->step(step_num);
                         const bool pc_mismatch = diff_ref->check_pc(diff_ref->get_pc(),
                                                                     sim_base.get_pc(), debug_en);
-                        bool gpr_mismatch = diff_ref->check_gprs(
-                            [&](size_t idx) { return sim_base.get_reg(idx); },
-                            [&](size_t idx) { return diff_ref->get_reg(idx); }, debug_en);
-                        bool csr_mismatch = diff_ref->check_csrs(
-                            [&](size_t idx) { return sim_base.get_csr(idx); }, debug_en);
-                        bool mismatch = pc_mismatch | gpr_mismatch | csr_mismatch;
+                        const bool gpr_mismatch = diff_ref->check_gprs(
+                            [&](const size_t idx) { return sim_base.get_reg(idx); },
+                            [&](const size_t idx) { return diff_ref->get_reg(idx); }, debug_en);
+                        const bool csr_mismatch = diff_ref->check_csrs(
+                            [&](const size_t idx) { return sim_base.get_csr(idx); }, debug_en);
+                        const bool mismatch = pc_mismatch | gpr_mismatch | csr_mismatch;
 
                         if (mismatch)
                         {
@@ -191,7 +192,7 @@ int main(int argc, char** argv)
             {
                 bool to_host_ret = false;
                 to_host_check_freq = 0;
-                sim_mem.check_to_host([&]() { to_host_ret = true; });
+                sim_mem.check_to_host([&] { to_host_ret = true; });
                 if (to_host_ret)
                 {
                     std::cout << std::format("to host at pc: 0x{:016x}\n",
@@ -204,13 +205,19 @@ int main(int argc, char** argv)
         });
     }
 
+    auto time_end = std::chrono::utc_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(time_end - start_time);
+
+
     if (dump_signature_file.has_value())
     {
         sim_mem.dump_signature(dump_signature_file.value());
     }
 
-    std::cout << std::format("clk_num: {}, commit_num: {}, IPC: {}\n", clk_num,
-                             commit_num, static_cast<double_t>(commit_num) / clk_num);
+
+    std::cout << std::format("clk_num: {}, commit_num: {}, IPC: {}, SimSpeed: {} insts/seconds \n", clk_num,
+                             commit_num, static_cast<double_t>(commit_num) / static_cast<double_t>(clk_num),
+                             commit_num / duration.count());
 
     bool success = !am_en || sim_base.get_reg(10) == 0;
 

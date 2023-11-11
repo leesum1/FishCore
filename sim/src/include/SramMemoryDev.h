@@ -6,31 +6,29 @@
 #include <string>
 #include <unordered_map>
 
-namespace SimDevices {
-
-    class SynReadMemoryDev : public DeviceBase {
-    private:
+namespace SimDevices
+{
+    class SynReadMemoryDev final : public DeviceBase
+    {
         std::vector<uint8_t> mem;
         std::unordered_map<std::string, uint64_t> elf_symbol_map;
         uint64_t mem_addr;
         uint64_t mem_size;
-        
-    private:
-        bool load_elf(const char *file_name);
 
-        void collect_elf_symbols(ELFIO::elfio &reader);
+        bool load_elf(const char* file_name);
 
-        void load_elf_to_mem(ELFIO::elfio &reader);
+        void collect_elf_symbols(ELFIO::elfio& reader);
 
+        void load_elf_to_mem(ELFIO::elfio& reader);
 
     public:
         explicit SynReadMemoryDev(uint64_t base_addr, uint32_t mem_size);
 
-        void load_file(const char *file_name);
+        void load_file(const char* file_name);
 
         void dump_signature(std::string_view signature_file_name);
 
-        void check_to_host(const std::function<void(void)> &exit_callback);
+        void check_to_host(const std::function<void()>& exit_callback);
 
         uint64_t read(uint64_t addr);
 
@@ -47,7 +45,6 @@ namespace SimDevices {
 
         ~SynReadMemoryDev() override = default;
     };
-
 }
 
 

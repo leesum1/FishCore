@@ -3,18 +3,20 @@
 #include "CSREncode.h"
 #include <memory>
 #include <iostream>
-
+#include "Utils.h"
 
 SimBase::SimBase()
 {
     top = std::make_shared<Vtop>();
 }
 
-void SimBase::dump_wave()
+void SimBase::dump_wave() const
 {
 #if VM_TRACE_FST == 1
-    if (wave_trace_flag) {
-        if (tfp->isOpen()) {
+    if (wave_trace_flag)
+    {
+        if (tfp->isOpen())
+        {
             tfp->dump(top->contextp()->time());
         }
     }
@@ -22,7 +24,7 @@ void SimBase::dump_wave()
     top->contextp()->timeInc(1);
 }
 
-void SimBase::enable_wave_trace(std::string file_name)
+void SimBase::enable_wave_trace(const std::string& file_name)
 {
 #if VM_TRACE_FST == 1
     wave_trace_flag = true;
@@ -36,9 +38,11 @@ void SimBase::enable_wave_trace(std::string file_name)
 SimBase::~SimBase()
 {
 #if VM_TRACE_FST == 1
-    if (wave_trace_flag) {
+    if (wave_trace_flag)
+    {
         std::cout << "close wave trace file" << std::endl;
-        if (tfp->isOpen()) {
+        if (tfp->isOpen())
+        {
             tfp->flush();
             tfp->close();
             delete tfp;
@@ -47,7 +51,7 @@ SimBase::~SimBase()
 #endif
 }
 
-void SimBase::reset()
+void SimBase::reset() const
 {
     top->reset = 1;
 
@@ -59,12 +63,12 @@ void SimBase::reset()
     top->reset = 0;
 }
 
-uint64_t SimBase::get_pc()
+uint64_t SimBase::get_pc() const
 {
     return top->io_difftest_bits_pc;
 }
 
-uint64_t SimBase::get_reg(int idx)
+uint64_t SimBase::get_reg(const int idx)
 {
 #define GET_REG(top, idx) (top->io_difftest_bits_gpr_##idx)
 
@@ -141,11 +145,11 @@ uint64_t SimBase::get_reg(int idx)
 }
 
 
-uint64_t SimBase::get_csr(int addr)
+uint64_t SimBase::get_csr(int idx)
 {
-    MY_ASSERT(addr < 4096, "csr index out of range");
+    MY_ASSERT(idx < 4096, "csr index out of range");
 #define GET_CSR(top, name) (top->io_difftest_bits_csr_##name)
-    switch (addr)
+    switch (idx)
     {
     case MSTATUS:
         return GET_CSR(top, mstatus);

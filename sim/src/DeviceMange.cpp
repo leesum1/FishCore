@@ -8,10 +8,9 @@ namespace SimDevices
     void DeviceMange::add_device(DeviceBase* device)
     {
         bool conflict = false;
-        auto addr_info = device->get_addr_info();
-        for (auto info : addr_info)
+        for (const auto addr_info = device->get_addr_info(); const auto& info : addr_info)
         {
-            if (is_conflit(info.start, info.end))
+            if (is_conflict(info.start, info.end))
             {
                 conflict = true;
                 break;
@@ -25,17 +24,17 @@ namespace SimDevices
 
     void DeviceMange::update_inputs(
         uint64_t read_addr,
-        bool read_en,
+        const bool read_en,
         WriteReq write_req,
-        bool write_en
+        const bool write_en
     )
     {
-        auto rdevice = std::ranges::find_if(device_pool, [&read_addr](auto item)
+        const auto rdevice = std::ranges::find_if(device_pool, [&read_addr](auto item)
         {
             return item->in_range(read_addr);
         });
 
-        auto wdevice = std::ranges::find_if(device_pool, [&write_req](auto item)
+        const auto wdevice = std::ranges::find_if(device_pool, [&write_req](auto item)
         {
             return item->in_range(write_req.waddr);
         });
@@ -67,10 +66,10 @@ namespace SimDevices
         }
     }
 
-    uint64_t DeviceMange::update_outputs()
+    uint64_t DeviceMange::update_outputs() const
     {
         static uint64_t last_read = 0;
-        for (auto device : device_pool)
+        for (const auto device : device_pool)
         {
             if (!device->read_req_seq.empty())
             {
@@ -85,13 +84,12 @@ namespace SimDevices
     }
 
 
-    void DeviceMange::print_device_info()
+    void DeviceMange::print_device_info() const
     {
         std::cout << "Device Info:\n";
-        for (auto device : device_pool)
+        for (const auto device : device_pool)
         {
-            auto addr_info = device->get_addr_info();
-            for (auto [start, end, name] : addr_info)
+            for (auto addr_info = device->get_addr_info(); auto& [start, end, name] : addr_info)
             {
                 std::cout << std::format("device: {:<15} {:#010X} ----> {:#010X}\n",
                                          name,
@@ -102,9 +100,9 @@ namespace SimDevices
         std::cout << "---------------------------------------------\n";
     }
 
-    bool DeviceMange::is_conflit(uint64_t start, uint64_t end)
+    bool DeviceMange::is_conflict(const uint64_t start, const uint64_t end) const
     {
-        for (auto device : device_pool)
+        for (const auto device : device_pool)
         {
             for (auto addr_info = device->get_addr_info(); const auto& info : addr_info)
             {

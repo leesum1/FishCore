@@ -8,7 +8,7 @@ end
 if is_mode("debug") then
     set_symbols("debug")
     set_optimize("none")
-    set_policy("build.sanitizer.address", true)
+--     set_policy("build.sanitizer.address", true)
 end
 
 add_requires("cli11",{system = false})
@@ -32,7 +32,7 @@ target("Vtop")
     add_files("src/*.cpp")
     add_files("vsrc/*.sv")
     add_values("verilator.flags","--top","CoreDutFull")
---     add_values("verilator.flags","--trace-fst")
+    add_values("verilator.flags","--trace-fst")
 --     add_values("verilator.flags","--threads","2")
     add_includedirs("src/include/")
     add_packages("catch2","cli11","assert","elfio","libsdl","readerwriterqueue")

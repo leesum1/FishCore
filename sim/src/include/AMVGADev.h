@@ -3,19 +3,17 @@
 #include "DeviceBase.h"
 #include "SDL_stdinc.h"
 #include <SDL2/SDL.h>
-#include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <string_view>
-#include <sys/types.h>
 
-namespace SimDevices {
-
-    class AMVGADev : public DeviceBase {
-        SDL_Window *window = nullptr;
-        SDL_Renderer *renderer = nullptr;
-        SDL_Texture *texture = nullptr;
-        uint8_t *fbbuff = nullptr;
+namespace SimDevices
+{
+    class AMVGADev final : public DeviceBase
+    {
+        SDL_Window* window = nullptr;
+        SDL_Renderer* renderer = nullptr;
+        SDL_Texture* texture = nullptr;
+        uint8_t* fbbuff = nullptr;
         uint64_t vga_ctrl_reg = 0;
 
         uint64_t fb_addr_start = 0;
@@ -23,11 +21,12 @@ namespace SimDevices {
         uint64_t ctrl_addr_start = 0;
         uint64_t ctrl_addr_lenth = 8;
 
-        constexpr uint64_t get_witdh() { return 400; }
+        static constexpr uint64_t get_witdh() { return 400; }
 
-        constexpr uint64_t get_height() { return 300; }
+        static constexpr uint64_t get_height() { return 300; }
 
-        constexpr uint64_t get_fb_size() {
+        static constexpr uint64_t get_fb_size()
+        {
             return get_witdh() * get_height() * sizeof(uint32_t);
         }
 
@@ -39,7 +38,6 @@ namespace SimDevices {
         void write(uint64_t addr, uint64_t wdata, uint8_t wstrb);
 
     public:
-
         void init_screen(std::string_view name);
 
         AMVGADev(uint64_t fb_addr_start, uint64_t ctrl_addr_start);
