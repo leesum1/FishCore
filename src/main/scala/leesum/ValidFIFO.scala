@@ -2,6 +2,9 @@ package leesum
 
 import chisel3._
 import chisel3.util.{Decoupled, Valid, isPow2, log2Ceil}
+import chiseltest.ChiselScalatestTester
+import chiseltest.formal.{BoundedCheck, CVC4EngineAnnotation, Formal}
+import org.scalatest.flatspec.AnyFlatSpec
 
 /** This is a FIFO, which use Mem as storage. And each element in the FIFO has a
   * valid bit. The FIFO has a push port and a pop port, and can read randomly
@@ -631,7 +634,8 @@ class DummyMultiPortValidFIFO[T <: Data](
     gen: T,
     size: Int,
     num_push_ports: Int,
-    num_pop_ports: Int
+    num_pop_ports: Int,
+    formal: Boolean = false
 ) extends Module {
   val io = IO(new Bundle {
     val in = Vec(num_push_ports, Flipped(Decoupled(gen)))
@@ -665,6 +669,55 @@ class DummyMultiPortValidFIFO[T <: Data](
     .foreach({ i =>
       io.in(i).ready := fifo.free_entries > i.U
     })
+
+  // --------------------------
+  // formal
+  // -------------------------
+  if (formal) {
+    val f_push_valid_order = CheckOrder(VecInit(io.in.map(_.valid)))
+    val f_push_ready_order = CheckOrder(VecInit(io.in.map(_.ready)))
+    val f_pop_valid_order = CheckOrder(VecInit(io.out.map(_.valid)))
+    val f_pop_ready_order = CheckOrder(VecInit(io.out.map(_.ready)))
+    val f_push_fire_order = CheckOrder(VecInit(io.in.map(_.fire)))
+    val f_pop_fire_order = CheckOrder(VecInit(io.out.map(_.fire)))
+
+    assume(f_push_valid_order)
+    assert(f_push_ready_order)
+    assert(f_pop_valid_order)
+    assume(f_pop_ready_order)
+    assert(f_push_fire_order)
+    assert(f_pop_fire_order)
+
+    when(RegNext(io.flush)) {
+      assert(fifo.num_counter === 0.U)
+      assert(fifo.free_entries === size.U)
+      for (i <- 0 until fifo.push_ptr_seq.length) {
+        assert(fifo.push_ptr_seq(i) === i.U)
+        assert(fifo.pop_ptr_seq(i) === i.U)
+      }
+      fifo.content.foreach({ v =>
+        assert(!v.valid)
+      })
+    }
+
+    when(fifo.full) {
+      assert(fifo.num_counter === size.U)
+      assert(fifo.free_entries === 0.U)
+    }
+
+  }
+}
+
+class ValidFIFOFormal
+    extends AnyFlatSpec
+    with ChiselScalatestTester
+    with Formal {
+  "DummyMultiPortValidFIFO" should "pass with assumption" in {
+    verify(
+      new DummyMultiPortValidFIFO(UInt(32.W), 16, 4, 4, formal = true),
+      Seq(BoundedCheck(5))
+    )
+  }
 }
 
 object gen_valid_fifo_verilog extends App {

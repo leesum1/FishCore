@@ -135,7 +135,6 @@ class MstatusFiled(data: UInt) {
     new_cause
   }
 
-  // TODO: need implement
   def get_mret_mstatus(clear_mprv: Bool) = {
     val new_mstatus = Cat(
       data(63, 18),
@@ -170,6 +169,7 @@ class MtvecFiled(data: UInt) {
     when(mode === 0.U) {
       pc := base
     }.otherwise {
+      // TODO: dn not use shift
       pc := base + (cause << 2.U)
     }
     pc
@@ -200,6 +200,18 @@ class MipFiled(data: UInt) {
   def mtip: Bool = data(7)
   def seip: Bool = data(9)
   def meip: Bool = data(11)
+}
+
+class SatpFiled(data: UInt) {
+  require(data.getWidth == 64)
+  def mode: UInt = data(63, 60)
+  def asid: UInt = data(59, 44)
+  def ppn: UInt = data(43, 0)
+
+  def mode_is_sv39: Bool = mode === 8.U
+  def mode_is_bare: Bool = mode === 0.U
+
+  def mode_is_unsupported: Bool = !mode_is_sv39 && !mode_is_bare
 }
 
 class MidelegFiled(data: UInt) extends MipFiled(data)
@@ -329,6 +341,18 @@ class CSRRegs extends Module {
   println("mstatus_wmask: " + mstatus_wmask.getRawValue.toHexString)
 
   // -----------------
+  // misa register
+  // -----------------
+  val misa_val = new CSRBitField(0)
+  misa_val.setField(MIsaMask.I, 1)
+  misa_val.setField(MIsaMask.M, 1)
+  misa_val.setField(MIsaMask.A, 1)
+  misa_val.setField(MIsaMask.C, 1)
+  misa_val.setField(MIsaMask.M, 1)
+  misa_val.setField(MIsaMask.U, 1)
+  misa_val.setField(MIsaMask.MXL, 2) // xlen = 64
+
+  // -----------------
   // csr register
   // -----------------
 
@@ -342,7 +366,7 @@ class CSRRegs extends Module {
   val mtval = RegInit(0.U(64.W))
   val mscratch = RegInit(0.U(64.W))
   // TODO: make misa configurable
-  val misa = RegInit(Long2UInt64(0x8000000000101105L))
+  val misa = RegInit(Long2UInt64(misa_val.getRawValue))
   val mimpid = RegInit(0.U(64.W))
   val mhartid = RegInit(0.U(64.W))
   val marchid = RegInit(0.U(64.W))

@@ -238,6 +238,36 @@ class CSRBitField(private var value: Long) {
   def getRawValue = value
 }
 
+object MIsaMask {
+  final val A = 0x00000001L
+  final val B = 0x00000002L
+  final val C = 0x00000004L
+  final val D = 0x00000008L
+  final val E = 0x00000010L
+  final val F = 0x00000020L
+  final val G = 0x00000040L
+  final val H = 0x00000080L
+  final val I = 0x00000100L
+  final val J = 0x00000200L
+  final val K = 0x00000400L
+  final val L = 0x00000800L
+  final val M = 0x00001000L
+  final val N = 0x00002000L
+  final val O = 0x00004000L
+  final val P = 0x00008000L
+  final val Q = 0x00010000L
+  final val R = 0x00020000L
+  final val S = 0x00040000L
+  final val T = 0x00080000L
+  final val U = 0x00100000L
+  final val V = 0x00200000L
+  final val W = 0x00400000L
+  final val X = 0x00800000L
+  final val Y = 0x01000000L
+  final val Z = 0x02000000L
+  final val MXL = 0xc0000000_00000000L
+}
+
 object MStatusMask {
   final val UIE = 0x00000001L
   final val SIE = 0x00000002L
