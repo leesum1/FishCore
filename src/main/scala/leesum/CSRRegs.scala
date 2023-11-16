@@ -92,6 +92,7 @@ class CSRDirectReadPorts extends Bundle {
   val mtvec = UInt(64.W)
   val mepc = UInt(64.W)
   val mtval = UInt(64.W)
+  val satp = UInt(64.W)
 }
 
 class MstatusFiled(data: UInt) {
@@ -495,6 +496,7 @@ class CSRRegs extends Module {
   io.direct_read_ports.mtvec := mtvec
   io.direct_read_ports.mepc := mepc
   io.direct_read_ports.mtval := mtval
+  io.direct_read_ports.satp := satp
 
   when(io.direct_write_ports.mepc.valid) {
     mepc := io.direct_write_ports.mepc.bits

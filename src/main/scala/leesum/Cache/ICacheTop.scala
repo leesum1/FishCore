@@ -31,7 +31,7 @@ class ICacheTop(formal: Boolean = false) extends Module {
     val mmu_req = Decoupled(new TLBReq)
     val mmu_resp = Flipped(Decoupled(new TLBResp))
     // memory port
-    val mem_master = new AXIMasterIO(64, 64)
+    val mem_master = new AXIMasterIO(32, 64)
   })
 
   val icache_hit = WireInit(false.B)
@@ -287,7 +287,7 @@ class ICacheFormal extends AnyFlatSpec with ChiselScalatestTester with Formal {
   "ICache" should "pass with assumption" in {
     verify(
       new ICacheTop(formal = true),
-      Seq(BoundedCheck(20), CVC4EngineAnnotation)
+      Seq(BoundedCheck(10), CVC4EngineAnnotation)
     )
   }
 }

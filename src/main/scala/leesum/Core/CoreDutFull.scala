@@ -1,9 +1,11 @@
 package leesum.Core
 import chisel3._
 import chisel3.util.{Valid, log2Ceil}
+import leesum.Cache.ICacheTop
 import leesum.axi4.{AXI4SlaveBridge, AxiReadArbiter, BasicMemoryIO}
 import leesum.moniter.{DifftestPort, MonitorTop}
 import leesum._
+import leesum.fronten.IFUTop
 class CoreDutFull(
     random_latency: Boolean = false,
     muldiv_en: Boolean = true,
@@ -42,9 +44,8 @@ class CoreDutFull(
 
   // pipeline stage
   val pc_gen_stage = Module(new PCGenStage(boot_pc, rvc_en))
-  val fetch_stage = Module(new FetchStage)
-  val inst_realign = Module(new InstReAlign(rvc_en))
-  val inst_fifo = Module(new InstsFIFO)
+  val ifu = Module(new IFUTop(rvc_en))
+  val mmmu = Module(new MMU())
 
   val decode_stage = Seq.tabulate(2)(i => Module(new InstDecoder))
 
@@ -55,9 +56,6 @@ class CoreDutFull(
   val reg_file = Module(new GPRs(2, 2, monitor_en))
   val csr_regs = Module(new CSRRegs)
 
-  val fetch_tlb = Module(new DummyTLB(random_latency))
-  val lsu_tlb = Module(new DummyTLB(random_latency))
-
   // fu
   val alu_seq = Seq.fill(2)(Module(new FuAlu))
   val lsu = Module(new LSU(addr_map))
@@ -66,7 +64,8 @@ class CoreDutFull(
   val csr = Module(new FuCSR)
 
   val dcache = Module(new DummyDCache)
-  val icache = Module(new DummyICache)
+  val icache_top = Module(new ICacheTop)
+
   val axi_r_arb = Module(new AxiReadArbiter)
   val axi_mem = Module(
     new AXI4SlaveBridge(
@@ -90,11 +89,11 @@ class CoreDutFull(
   axi_r_arb.io.out.w.nodeq()
   axi_r_arb.io.out.b.noenq()
 
-  icache.io.axi_mem.ar <> axi_r_arb.io.in(1).ar
-  icache.io.axi_mem.r <> axi_r_arb.io.in(1).r
-  icache.io.axi_mem.aw.nodeq()
-  icache.io.axi_mem.w.nodeq()
-  icache.io.axi_mem.b.noenq()
+  icache_top.io.mem_master.ar <> axi_r_arb.io.in(1).ar
+  icache_top.io.mem_master.r <> axi_r_arb.io.in(1).r
+  icache_top.io.mem_master.aw.nodeq()
+  icache_top.io.mem_master.w.nodeq()
+  icache_top.io.mem_master.b.noenq()
 
   dcache.io.axi_mem.ar <> axi_r_arb.io.in(0).ar
   dcache.io.axi_mem.r <> axi_r_arb.io.in(0).r
@@ -107,50 +106,55 @@ class CoreDutFull(
 
   // flush
   axi_r_arb.io.flush := commit_stage.io.flush
-  fetch_stage.io.flush := commit_stage.io.flush
-  inst_fifo.io.flush := commit_stage.io.flush
+  ifu.io.flush := commit_stage.io.flush
   issue_stage_rob.io.flush := commit_stage.io.flush
   rob.io.flush := commit_stage.io.flush
   lsu.io.flush := commit_stage.io.flush
-  fetch_tlb.io.flush := commit_stage.io.flush
-  lsu_tlb.io.flush := commit_stage.io.flush
+  mmmu.io.flush := commit_stage.io.flush
   dcache.io.flush := commit_stage.io.flush
-  icache.io.flush := commit_stage.io.flush
-  inst_realign.io.flush := commit_stage.io.flush
+  icache_top.io.flush := commit_stage.io.flush
   bru.io.flush := commit_stage.io.flush
   mul_div.io.flush := commit_stage.io.flush
   csr.io.flush := commit_stage.io.flush
 
   // pc_gen_stage <> fetch_stage
-  pc_gen_stage.io.pc <> fetch_stage.io.pc_in
+  pc_gen_stage.io.pc <> ifu.io.pc_in
 
-  // fetch_stage <> inst_realign
-  inst_realign.unaligned_insts.valid := fetch_stage.io.fetch_resp.valid
-  fetch_stage.io.fetch_resp.ready := inst_realign.unaligned_insts.ready
-  inst_realign.unaligned_insts.bits.pc := fetch_stage.io.fetch_resp.bits.pc
-  inst_realign.unaligned_insts.bits.payload := fetch_stage.io.fetch_resp.bits.data
+  // ifu <> icache
+  ifu.io.icache_req <> icache_top.io.req
+  ifu.io.icache_resp <> icache_top.io.resp
 
-  // fetch_stage <> tlb_arb
-  fetch_tlb.io.tlb_req <> fetch_stage.io.tlb_req
-  fetch_tlb.io.tlb_resp <> fetch_stage.io.tlb_resp
+  // mmu <> icache
+  mmmu.io.fetch_req <> icache_top.io.mmu_req
+  mmmu.io.fetch_resp <> icache_top.io.mmu_resp
 
-  // fetch_stage <> icache
-  fetch_stage.io.icache_req <> icache.io.load_req
-  fetch_stage.io.icache_resp <> icache.io.load_resp
+  // mmu <> lsu
+  mmmu.io.lsu_req <> lsu.io.tlb_req
+  mmmu.io.lsu_resp <> lsu.io.tlb_resp
 
-  // inst_realign <> inst_fifo
-  inst_fifo.io.push <> inst_realign.io.output
+  // mmu <> csr
+  mmmu.io.satp := csr_regs.io.direct_read_ports.satp
+  mmmu.io.mstatus := csr_regs.io.direct_read_ports.mstatus
 
-  // inst_fifo <> decode stage
+  // mmu <> commit stage
+  mmmu.io.cur_privilege := commit_stage.io.cur_privilege_mode
+
+  // mmu <> dcache
+  // TODO: not implement
+  mmmu.io.dcache_load_req.nodeq()
+  mmmu.io.dcache_load_resp.noenq()
+
+  // ifu <> decode stage
 
   for (i <- decode_stage.indices) {
-    inst_fifo.io.pop(i).ready := decode_stage(i).io.in.ready
-    decode_stage(i).io.in.valid := inst_fifo.io.pop(i).valid
-    decode_stage(i).io.in.bits.inst := inst_fifo.io.pop(i).bits.inst
-    decode_stage(i).io.in.bits.pc := inst_fifo.io.pop(i).bits.pc
-    decode_stage(i).io.in.bits.is_rvc := inst_fifo.io.pop(i).bits.rvc
-    decode_stage(i).io.in.bits.is_valid := inst_fifo.io.pop(i).bits.valid
-    decode_stage(i).io.in.bits.inst_c := inst_fifo.io.pop(i).bits.inst_c
+
+    ifu.io.inst_fifo_pop(i).ready := decode_stage(i).io.in.ready
+    decode_stage(i).io.in.valid := ifu.io.inst_fifo_pop(i).valid
+    decode_stage(i).io.in.bits.inst := ifu.io.inst_fifo_pop(i).bits.inst
+    decode_stage(i).io.in.bits.pc := ifu.io.inst_fifo_pop(i).bits.pc
+    decode_stage(i).io.in.bits.is_rvc := ifu.io.inst_fifo_pop(i).bits.rvc
+    decode_stage(i).io.in.bits.is_valid := ifu.io.inst_fifo_pop(i).bits.valid
+    decode_stage(i).io.in.bits.inst_c := ifu.io.inst_fifo_pop(i).bits.inst_c
     decode_stage(i).io.in.bits.exception := DontCare
     decode_stage(i).io.in.bits.bp := DontCare
     decode_stage(i).io.in.bits.exception.valid := false.B
@@ -225,10 +229,6 @@ class CoreDutFull(
 
   // csr <> monitor
   csr_regs.io.direct_read_ports <> monitor.io.csr_monitor
-
-  // lsu <> tlb
-  lsu.io.tlb_req <> lsu_tlb.io.tlb_req
-  lsu.io.tlb_resp <> lsu_tlb.io.tlb_resp
 
   // lsu <> dcache
   lsu.io.dcache_load_req <> dcache.io.load_req

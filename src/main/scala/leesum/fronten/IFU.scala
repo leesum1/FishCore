@@ -24,7 +24,7 @@ class f2_f3_pipe_entry extends Bundle {
   }
 }
 
-class IFUTop(formal: Boolean = false) extends Module {
+class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
   val io = IO(new Bundle {
     val pc_in = Flipped(Decoupled(UInt(64.W)))
     val icache_req = Decoupled(new ICacheReq)
@@ -48,7 +48,7 @@ class IFUTop(formal: Boolean = false) extends Module {
   f2_f3_pipe.io.in.bits.clear()
   f2_f3_pipe.io.out.nodeq()
 
-  val inst_realign = Module(new InstReAlign)
+  val inst_realign = Module(new InstReAlign(rvc_en))
   inst_realign.io.flush := io.flush
   inst_realign.io.input.noenq()
   inst_realign.io.output.nodeq()

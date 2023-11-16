@@ -74,7 +74,7 @@ class AGU(
   // TODO: need optimize, use alu to calculate vaddr?
   val vaddr = agu_req.bits.op_a.asSInt + agu_req.bits.op_b.asSInt
 
-  val sIdle :: sWaitTLBRsp :: sWaitFifo :: sFlush :: Nil = Enum(4)
+  val sIdle :: sWaitTLBRsp :: sWaitFifo :: Nil = Enum(3)
   val state = RegInit(sIdle)
   val tlb_resp_buf = RegInit(0.U.asTypeOf(new TLBResp))
   val agu_req_buf = RegInit(0.U.asTypeOf(new AGUReq))
@@ -112,10 +112,13 @@ class AGU(
       )
     )
 
-    when(agu_req.fire && io.tlb_req.fire) {
+    when(agu_req.fire) {
+      assert(!io.flush)
+      assert(io.tlb_req.fire)
       state := sWaitTLBRsp
       agu_req_buf := agu_req.bits
     }.otherwise {
+      // flush or not fire
       state := sIdle
     }
   }
@@ -325,7 +328,7 @@ class AGU(
       send_tlb_req()
     }
     is(sWaitTLBRsp) {
-      io.tlb_resp.ready := true.B
+      io.tlb_resp.ready := true.B && !io.flush
       when(io.tlb_resp.fire && !io.flush) {
         // 1. flush is false, and tlb_resp is fire
         tlb_resp_buf := io.tlb_resp.bits
@@ -343,12 +346,9 @@ class AGU(
         }.otherwise {
           assert(false.B, "sWaitTLBRsp error, should not reach here")
         }
-      }.elsewhen(io.tlb_resp.fire && io.flush) {
-        // 2. flush is true, and tlb_resp is fire, discard the coming tlb_resp
+      }.elsewhen(io.flush) {
+        // 2. flush is true, cancel wait response
         state := sIdle
-      }.elsewhen(!io.tlb_resp.fire && io.flush) {
-        // 3. flush is true, but tlb_resp is not fire
-        state := sFlush
       }.otherwise {
         // 4. flush is false, and tlb_resp is not fire,continue to wait
         state := sWaitTLBRsp
@@ -371,12 +371,6 @@ class AGU(
           assert(false.B, "sWaitFifo error, should not reach here")
         }
       }.otherwise {
-        state := sIdle
-      }
-    }
-    is(sFlush) {
-      io.tlb_resp.ready := true.B
-      when(io.tlb_resp.fire) {
         state := sIdle
       }
     }

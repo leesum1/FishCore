@@ -3,12 +3,13 @@ add_rules("mode.release", "mode.debug")
 
 if is_mode("release") then
     set_optimize("faster")
+--     set_policy("build.sanitizer.address", true)
 end
 
 if is_mode("debug") then
     set_symbols("debug")
     set_optimize("none")
---     set_policy("build.sanitizer.address", true)
+    set_policy("build.sanitizer.address", true)
 end
 
 add_requires("cli11",{system = false})
@@ -33,7 +34,7 @@ target("Vtop")
     add_files("vsrc/*.sv")
     add_values("verilator.flags","--top","CoreDutFull")
     add_values("verilator.flags","--trace-fst")
---     add_values("verilator.flags","--threads","2")
+--     add_values("verilator.flags","--threads","3")
     add_includedirs("src/include/")
     add_packages("catch2","cli11","assert","elfio","libsdl","readerwriterqueue")
     add_links("rv64emu_cbinding")

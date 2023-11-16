@@ -215,9 +215,12 @@ int main(int argc, char** argv)
     }
 
 
-    std::cout << std::format("clk_num: {}, commit_num: {}, IPC: {}, SimSpeed: {} insts/seconds \n", clk_num,
-                             commit_num, static_cast<double_t>(commit_num) / static_cast<double_t>(clk_num),
-                             commit_num / duration.count());
+    // add one to avoid div zero
+    std::cout << std::format("clk_num: {}, commit_num: {}, IPC: {}, SimSpeed: {} insts/seconds \n",
+                             clk_num, commit_num,
+                             static_cast<double_t>(commit_num) / static_cast<double_t>(clk_num + 1),
+                             commit_num / (duration.count() + 1));
+
 
     bool success = !am_en || sim_base.get_reg(10) == 0;
 
