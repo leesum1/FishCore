@@ -1,6 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util.{Decoupled, DecoupledIO, Enum, Queue, is, switch}
+import circt.stage.ChiselStage
 
 class FetchResp extends Bundle {
   val pc = UInt(64.W)
@@ -51,14 +52,15 @@ class FetchStage extends Module {
   val tlb_state = RegInit(sIdle)
 
   def send_tlb_req() = {
-    io.pc_in.ready := !tlb_fifo_almost_full
-    io.tlb_req.valid := io.pc_in.valid && !io.flush && !tlb_fifo_almost_full
+    io.pc_in.ready := !tlb_fifo_almost_full && !io.flush
+    io.tlb_req.valid := io.pc_in.valid && !tlb_fifo_almost_full
 
     io.tlb_req.bits.req_type := TLBReqType.Fetch
     io.tlb_req.bits.vaddr := io.pc_in.bits
     io.tlb_req.bits.size := GenSizeByAddr(io.pc_in.bits)
 
     when(io.pc_in.fire && io.tlb_req.fire) {
+      assert(!io.flush)
       tlb_state := sWaitTLBResp
     }.otherwise {
       tlb_state := sIdle
@@ -70,27 +72,18 @@ class FetchStage extends Module {
       send_tlb_req()
     }
     is(sWaitTLBResp) {
+      // TODO: ready  flush?
       io.tlb_resp <> tlb_resp_fifo.io.enq
 
       when(io.tlb_resp.fire && !io.flush) {
         // 1. flush: false, tlb_resp.fire: true
         send_tlb_req()
-      }.elsewhen(io.tlb_resp.fire && io.flush) {
+      }.elsewhen(io.flush) {
         // 2. flush: true, tlb_resp.fire: true,discard the coming data
         tlb_state := sIdle
-      }.elsewhen(!io.tlb_resp.fire && io.flush) {
-        // 3. flush: ture, tlb_resp.fire: false
-        tlb_state := sFlush
       }.otherwise {
         // 4. flush: false, tlb_resp.fire: false
         tlb_state := sWaitTLBResp
-      }
-    }
-    is(sFlush) {
-      io.tlb_resp.ready := true.B
-      when(io.tlb_resp.fire) {
-        // discard the coming data
-        tlb_state := sIdle
       }
     }
   }

@@ -4,6 +4,7 @@ import chisel3.util.DecoupledIO
 import chisel3._
 import chisel3.experimental.SourceInfo
 import chiseltest.formal.{past, stable}
+import leesum.axi4.AXIMasterIO
 
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
@@ -23,4 +24,5 @@ object FormalUtils {
   ): Bool = {
     past(io.valid && !io.ready)
   }
+
 }

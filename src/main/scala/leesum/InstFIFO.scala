@@ -10,11 +10,13 @@ class INSTEntry extends Bundle {
   val inst_c = UInt(16.W)
   val rvc = Bool()
   val valid = Bool()
+  val exception = new ExceptionEntry()
 
   def clear() = {
     pc := 0.U
     inst := 0.U
     inst_c := 0.U
+    exception.clear()
     rvc := false.B
     valid := false.B
   }

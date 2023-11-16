@@ -2479,6 +2479,12 @@ class ExceptionEntry(has_valid: Boolean = true) extends Bundle {
   val valid = Bool()
   val tval = UInt(64.W)
   val cause = ExceptionCause()
+
+  def clear(): Unit = {
+    valid := false.B
+    tval := 0.U
+    cause := ExceptionCause.unknown
+  }
 }
 
 class BpEntry extends Bundle {

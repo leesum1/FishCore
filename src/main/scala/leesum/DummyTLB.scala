@@ -52,7 +52,7 @@ class DummyTLB(random_latency: Boolean = true, formal: Boolean = false)
 
   def recv_tlb_req(): Unit = {
     io.tlb_req.ready := true.B && !io.flush
-    when(io.tlb_req.fire) {
+    when(io.tlb_req.fire && !io.flush) {
       req_buf := io.tlb_req.bits
       state := sWaitResp
       latency_cnt := 0.U
@@ -72,8 +72,12 @@ class DummyTLB(random_latency: Boolean = true, formal: Boolean = false)
     // TODO:
     io.tlb_resp.bits.exception.cause := ExceptionCause.load_access
 
-    when(io.tlb_resp.fire) {
+    when(io.tlb_resp.fire && !io.flush) {
       recv_tlb_req() // back by back
+    }.elsewhen(io.flush) {
+      state := sFlush
+    }.otherwise {
+      state := sWaitResp
     }
   }
 

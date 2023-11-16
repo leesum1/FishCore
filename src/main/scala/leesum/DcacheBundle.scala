@@ -4,10 +4,10 @@ import chisel3.util.MuxLookup
 import leesum.axi4.AXIDef
 
 object DcacheConst {
-  val SIZE1 = 0.U(3.W)
-  val SIZE2 = 1.U(3.W)
-  val SIZE4 = 2.U(3.W)
-  val SIZE8 = 3.U(3.W)
+  val SIZE1 = 0.U(2.W)
+  val SIZE2 = 1.U(2.W)
+  val SIZE4 = 2.U(2.W)
+  val SIZE8 = 3.U(2.W)
 }
 
 object DcacheSize2AxiSize {
@@ -44,7 +44,7 @@ class StoreDcacheReq extends Bundle {
   val is_mmio = Bool()
 }
 class StoreDcacheResp extends Bundle {
-  val exception = new ExceptionEntry(has_valid = true)
+  val exception = new ExceptionEntry()
 }
 
 class ByteEnableGenerator extends Module {
