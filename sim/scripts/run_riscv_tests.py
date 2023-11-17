@@ -10,18 +10,19 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 tests_path = os.path.join("/opt/riscv-tests/share/riscv-tests/isa")
 Vtop_path = os.path.join("../build/linux/x86_64/release/Vtop")
 
-isa_patern = list("rv64u{}-p".format(i) for i in ['i', 'm', 'a', 'c'])
-isa_patern.append("rv64mi-p")
+isa_pattern = list("rv64u{}-p".format(i) for i in ['i', 'm', 'a', 'c'])
+isa_pattern.extend(list("rv64u{}-v".format(i) for i in ['i', 'm', 'a', 'c']))
+isa_pattern.append("rv64mi-p")
 
 # 从 tests_path 找到所有以 isa_patern 中元素为开头的文件
-isa_patern = [glob.glob(os.path.join(tests_path, "{}*".format(i)))
-              for i in isa_patern]
+isa_pattern = [glob.glob(os.path.join(tests_path, "{}*".format(i)))
+               for i in isa_pattern]
 
 # 将嵌套列表扁平化
-isa_patern = [item for sublist in isa_patern for item in sublist]
+isa_pattern = [item for sublist in isa_pattern for item in sublist]
 
 # 过滤出文件结尾不为 .dump 的文件
-all_tests = list(filter(lambda x: not x.endswith(".dump"), isa_patern))
+all_tests = list(filter(lambda x: not x.endswith(".dump"), isa_pattern))
 
 # 路径拼接
 all_tests = [os.path.join(tests_path, i) for i in all_tests]

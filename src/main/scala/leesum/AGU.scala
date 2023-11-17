@@ -74,6 +74,8 @@ class AGU(
   // TODO: need optimize, use alu to calculate vaddr?
   val vaddr = agu_req.bits.op_a.asSInt + agu_req.bits.op_b.asSInt
 
+  val vaddr_buf = RegInit(0.U(64.W))
+
   val sIdle :: sWaitTLBRsp :: sWaitFifo :: Nil = Enum(3)
   val state = RegInit(sIdle)
   val tlb_resp_buf = RegInit(0.U.asTypeOf(new TLBResp))
@@ -117,13 +119,14 @@ class AGU(
       assert(io.tlb_req.fire)
       state := sWaitTLBRsp
       agu_req_buf := agu_req.bits
+      vaddr_buf := vaddr.asUInt
     }.otherwise {
       // flush or not fire
       state := sIdle
     }
   }
 
-  def check_addr_range(addr: UInt): Bool = {
+  def addr_in_range(addr: UInt): Bool = {
     val in_range = addr_map
       .map { case (start, end, _) =>
         addr >= Long2UInt64(start) && addr <= Long2UInt64(end)
@@ -136,8 +139,8 @@ class AGU(
   // TODO: not implemented now
   def check_privilege(tlb_rsp: TLBResp): Bool = {
     val addr_align = CheckAligned(tlb_rsp.paddr, tlb_rsp.size)
-    val addr_in_range = check_addr_range(tlb_rsp.paddr)
-    Seq(tlb_rsp.exception.valid, !addr_align, !addr_in_range).reduce(_ || _)
+    val in_range = addr_in_range(tlb_rsp.paddr)
+    Seq(tlb_rsp.exception.valid, !addr_align, !in_range).reduce(_ || _)
   }
 
   def check_mmio(tlb_rsp: TLBResp): Bool = {
@@ -163,28 +166,30 @@ class AGU(
       io.out.agu_pipe.bits.exception.valid := true.B
       io.out.agu_pipe.bits.trans_id := agu_req_buf.trans_id
 
-      val is_misaligned = !CheckAligned(tlb_rsp.paddr, tlb_rsp.size)
-      val out_of_range = !check_addr_range(tlb_rsp.paddr)
+      // tlb_rsp.paddr only valid when tlb_rsp.exception.valid is false
+      val is_misaligned =
+        !CheckAligned(tlb_rsp.paddr, tlb_rsp.size) && !tlb_rsp.exception.valid
+      val out_of_range =
+        !addr_in_range(tlb_rsp.paddr) && !tlb_rsp.exception.valid
       // priority order: high -> low
-      // 1. misaligned
-      // 2. tlb exception
-      // 3. out of range
+      // 1. tlb exception
+      // 2. out of range
+      // 3. misaligned
       // 4. defeat unknown
       io.out.agu_pipe.bits.exception.cause := PriorityMux(
         Seq(
+          tlb_rsp.exception.valid -> tlb_rsp.exception.cause,
+          out_of_range -> ExceptionCause.get_access_cause(tlb_rsp.req_type),
           is_misaligned -> ExceptionCause.get_misaligned_cause(
             tlb_rsp.req_type
           ),
-          tlb_rsp.exception.valid -> tlb_rsp.exception.cause,
-          out_of_range -> ExceptionCause.get_access_cause(tlb_rsp.req_type),
           true.B -> ExceptionCause.unknown
         )
       )
-      // TODO: not implemented now
       // If mtval is written with a nonzero value when a misaligned load or store causes an access-fault or
       // page-fault exception, then mtval will contain the virtual address of the portion of the access that
       // caused the fault.
-      io.out.agu_pipe.bits.exception.tval := tlb_rsp.paddr
+      io.out.agu_pipe.bits.exception.tval := vaddr_buf
 
       // back to back
       send_tlb_req()

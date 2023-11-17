@@ -155,6 +155,12 @@ int main(int argc, char** argv)
 
                     std::cout << std::format("exception cause 0x{:x},pc 0x{:016x}\n",
                                              cause, sim_base.get_pc());
+                    if (am_en && cause == 3)
+                    {
+                        // ebreak
+                        std::cout << "AM exit" << std::endl;
+                        state = sim_stop;
+                    }
                 }
                 if (difftest_en & diff_ref.has_value())
                 {
