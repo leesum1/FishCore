@@ -6,7 +6,8 @@ import chiseltest.formal.{BoundedCheck, Formal, stable}
 import org.scalatest.flatspec.AnyFlatSpec
 
 /** This Module is a generic arbiter for request and response signals.The lowest
-  * index input has the highest priority.
+  * index input has the highest priority. if no flush signal, the arbiter will
+  * always response the request (such as axi).
   * @param numInputs
   * @param reqType
   * @param respType
@@ -41,12 +42,15 @@ class ReqRespArbiter[T <: Data, U <: Data](
 
   val state = RegInit(sIdle)
   val sel_idx = VecInit(io.req_vec.map(_.valid)).indexWhere(_ === true.B)
+  dontTouch(sel_idx)
   val sel_idx_valid = io.req_vec.map(_.valid).reduce(_ || _)
 
   val lock_valid = RegInit(false.B)
 
   when(io.req_arb.valid && !io.req_arb.ready) {
     lock_valid := true.B
+  }.otherwise {
+    lock_valid := false.B
   }
 
   io.req_vec.foreach(_.nodeq())
@@ -55,7 +59,7 @@ class ReqRespArbiter[T <: Data, U <: Data](
   io.resp_arb.nodeq()
 
   def select_input(): Unit = {
-    when(sel_idx_valid && !io.flush) {
+    when(sel_idx_valid) {
       assert(sel_idx < numInputs.U, "idx must less than %d".format(numInputs))
       assert(io.req_vec(sel_idx).valid, "in_req(idx) must be valid")
 
@@ -83,8 +87,10 @@ class ReqRespArbiter[T <: Data, U <: Data](
     }
     is(sWaitResp) {
       io.resp_vec(sel_buf) <> io.resp_arb
-      when(io.resp_arb.fire) {
+      when(io.resp_arb.fire && !io.flush) {
         select_input()
+      }.elsewhen(io.flush) {
+        state := sIdle
       }
     }
   }
@@ -95,11 +101,11 @@ class ReqRespArbiter[T <: Data, U <: Data](
   if (formal) {
     when(io.flush) {
       for (i <- 0 until numInputs) {
-        assume(io.req_vec(i).valid === false.B)
-        assert(io.resp_vec(i).valid === false.B)
+        assert(io.req_vec(i).ready === false.B)
+        assume(io.resp_vec(i).ready === false.B)
       }
-      assert(io.req_arb.valid === false.B)
-      assume(io.resp_arb.valid === false.B)
+      assume(io.req_arb.ready === false.B)
+      assert(io.resp_arb.ready === false.B)
     }
 
     for (i <- 0 until numInputs) {

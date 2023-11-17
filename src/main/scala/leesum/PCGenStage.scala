@@ -22,7 +22,7 @@ class PCGenStage(boot_pc: Long, rvc_en: Boolean = false) extends Module {
     npc := Cat(pc_reg(63, 3), "b000".U(3.W)) + fetch_size.U
   }
 
-  when(io.pc.fire) {
+  when(io.pc.fire || io.redirect_pc.valid) {
     pc_reg := npc
   }
 

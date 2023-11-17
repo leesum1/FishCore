@@ -22,7 +22,7 @@ namespace SimDevices
         device_pool.push_back(device);
     }
 
-    void DeviceMange::update_inputs(
+    bool DeviceMange::update_inputs(
         uint64_t read_addr,
         const bool read_en,
         WriteReq write_req,
@@ -39,6 +39,8 @@ namespace SimDevices
             return item->in_range(write_req.waddr);
         });
 
+        bool success = true;
+
         if (read_en)
         {
             if (rdevice != device_pool.end())
@@ -47,8 +49,8 @@ namespace SimDevices
             }
             else
             {
-                std::cout << std::format("read address: {:#010X}\n", read_addr);
-                MY_ASSERT(false, "read address out of range");
+                success = false;
+                std::cout << std::format("read address out of range: {:#010X}\n", read_addr);
             }
         }
 
@@ -60,10 +62,12 @@ namespace SimDevices
             }
             else
             {
-                std::cout << std::format("write address: {:#010X}\n", write_req.waddr);
-                MY_ASSERT(false, "write address out of range");
+                success = false;
+                std::cout << std::format("write address out of range: {:#010X}\n", write_req.waddr);
             }
         }
+
+        return success;
     }
 
     uint64_t DeviceMange::update_outputs() const

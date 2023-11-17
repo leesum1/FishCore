@@ -127,14 +127,14 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     val mis_predict = entry.bp.is_miss_predict
     when(mis_predict) {
       io.branch_commit.valid := true.B
-      when(io.branch_commit.fire) {
-        io.branch_commit.bits.target := entry.bp.predict_pc
-        flush_next := true.B
-        ack := true.B
-        when(FuOP.is_jal(entry.fu_op) || FuOP.is_jalr(entry.fu_op)) {
-          gpr_commit_port.write(entry.rd_addr, entry.result)
-        }
+//      when(io.branch_commit.fire) {
+      io.branch_commit.bits.target := entry.bp.predict_pc
+      flush_next := true.B
+      ack := true.B
+      when(FuOP.is_jal(entry.fu_op) || FuOP.is_jalr(entry.fu_op)) {
+        gpr_commit_port.write(entry.rd_addr, entry.result)
       }
+//      }
     }.otherwise {
       when(FuOP.is_jal(entry.fu_op) || FuOP.is_jalr(entry.fu_op)) {
         gpr_commit_port.write(entry.rd_addr, entry.result)
@@ -151,23 +151,54 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   // TODO: exception
   def retire_exception(entry: ScoreBoardEntry, ack: Bool): Unit = {
     assert(entry.exception.valid === true.B)
-    val mtvec = new MtvecFiled(io.direct_read_ports.mtvec)
+
+    val mstatus = new MstatusFiled(io.direct_read_ports.mstatus)
+    val medeleg = io.direct_read_ports.medeleg
     val exception_mcause = Mux(
       entry.fu_op === FuOP.Ecall,
       ExceptionCause.get_call_cause(privilege_mode),
       entry.exception.cause
     ).asUInt
 
-    val mstatus = new MstatusFiled(io.direct_read_ports.mstatus)
+    val trap_to_smode = medeleg(
+      exception_mcause
+    ) && privilege_mode <= Privilegelevel.S.U
 
-    val new_pc = mtvec.get_exception_pc(exception_mcause)
-    io.branch_commit.valid := true.B
+    when(trap_to_smode) {
+      // s mode
+      val stvec = new MtvecFiled(io.direct_read_ports.stvec)
+      io.branch_commit.valid := true.B
+      io.branch_commit.bits.target := stvec.get_exception_pc(exception_mcause)
 
-    // TODO: DO NOT USE BRANCH_COMMIT
-    when(io.branch_commit.fire) {
-      io.branch_commit.bits.target := new_pc
-      flush_next := true.B
+//      when(io.branch_commit.fire) {
       ack := true.B
+      flush_next := true.B
+      privilege_mode := Privilegelevel.S.U
+
+      io.direct_write_ports.mstatus.valid := true.B
+      io.direct_write_ports.mstatus.bits := mstatus
+        .get_smode_exception_mstatus(
+          privilege_mode
+        )
+      io.direct_write_ports.sepc.valid := true.B
+      io.direct_write_ports.sepc.bits := entry.pc
+      io.direct_write_ports.scause.valid := true.B
+      io.direct_write_ports.scause.bits := exception_mcause
+      io.direct_write_ports.stval.valid := true.B
+      io.direct_write_ports.stval.bits := entry.exception.tval
+
+//    }
+
+    }.otherwise {
+      // m mode
+      val mtvec = new MtvecFiled(io.direct_read_ports.mtvec)
+      io.branch_commit.valid := true.B
+      io.branch_commit.bits.target := mtvec.get_exception_pc(exception_mcause)
+
+//    when(io.branch_commit.fire) {
+      ack := true.B
+      flush_next := true.B
+      privilege_mode := Privilegelevel.M.U
 
       io.direct_write_ports.mepc.valid := true.B
       io.direct_write_ports.mepc.bits := entry.pc
@@ -176,12 +207,13 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       io.direct_write_ports.mtval.valid := true.B
       io.direct_write_ports.mtval.bits := entry.exception.tval
       io.direct_write_ports.mstatus.valid := true.B
-      io.direct_write_ports.mstatus.bits := mstatus.get_exception_mstatus(
-        privilege_mode
-      )
-      // TODO: only support machine mode now!! delegate is not supported!!
-      privilege_mode := Privilegelevel.M.U
+      io.direct_write_ports.mstatus.bits := mstatus
+        .get_mmode_exception_mstatus(
+          privilege_mode
+        )
+//      }
     }
+
     // ------------------
     // assert
     // ------------------
@@ -189,11 +221,10 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 //      mcause.interrupt === false.B,
 //      "exception cause must be exception"
 //    )
-    assert(
+    assume(
       entry.complete,
       "exception must be complete"
     )
-
   }
 
   def retire_mret(entry: ScoreBoardEntry, ack: Bool): Unit = {
@@ -214,13 +245,48 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     val new_mstatus = mstatus.get_mret_mstatus(y =/= Privilegelevel.M.U(2.W))
 
     io.branch_commit.valid := true.B
-    when(io.branch_commit.fire) {
-      io.branch_commit.bits.target := mepc
-      io.direct_write_ports.mstatus.valid := true.B
-      io.direct_write_ports.mstatus.bits := new_mstatus
-      flush_next := true.B
-      ack := true.B
+//    when(io.branch_commit.fire) {
+    io.branch_commit.bits.target := mepc
+    io.direct_write_ports.mstatus.valid := true.B
+    io.direct_write_ports.mstatus.bits := new_mstatus
+    flush_next := true.B
+    ack := true.B
+//    }
+  }
+
+  def retire_sret(entry: ScoreBoardEntry, ack: Bool): Unit = {
+    assert(entry.fu_op === FuOP.Sret, "fu_op must be sret")
+    assert(entry.exception.valid === false.B)
+    assert(entry.complete === true.B, "sret must be complete")
+
+    val sstatus = new MstatusFiled(io.direct_read_ports.mstatus)
+    val sepc = io.direct_read_ports.sepc
+
+    // SRET should also raise an illegal instruction exception when TSR=1 in mstatus
+    when(sstatus.tsr) {
+      // TODO: raise an illegal instruction exception
+      printf("raise an illegal instruction exception")
     }
+
+    // supposing xPP holds the value y, 0: user mode 1: s mode
+    val y = Mux(sstatus.spp, Privilegelevel.S.U(2.W), Privilegelevel.U.U(2.W))
+    // the privilege mode is changed to xPP
+    privilege_mode := y
+
+    // (If y!=M, x RET also sets MPRV=0.)
+    // reference to  https://github.com/riscv/riscv-isa-manual/pull/929
+    val new_mstatus = sstatus.get_sret_mstatus(y =/= Privilegelevel.M.U(2.W))
+
+    io.branch_commit.valid := true.B
+    io.branch_commit.bits.target := sepc
+
+//    when(io.branch_commit.fire) {
+    io.direct_write_ports.mstatus.valid := true.B
+    io.direct_write_ports.mstatus.bits := new_mstatus
+    ack := true.B
+    flush_next := true.B
+
+//    }
   }
 
   // TODO: implement not correct!!!!!!!!!
@@ -302,7 +368,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       when(rob_data_seq.head.fu_op === FuOP.Mret) {
         retire_mret(rob_data_seq.head, pop_ack.head)
       }.otherwise {
-        assert(false.B, "not implemented")
+        retire_sret(rob_data_seq.head, pop_ack.head)
       }
     }.otherwise {
       switch(rob_data_seq.head.fu_type) {

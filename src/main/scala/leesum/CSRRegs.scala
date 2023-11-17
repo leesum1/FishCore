@@ -86,12 +86,21 @@ class CSRWritePort extends Bundle {
 
 class CSRDirectReadPorts extends Bundle {
   val mstatus = UInt(64.W)
-  val mcause = UInt(64.W)
   val mie = UInt(64.W)
   val mip = UInt(64.W)
+  // m mode
+  val mcause = UInt(64.W)
   val mtvec = UInt(64.W)
   val mepc = UInt(64.W)
   val mtval = UInt(64.W)
+  val medeleg = UInt(64.W)
+  val mideleg = UInt(64.W)
+  // s mode
+  val scause = UInt(64.W)
+  val stvec = UInt(64.W)
+  val sepc = UInt(64.W)
+  val stval = UInt(64.W)
+
   val satp = UInt(64.W)
 }
 
@@ -120,7 +129,7 @@ class MstatusFiled(data: UInt) {
   def mbe = data(37)
   def sb = data(63)
 
-  def get_exception_mstatus(cur_privilege: UInt) = {
+  def get_mmode_exception_mstatus(cur_privilege: UInt) = {
     require(cur_privilege.getWidth == 2)
 
     val new_cause = Cat(
@@ -131,6 +140,25 @@ class MstatusFiled(data: UInt) {
       data(6, 4),
       false.B, // mie
       data(2, 0)
+    )
+    require(new_cause.getWidth == 64)
+    new_cause
+  }
+
+  def get_smode_exception_mstatus(cur_privilege: UInt) = {
+    require(cur_privilege.getWidth == 2)
+
+    val new_cause = Cat(
+      data(63, 9),
+      // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise.
+      Mux(cur_privilege === Privilegelevel.U.U, false.B, true.B), // spp
+      data(7, 6),
+      // When a trap is taken into supervisor mode, SPIE is set to SIE
+      this.sie, // spie
+      data(4, 2),
+      // and SIE is set to 0
+      false.B, // sie
+      data(0)
     )
     require(new_cause.getWidth == 64)
     new_cause
@@ -153,6 +181,23 @@ class MstatusFiled(data: UInt) {
     require(new_mstatus.getWidth == 64)
     new_mstatus
   }
+  def get_sret_mstatus(clear_mprv: Bool) = {
+    val new_mstatus = Cat(
+      data(63, 18),
+      Mux(clear_mprv, false.B, this.mprv), // mprv
+      data(16, 9),
+      // spp , xPP is set to the least-privileged supported mode (U if U-mode is implemented, else M).
+      false.B,
+      data(7, 6),
+      true.B, // spie // xPIE is set to 1;
+      data(4, 2),
+      this.spie, // sie // xIE is set to xPIE
+      data(0)
+    )
+    require(new_mstatus.getWidth == 64)
+    new_mstatus
+  }
+
 }
 
 class MtvecFiled(data: UInt) {
@@ -219,12 +264,18 @@ class MidelegFiled(data: UInt) extends MipFiled(data)
 
 class CSRDirectWritePorts extends Bundle {
   val mstatus = Valid(UInt(64.W))
-  val mcause = Valid(UInt(64.W))
   val mie = Valid(UInt(64.W))
   val mip = Valid(UInt(64.W))
+
+  val mcause = Valid(UInt(64.W))
   val mtvec = Valid(UInt(64.W))
   val mepc = Valid(UInt(64.W))
   val mtval = Valid(UInt(64.W))
+
+  val scause = Valid(UInt(64.W))
+  val stvec = Valid(UInt(64.W))
+  val sepc = Valid(UInt(64.W))
+  val stval = Valid(UInt(64.W))
 
   def clear(): Unit = {
     mstatus.valid := false.B
@@ -234,6 +285,11 @@ class CSRDirectWritePorts extends Bundle {
     mtvec.valid := false.B
     mepc.valid := false.B
     mtval.valid := false.B
+    sepc.valid := false.B
+    stval.valid := false.B
+    stvec.valid := false.B
+    scause.valid := false.B
+
     mstatus.bits := 0.U
     mcause.bits := 0.U
     mie.bits := 0.U
@@ -241,6 +297,10 @@ class CSRDirectWritePorts extends Bundle {
     mtvec.bits := 0.U
     mepc.bits := 0.U
     mtval.bits := 0.U
+    sepc.bits := 0.U
+    stval.bits := 0.U
+    stvec.bits := 0.U
+    scause.bits := 0.U
   }
 }
 
@@ -255,7 +315,7 @@ class CSRRegs extends Module {
   })
 
   // TODO: use config replace hard code
-  val smode_enable = false
+  val smode_enable = true
   val umode_enable = true
   val float_enable = false
 
@@ -281,9 +341,9 @@ class CSRRegs extends Module {
 
   println("mstatus_val: " + mstatus_val.getRawValue.toHexString)
 
-  // -----------------
-  // mstatus rmask
-  // -----------------
+  // ---------------------
+  // mstatus read func
+  // ---------------------
   val mstatus_rmask = new CSRBitField(-1L)
   // only support little endian
   mstatus_rmask.setField(MStatusMask.SBE, 0)
@@ -322,9 +382,9 @@ class CSRRegs extends Module {
     read_result
   }
 
-  // -----------------
-  // mstatus wmask
-  // -----------------
+  // --------------------
+  // mstatus write fun
+  // --------------------
   val mstatus_wmask = new CSRBitField(mstatus_rmask.getRawValue)
   mstatus_wmask.setField(MStatusMask.UXL, 0)
   mstatus_wmask.setField(MStatusMask.SXL, 0)
@@ -340,6 +400,62 @@ class CSRRegs extends Module {
   }
 
   println("mstatus_wmask: " + mstatus_wmask.getRawValue.toHexString)
+
+  // ---------------------
+  // sstatus read func
+  // ---------------------
+  val sstatus_read = mstatus_read
+
+  // ---------------------
+  // sstatus write func
+  // ---------------------
+  val sstatus_wmask_before = new CSRBitField(0L)
+  sstatus_wmask_before.setField(MStatusMask.SPP, 1)
+  sstatus_wmask_before.setField(MStatusMask.SIE, 1)
+  sstatus_wmask_before.setField(MStatusMask.SPIE, 1)
+  sstatus_wmask_before.setField(MStatusMask.UBE, 1)
+  sstatus_wmask_before.setField(MStatusMask.VS, 3)
+  sstatus_wmask_before.setField(MStatusMask.FS, 3)
+  sstatus_wmask_before.setField(MStatusMask.XS, 3)
+  sstatus_wmask_before.setField(MStatusMask.SUM, 1)
+  sstatus_wmask_before.setField(MStatusMask.MXR, 1)
+  sstatus_wmask_before.setField(MStatusMask.MSTATUS64_SD, 1)
+  sstatus_wmask_before.getRawValue
+
+  val sstatus_wmask =
+    sstatus_wmask_before.getRawValue & mstatus_rmask.getRawValue
+
+  val sstatus_write = (addr: UInt, reg: UInt, wdata: UInt) => {
+    val write_result = Wire(Valid(UInt(64.W)))
+    write_result.valid := true.B
+    write_result.bits := wdata & Long2UInt64(
+      sstatus_wmask
+    ) | reg & Long2UInt64(~sstatus_wmask)
+    reg := write_result.bits
+    write_result
+  }
+  // ---------------------
+  // satp write func
+  // ---------------------
+
+  val satp_write = (addr: UInt, reg: UInt, wdata: UInt) => {
+
+    val satp_val = new SatpFiled(wdata)
+
+    // WAWL
+    val effective_mode =
+      Mux(
+        satp_val.mode_is_sv39 || satp_val.mode_is_bare,
+        satp_val.mode,
+        reg(63, 60)
+      )
+
+    val write_result = Wire(Valid(UInt(64.W)))
+    write_result.valid := true.B
+    write_result.bits := Cat(effective_mode, satp_val.asid, satp_val.ppn)
+    reg := write_result.bits
+    write_result
+  }
 
   // -----------------
   // misa register
@@ -359,9 +475,9 @@ class CSRRegs extends Module {
 
   println("mstatus_val: " + mstatus_val.getRawValue.toHexString)
   val mstatus = RegInit(Long2UInt64(mstatus_val.getRawValue))
-  val mcause = RegInit(0.U(64.W))
   val mie = RegInit(0.U(64.W))
   val mip = RegInit(0.U(64.W))
+  val mcause = RegInit(0.U(64.W))
   val mtvec = RegInit(0.U(64.W))
   val mepc = RegInit(0.U(64.W))
   val mtval = RegInit(0.U(64.W))
@@ -373,14 +489,20 @@ class CSRRegs extends Module {
   val marchid = RegInit(0.U(64.W))
   val mvendorid = RegInit(0.U(64.W))
 
+  // smode
+  val scause = RegInit(0.U(64.W))
+  val stvec = RegInit(0.U(64.W))
+  val sepc = RegInit(0.U(64.W))
+  val stval = RegInit(0.U(64.W))
+  val sscratch = RegInit(0.U(64.W))
+  val satp = RegInit(0.U(64.W))
+
   // counters
   val mcounteren = RegInit(0.U(64.W))
 
   val cycle = RegInit(0.U(64.W))
   cycle := cycle + 1.U
 
-  // TODO: added but not used now
-  val satp = RegInit(0.U(64.W))
   val mideleg = RegInit(0.U(64.W))
   val medeleg = RegInit(0.U(64.W))
 
@@ -423,9 +545,17 @@ class CSRRegs extends Module {
       (CSRs.mepc, mepc, normal_read, normal_write),
       (CSRs.mip, mip, normal_read, normal_write),
       (CSRs.mscratch, mscratch, normal_read, normal_write),
-      (CSRs.satp, satp, normal_read, normal_write),
       (CSRs.mideleg, mideleg, normal_read, normal_write),
       (CSRs.medeleg, medeleg, normal_read, normal_write),
+      // smode
+      (CSRs.sstatus, mstatus, sstatus_read, sstatus_write),
+      (CSRs.scause, scause, normal_read, normal_write),
+      (CSRs.stvec, stvec, normal_read, normal_write),
+      (CSRs.stval, stval, normal_read, normal_write),
+      (CSRs.sepc, sepc, normal_read, normal_write),
+      (CSRs.sscratch, sscratch, normal_read, normal_write),
+      (CSRs.satp, satp, normal_read, satp_write),
+
       // read only
       (CSRs.misa, misa, normal_read, empty_write),
       (CSRs.mhartid, mhartid, normal_read, empty_write),
@@ -489,6 +619,8 @@ class CSRRegs extends Module {
   // -----------------------
   // direct read write logic
   // -----------------------
+
+  // m mode
   io.direct_read_ports.mstatus := mstatus
   io.direct_read_ports.mcause := mcause
   io.direct_read_ports.mie := mie
@@ -496,8 +628,26 @@ class CSRRegs extends Module {
   io.direct_read_ports.mtvec := mtvec
   io.direct_read_ports.mepc := mepc
   io.direct_read_ports.mtval := mtval
+  io.direct_read_ports.medeleg := medeleg
+  io.direct_read_ports.mideleg := mideleg
+
+  // s mode
+  io.direct_read_ports.scause := scause
+  io.direct_read_ports.stvec := stvec
+  io.direct_read_ports.sepc := sepc
+  io.direct_read_ports.stval := stval
   io.direct_read_ports.satp := satp
 
+  when(io.direct_write_ports.mip.valid) {
+    mip := io.direct_write_ports.mip.bits
+  }
+  when(io.direct_write_ports.mie.valid) {
+    mie := io.direct_write_ports.mie.bits
+  }
+  when(io.direct_write_ports.mstatus.valid) {
+    mstatus := io.direct_write_ports.mstatus.bits
+  }
+  // m mode trap
   when(io.direct_write_ports.mepc.valid) {
     mepc := io.direct_write_ports.mepc.bits
   }
@@ -507,18 +657,23 @@ class CSRRegs extends Module {
   when(io.direct_write_ports.mtvec.valid) {
     mtvec := io.direct_write_ports.mtvec.bits
   }
-  when(io.direct_write_ports.mip.valid) {
-    mip := io.direct_write_ports.mip.bits
-  }
-  when(io.direct_write_ports.mie.valid) {
-    mie := io.direct_write_ports.mie.bits
-  }
   when(io.direct_write_ports.mcause.valid) {
     mcause := io.direct_write_ports.mcause.bits
   }
-  when(io.direct_write_ports.mstatus.valid) {
-    mstatus := io.direct_write_ports.mstatus.bits
+  // s mode trap
+  when(io.direct_write_ports.sepc.valid) {
+    sepc := io.direct_write_ports.sepc.bits
   }
+  when(io.direct_write_ports.stval.valid) {
+    stval := io.direct_write_ports.stval.bits
+  }
+  when(io.direct_write_ports.stvec.valid) {
+    stvec := io.direct_write_ports.stvec.bits
+  }
+  when(io.direct_write_ports.scause.valid) {
+    scause := io.direct_write_ports.scause.bits
+  }
+
 }
 
 object gen_csr_regs_verilog extends App {

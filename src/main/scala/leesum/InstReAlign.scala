@@ -2,6 +2,10 @@ package leesum
 
 import chisel3._
 import chisel3.util.{Cat, Decoupled, ListLookup, MuxLookup}
+import chiseltest.ChiselScalatestTester
+import chiseltest.formal.{BoundedCheck, CVC4EngineAnnotation, Formal}
+import leesum.fronten.IFUTop
+import org.scalatest.flatspec.AnyFlatSpec
 
 // TODO: exception
 class RspPacket extends Bundle {
@@ -184,7 +188,45 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
     }
   }
 
-  io.output.bits := realign_insts
+  val vec_compress = Module(new VecCompressor(new INSTEntry, 4))
+
+  vec_compress.io.in.zipWithIndex.foreach {
+    case (x, i) => {
+      x.bits := realign_insts(i)
+      x.valid := realign_insts(i).valid && io.input.valid
+    }
+  }
+
+  // TODO: improve this
+  for (i <- 0 until 4) {
+    io.output.bits(i) := vec_compress.io.out(i).bits
+    io.output.bits(i).valid := vec_compress.io.out(i).valid
+  }
+
+  // -----------------------------
+  // formal
+  // -----------------------------
+
+  when(io.input.fire) {
+    assume(io.input.bits.pc(0) === false.B)
+  }
+
+  when(io.output.fire) {
+    assert(CheckOrder(VecInit(io.output.bits.map(_.valid))))
+  }
+
+}
+
+class InstRealignFormal
+    extends AnyFlatSpec
+    with ChiselScalatestTester
+    with Formal {
+  "InstRealign" should "pass with assumption" in {
+    verify(
+      new InstReAlign(),
+      Seq(BoundedCheck(10), CVC4EngineAnnotation)
+    )
+  }
 }
 
 object gen_verilog extends App {

@@ -57,17 +57,23 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
   io.icache_resp.nodeq()
   io.pc_in.nodeq()
 
+  def send_icache_req() = {
+    io.icache_req.valid := io.pc_in.valid
+    io.pc_in.ready := io.icache_req.ready && !io.flush
+    io.icache_req.bits.va := io.pc_in.bits
+
+    when(io.icache_req.fire) {
+      assert(!io.flush)
+      pc_f1_f2_buf := io.pc_in.bits
+      state := sWaitResp
+    }.otherwise {
+      state := sIdle
+    }
+  }
+
   switch(state) {
     is(sIdle) {
-      io.icache_req.valid := io.pc_in.valid
-      io.pc_in.ready := io.icache_req.ready && !io.flush
-      io.icache_req.bits.va := Cat(io.pc_in.bits(63, 3), 0.U(3.W))
-
-      when(io.icache_req.fire) {
-        assert(!io.flush)
-        pc_f1_f2_buf := io.pc_in.bits
-        state := sWaitResp
-      }
+      send_icache_req()
     }
     is(sWaitResp) {
       io.icache_resp.ready := true.B && !io.flush
@@ -86,8 +92,7 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
         f2_f3_buf.fetch_group := inst_realign.io.output.bits
 
         when(f2_f3_pipe.io.in.fire) {
-          // TODO: back by back
-          state := sIdle
+          send_icache_req()
         }.otherwise {
           state := sWaitPipe
         }
@@ -99,8 +104,7 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
       f2_f3_pipe.io.in.valid := true.B
       f2_f3_pipe.io.in.bits := f2_f3_buf
       when(f2_f3_pipe.io.in.fire) {
-        // TODO: back by back
-        state := sIdle
+        send_icache_req()
       }.elsewhen(io.flush) {
         state := sIdle
       }

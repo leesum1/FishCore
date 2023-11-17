@@ -63,8 +63,16 @@ class CoreDutFull(
   val mul_div = Module(new FuMulDiv(muldiv_en))
   val csr = Module(new FuCSR)
 
+  val dcache_load_arb = Module(
+    new ReqRespArbiter(2, new LoadDcacheReq, new LoadDcacheResp)
+  )
+  dcache_load_arb.io.flush := false.B
+
   val dcache = Module(new DummyDCache)
   val icache_top = Module(new ICacheTop)
+
+  dcache_load_arb.io.req_arb <> dcache.io.load_req
+  dcache_load_arb.io.resp_arb <> dcache.io.load_resp
 
   val axi_r_arb = Module(new AxiReadArbiter)
   val axi_mem = Module(
@@ -105,7 +113,6 @@ class CoreDutFull(
   axi_mem.io.axi_slave.b <> dcache.io.axi_mem.b
 
   // flush
-  axi_r_arb.io.flush := commit_stage.io.flush
   ifu.io.flush := commit_stage.io.flush
   issue_stage_rob.io.flush := commit_stage.io.flush
   rob.io.flush := commit_stage.io.flush
@@ -141,8 +148,8 @@ class CoreDutFull(
 
   // mmu <> dcache
   // TODO: not implement
-  mmmu.io.dcache_load_req.nodeq()
-  mmmu.io.dcache_load_resp.noenq()
+  mmmu.io.dcache_load_req <> dcache_load_arb.io.req_vec(1)
+  mmmu.io.dcache_load_resp <> dcache_load_arb.io.resp_vec(1)
 
   // ifu <> decode stage
 
@@ -155,9 +162,11 @@ class CoreDutFull(
     decode_stage(i).io.in.bits.is_rvc := ifu.io.inst_fifo_pop(i).bits.rvc
     decode_stage(i).io.in.bits.is_valid := ifu.io.inst_fifo_pop(i).bits.valid
     decode_stage(i).io.in.bits.inst_c := ifu.io.inst_fifo_pop(i).bits.inst_c
-    decode_stage(i).io.in.bits.exception := DontCare
-    decode_stage(i).io.in.bits.bp := DontCare
-    decode_stage(i).io.in.bits.exception.valid := false.B
+    decode_stage(i).io.in.bits.exception := ifu.io
+      .inst_fifo_pop(i)
+      .bits
+      .exception
+    decode_stage(i).io.in.bits.bp := DontCare // TODO: not implement
     decode_stage(i).io.in.bits.bp.is_taken := false.B
   }
 
@@ -231,9 +240,9 @@ class CoreDutFull(
   csr_regs.io.direct_read_ports <> monitor.io.csr_monitor
 
   // lsu <> dcache
-  lsu.io.dcache_load_req <> dcache.io.load_req
+  lsu.io.dcache_load_req <> dcache_load_arb.io.req_vec(0)
   lsu.io.dcache_store_req <> dcache.io.store_req
-  lsu.io.dcache_load_resp <> dcache.io.load_resp
+  lsu.io.dcache_load_resp <> dcache_load_arb.io.resp_vec(0)
   lsu.io.dcache_store_resp <> dcache.io.store_resp
 
 }

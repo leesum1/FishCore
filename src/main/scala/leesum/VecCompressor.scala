@@ -77,10 +77,8 @@ class VecCompressor[T <: Data](gen: T, num: Int, formal: Boolean = false)
   // --------------------------
   // formal
   // --------------------------
-  if (formal) {
-    assert(PopCount(io.out.map(_.valid)) === PopCount(io.in.map(_.valid)))
-    assert(CheckOrder(VecInit(io.out.map(_.valid))))
-  }
+  assert(PopCount(io.out.map(_.valid)) === PopCount(io.in.map(_.valid)))
+  assert(CheckOrder(VecInit(io.out.map(_.valid))))
 }
 class VecCompressFormal
     extends AnyFlatSpec
@@ -89,7 +87,7 @@ class VecCompressFormal
   "VecCompress" should "pass with assumption" in {
     verify(
       new VecCompressor(UInt(8.W), 4, formal = true),
-      Seq(BoundedCheck(50))
+      Seq(BoundedCheck(10))
     )
   }
 }

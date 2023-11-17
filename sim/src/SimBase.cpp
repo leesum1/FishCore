@@ -163,8 +163,26 @@ uint64_t SimBase::get_csr(int idx)
         return GET_CSR(top, mcause);
     case MTVAL:
         return GET_CSR(top, mtval);
+    case MEDELEG:
+        return GET_CSR(top, medeleg);
+    case MIDELEG:
+        return GET_CSR(top, mideleg);
+    case SSTATUS:
+        return GET_CSR(top, mstatus);
+    case SEPC:
+        return GET_CSR(top, sepc);
+    case SCAUSE:
+        return GET_CSR(top, scause);
+    case STVAL:
+        return GET_CSR(top, stval);
+    case STVEC:
+        return GET_CSR(top, stvec);
+    case SATP:
+        return GET_CSR(top, satp);
+
+
     default:
-        MY_ASSERT(false);
+        MY_ASSERT(false, "csr index out of range");
         return 0;
     }
 }

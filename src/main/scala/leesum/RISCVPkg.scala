@@ -1294,7 +1294,7 @@ object FuOP extends ChiselEnum {
   val Mret = Value(42.U)
   val Sret = Value(43.U)
   val FenceI = Value(44.U)
-  val SFenceVM = Value(45.U)
+  val SFenceVMA = Value(45.U)
   val CSRRW = Value(46.U)
   val CSRRS = Value(47.U)
   val CSRRC = Value(48.U)
@@ -1324,7 +1324,7 @@ object FuOP extends ChiselEnum {
     val fence_op_map = Seq(
       FuOP.Fence,
       FuOP.FenceI,
-      FuOP.SFenceVM
+      FuOP.SFenceVMA
     )
     val fence_op_vec = VecInit(fence_op_map.map(_.asUInt))
     val op_is_fence = fence_op_vec.contains(op.asUInt)
@@ -2369,6 +2369,21 @@ object RVinst {
       FuOP.Mret,
       false.B,
       InstType.I
+    ) ::: none_op),
+    // stype
+    Instructions.SType("SRET") -> (List(
+      true.B,
+      FuType.None,
+      FuOP.Sret,
+      false.B,
+      InstType.I
+    ) ::: none_op),
+    Instructions.SType("SFENCE_VMA") -> (List(
+      true.B,
+      FuType.None,
+      FuOP.SFenceVMA,
+      false.B,
+      InstType.I
     ) ::: none_op)
   )
 
@@ -2501,7 +2516,7 @@ class FetchEntry extends Bundle {
   val inst_c = UInt(16.W)
   val is_rvc = Bool()
   val is_valid = Bool()
-  val exception = new ExceptionEntry(has_valid = true)
+  val exception = new ExceptionEntry()
   val bp = new BpEntry()
 }
 

@@ -1,7 +1,7 @@
 package leesum.Cache
 
 import chisel3._
-import chisel3.util.{Decoupled, Enum, is, switch}
+import chisel3.util.{Cat, Decoupled, Enum, is, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{
   BoundedCheck,
@@ -34,6 +34,7 @@ class ICacheTop(formal: Boolean = false) extends Module {
     val mem_master = new AXIMasterIO(32, 64)
   })
 
+  // TODO: not implemented now
   val icache_hit = WireInit(false.B)
   val icache_data = RegInit(0.U(64.W))
   val icache_tag = RegInit(0.U(64.W))
@@ -67,29 +68,33 @@ class ICacheTop(formal: Boolean = false) extends Module {
   val icache_req_buf = RegInit(0.U.asTypeOf(new ICacheReq))
   val mmu_resp_buf = RegInit(0.U.asTypeOf(new TLBResp))
 
+  def rev_icache_req() = {
+    val (icache_req_fork, mmu_req_fork) =
+      StreamFork2(io.req, synchronous = true)
+
+    icache_req_fork.ready := !io.flush
+    mmu_req_fork.ready := io.mmu_req.ready && !io.flush
+    // Send mmu request
+    io.mmu_req.valid := mmu_req_fork.valid
+    io.mmu_req.bits.req_type := TLBReqType.Fetch
+    io.mmu_req.bits.vaddr := io.req.bits.va
+    io.mmu_req.bits.size := DcacheConst.SIZE8
+
+    when(io.req.fire) {
+      icache_req_buf := io.req.bits
+      state := sWaitTLBResp
+      // TODO: send read req of icache tag and data, resp at the next cycle
+      icache_data := 1122334.U // set a random value
+      icache_tag := 5566778.U // set a random value
+
+    }.otherwise {
+      state := sIdle
+    }
+  }
+
   switch(state) {
     is(sIdle) {
-      val (icache_req_fork, mmu_req_fork) =
-        StreamFork2(io.req, synchronous = true)
-
-      icache_req_fork.ready := !io.flush
-      mmu_req_fork.ready := io.mmu_req.ready && !io.flush
-      // Send mmu request
-      io.mmu_req.valid := mmu_req_fork.valid
-      io.mmu_req.bits.req_type := TLBReqType.Fetch
-      io.mmu_req.bits.vaddr := io.req.bits.va
-      io.mmu_req.bits.size := DcacheConst.SIZE8
-
-      when(io.req.fire) {
-        icache_req_buf := io.req.bits
-        state := sWaitTLBResp
-        // TODO: send read req of icache tag and data, resp at the next cycle
-        icache_data := 1122334.U // set a random value
-        icache_tag := 5566778.U // set a random value
-
-      }.otherwise {
-        state := sIdle
-      }
+      rev_icache_req()
     }
     is(sWaitTLBResp) {
       io.mmu_resp.ready := true.B && !io.flush
@@ -97,7 +102,10 @@ class ICacheTop(formal: Boolean = false) extends Module {
 
       when(io.mmu_resp.fire) {
         assert(io.mmu_resp.bits.req_type === TLBReqType.Fetch)
-        icache_hit := io.mmu_resp.bits.paddr === icache_tag
+        icache_hit := Cat(
+          io.mmu_resp.bits.paddr(63, 3),
+          0.U(3.W)
+        ) === icache_tag
         mmu_resp_buf := io.mmu_resp.bits
         // wait for mmu response
         // at the same time, icache tag and data are ready, compare paddr with tag to check if hit
@@ -116,8 +124,12 @@ class ICacheTop(formal: Boolean = false) extends Module {
           }
         }.otherwise {
           // not hit, send refill request
-          // TODO: send refill request at the same cycle?
-          state := sSendRefillReq
+          when(io.mmu_resp.bits.exception.valid) {
+            state := sSendICacheResp
+          }.otherwise {
+            // TODO: send refill request at the same cycle?
+            state := sSendRefillReq
+          }
         }
       }.elsewhen(io.flush) {
         state := sIdle
@@ -126,10 +138,10 @@ class ICacheTop(formal: Boolean = false) extends Module {
 
     is(sSendRefillReq) {
       assert(mmu_resp_buf.req_type === TLBReqType.Fetch)
-      assert(CheckAligned(mmu_resp_buf.paddr, DcacheConst.SIZE8))
+      assert(!mmu_resp_buf.exception.valid)
 
       io.mem_master.ar.valid := true.B
-      io.mem_master.ar.bits.addr := mmu_resp_buf.paddr
+      io.mem_master.ar.bits.addr := Cat(mmu_resp_buf.paddr(63, 3), 0.U(3.W))
       io.mem_master.ar.bits.size := DcacheConst.SIZE8
       io.mem_master.ar.bits.burst := 0.U
       io.mem_master.ar.bits.len := 0.U
@@ -147,13 +159,13 @@ class ICacheTop(formal: Boolean = false) extends Module {
     }
     is(sWaitRefillResp) {
       assert(mmu_resp_buf.req_type === TLBReqType.Fetch)
-      assert(CheckAligned(mmu_resp_buf.paddr, DcacheConst.SIZE8))
 
       io.mem_master.r.ready := true.B
       when(io.mem_master.r.fire && !io.flush) {
         // success, no flush
+        // TODO: not implemented now
         icache_data := io.mem_master.r.bits.data
-        icache_tag := mmu_resp_buf.paddr
+        icache_tag := Cat(mmu_resp_buf.paddr(63, 3), 0.U(3.W))
         // TODO: not implemented burst now
         assert(io.mem_master.r.bits.last === true.B)
 
@@ -161,24 +173,33 @@ class ICacheTop(formal: Boolean = false) extends Module {
           state := sSendICacheResp
         }
       }.elsewhen(
-        io.mem_master.r.fire && !io.mem_master.r.bits.last && io.flush
+        io.mem_master.r.fire && io.mem_master.r.bits.last && io.flush
       ) {
-        // encounter flush, but not last, go sFlushRefillResp wait for last
+        // encounter flush, and is last, go sIdle
+        state := sIdle
+      }.elsewhen(
+        io.flush
+      ) {
+        // handshake ok : encounter flush, but not last, go sFlushRefillResp wait for last
+        // handshake not ok : encounter flush, but still wait for handshake, go sFlushRefillReq
         state := sFlushRefillResp
       }
     }
 
     is(sSendICacheResp) {
-      icache_hit := mmu_resp_buf.paddr === icache_tag
-      assert(icache_hit)
+      icache_hit := Cat(mmu_resp_buf.paddr(63, 3), 0.U(3.W)) === icache_tag
+
+      assert(
+        icache_hit || mmu_resp_buf.exception.valid,
+        "only send resp on icache_hit or page exception"
+      )
 
       io.resp.valid := true.B
       io.resp.bits.payload := icache_data
       io.resp.bits.exception := mmu_resp_buf.exception
       when(io.resp.fire && !io.flush) {
         assert(!io.flush)
-        // TODO: back by back
-        state := sIdle
+        rev_icache_req()
       }.elsewhen(io.flush) {
         // cancel the response
         state := sIdle
@@ -187,9 +208,8 @@ class ICacheTop(formal: Boolean = false) extends Module {
 
     is(sFlushRefillReq) {
       assert(mmu_resp_buf.req_type === TLBReqType.Fetch)
-      assert(CheckAligned(mmu_resp_buf.paddr, DcacheConst.SIZE8))
       io.mem_master.ar.valid := true.B
-      io.mem_master.ar.bits.addr := mmu_resp_buf.paddr
+      io.mem_master.ar.bits.addr := Cat(mmu_resp_buf.paddr(63, 3), 0.U(3.W))
       io.mem_master.ar.bits.size := DcacheConst.SIZE8
       io.mem_master.ar.bits.burst := 0.U
       io.mem_master.ar.bits.len := 0.U
@@ -200,9 +220,9 @@ class ICacheTop(formal: Boolean = false) extends Module {
     }
     is(sFlushRefillResp) {
       assert(mmu_resp_buf.req_type === TLBReqType.Fetch)
-      assert(CheckAligned(mmu_resp_buf.paddr, DcacheConst.SIZE8))
       io.mem_master.r.ready := true.B
       when(io.mem_master.r.fire) {
+        // TODO: not implemented burst now
         assert(io.mem_master.r.bits.last === true.B)
         when(io.mem_master.r.bits.last) {
           state := sIdle
@@ -226,7 +246,6 @@ class ICacheTop(formal: Boolean = false) extends Module {
 
   when(io.mmu_resp.fire) {
     assume(io.mmu_resp.bits.req_type === TLBReqType.Fetch)
-    assume(CheckAligned(io.mmu_resp.bits.paddr, DcacheConst.SIZE8))
   }
 
   when(io.mem_master.r.fire) {

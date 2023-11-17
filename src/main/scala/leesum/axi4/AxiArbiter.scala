@@ -5,7 +5,6 @@ import leesum.ReqRespArbiter
 class AxiReadArbiter extends Module {
 
   val io = IO(new Bundle {
-    val flush = Input(Bool())
     val in = Vec(2, new AXISlaveIO(32, 64))
     val out = new AXIMasterIO(32, 64)
   })
@@ -26,7 +25,7 @@ class AxiReadArbiter extends Module {
     new ReqRespArbiter(2, new AXIAddressChannel(32), new AXIReadDataChannel(64))
   )
 
-  axi_r_arb.io.flush := io.flush
+  axi_r_arb.io.flush := false.B
   axi_r_arb.io.req_vec <> io.in.map(_.ar)
   axi_r_arb.io.resp_vec <> io.in.map(_.r)
   io.out.ar <> axi_r_arb.io.req_arb

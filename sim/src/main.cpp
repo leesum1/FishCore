@@ -100,10 +100,18 @@ int main(int argc, char** argv)
     uint64_t commit_num = 0;
     uint8_t no_commit_num = 0;
     uint64_t to_host_check_freq = 0;
+    enum SimState_t
+    {
+        sim_run,
+        sim_stop,
+        sim_abort,
+        sim_finish
+    };
+    SimState_t state = sim_run;
 
-    bool sim_abort = false;
+
     auto start_time = std::chrono::utc_clock::now();
-    while (!sim_base.finished() && clk_num < max_cycles)
+    while (!sim_base.finished() && clk_num < max_cycles && state == sim_run)
     {
         sim_base.step([&](auto top) -> bool
         {
@@ -113,17 +121,26 @@ int main(int argc, char** argv)
             // stop run
             if (no_commit_num > 150)
             {
-                return true;
+                std::cout << "no commit for 150 cycles, stop run" << std::endl;
+                state = sim_abort;
             }
             // memory
             uint64_t rdata = device_manager.update_outputs();
-            device_manager.update_inputs(
+            const bool device_sucess = device_manager.update_inputs(
                 top->io_mem_port_i_raddr, top->io_mem_port_i_rd,
                 {
                     top->io_mem_port_i_waddr, top->io_mem_port_i_wdata,
                     top->io_mem_port_i_wstrb
                 },
                 top->io_mem_port_i_we);
+
+            if (!device_sucess)
+            {
+                std::cout << std::format("device error at pc: 0x{:016x}\n",
+                                         sim_base.get_pc());
+                state = sim_abort;
+            }
+
             top->io_mem_port_o_rdata = rdata;
 
             // diff test
@@ -136,18 +153,8 @@ int main(int argc, char** argv)
                 {
                     auto cause = top->io_difftest_bits_exception_cause;
 
-                    if (auto valid_cause = std::array{0, 2, 3, 4, 6, 8, 11}; std::ranges::find(valid_cause, cause) ==
-                        valid_cause.end())
-                    {
-                        std::cout << std::format("exception cause 0x{:x},pc 0x{:016x}\n",
-                                                 cause, sim_base.get_pc());
-                        sim_abort = true;
-                        return true;
-                    }
-                    if (cause == 3 && am_en)
-                    {
-                        return true;
-                    }
+                    std::cout << std::format("exception cause 0x{:x},pc 0x{:016x}\n",
+                                             cause, sim_base.get_pc());
                 }
                 if (difftest_en & diff_ref.has_value())
                 {
@@ -176,12 +183,12 @@ int main(int argc, char** argv)
 
                         if (mismatch)
                         {
+                            std::cout << "DiffTest mismatch" << std::endl;
                             std::cout << std::format("pc mismatch: ref: 0x{:016x}, dut: "
                                                      "0x{:016x}\n\n",
                                                      diff_ref->get_pc(), sim_base.get_pc());
-                            sim_abort = true;
+                            state = sim_abort;
                         }
-                        return mismatch;
                     }
                 }
                 return false;
@@ -190,15 +197,14 @@ int main(int argc, char** argv)
             // environment
             if (to_host_check_freq > 1024)
             {
-                bool to_host_ret = false;
                 to_host_check_freq = 0;
-                sim_mem.check_to_host([&] { to_host_ret = true; });
-                if (to_host_ret)
+                auto tohost_pc = sim_base.get_pc();
+                sim_mem.check_to_host([&]
                 {
-                    std::cout << std::format("to host at pc: 0x{:016x}\n",
-                                             sim_base.get_pc());
-                    return true;
-                }
+                    state = sim_stop;
+                    std::cout << std::format("Write tohost at pc: 0x{:016x}\n",
+                                             tohost_pc);
+                });
             }
 
             return false;
@@ -225,7 +231,7 @@ int main(int argc, char** argv)
     bool success = !am_en || sim_base.get_reg(10) == 0;
 
     // zero means success
-    bool return_code = !(success & !sim_abort);
+    bool return_code = !(success && state != sim_abort);
 
     return return_code;
 }

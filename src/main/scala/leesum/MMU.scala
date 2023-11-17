@@ -3,13 +3,7 @@ package leesum
 import chisel3._
 import chisel3.util.{Cat, Decoupled, DecoupledIO, Enum, Valid, is, switch}
 import chiseltest.ChiselScalatestTester
-import chiseltest.formal.{
-  BoundedCheck,
-  CVC4EngineAnnotation,
-  Formal,
-  past,
-  stable
-}
+import chiseltest.formal._
 import org.scalatest.flatspec.AnyFlatSpec
 
 class TLBEntry extends Bundle {
@@ -56,6 +50,8 @@ class MMU(formal: Boolean = false) extends Module {
     val flush = Input(Bool())
   })
 
+  val mstatus_field = new MstatusFiled(io.mstatus)
+
   val fetch_effective_info_buf = RegInit(0.U.asTypeOf(new MMUEffectiveInfo))
   val lsu_effective_info_buf = RegInit(0.U.asTypeOf(new MMUEffectiveInfo))
 
@@ -65,28 +61,22 @@ class MMU(formal: Boolean = false) extends Module {
     fetch_effective_info_buf.satp := io.satp
   }
   when(io.lsu_req.fire) {
-    lsu_effective_info_buf.mmu_privilege := io.cur_privilege
+    // When MPRV=1, load and store memory addresses are translated and protected, and endianness is applied, as though
+    // the current privilege mode were set to MPP. Instruction address-translation and protection are
+    // unaffected by the setting of MPRV. MPRV is read-only 0 if U-mode is not supported.
+    lsu_effective_info_buf.mmu_privilege := Mux(
+      mstatus_field.mprv,
+      mstatus_field.mpp,
+      io.cur_privilege
+    )
     lsu_effective_info_buf.mstatus := io.mstatus
     lsu_effective_info_buf.satp := io.satp
   }
 
-  // When MPRV=1, load and store memory addresses are translated and protected, and endianness is applied, as though
-  // the current privilege mode were set to MPP. Instruction address-translation and protection are
-  // unaffected by the setting of MPRV. MPRV is read-only 0 if U-mode is not supported.
-
-  val fetch_effective_privilege = WireInit(
-    fetch_effective_info_buf.mmu_privilege
-  )
-  val lsu_effective_privilege =
-    Mux(
-      lsu_effective_info_buf.mstatus_field.mprv,
-      lsu_effective_info_buf.mstatus_field.mpp,
-      lsu_effective_info_buf.mmu_privilege
-    )
   val fetch_mmu_en =
-    (!fetch_effective_info_buf.satp_field.mode_is_bare) && !(fetch_effective_privilege === Privilegelevel.M.U)
+    (!fetch_effective_info_buf.satp_field.mode_is_bare) && !(fetch_effective_info_buf.mmu_privilege === Privilegelevel.M.U)
   val lsu_mmu_en =
-    (!lsu_effective_info_buf.satp_field.mode_is_bare) && !(lsu_effective_privilege === Privilegelevel.M.U)
+    (!lsu_effective_info_buf.satp_field.mode_is_bare) && !(lsu_effective_info_buf.mmu_privilege === Privilegelevel.M.U)
 
   def get_paddr(pte: UInt, va: UInt, pg_size: SV39PageSize.Type): UInt = {
     val pte_tmp = new SV39PTE(pte)
@@ -159,8 +149,9 @@ class MMU(formal: Boolean = false) extends Module {
 
   ptw_arb.io.flush := io.flush
   ptw_arb.io.req_vec(0) <> fetch_ptw_req
-  ptw_arb.io.req_vec(1) <> lsu_ptw_req
   ptw_arb.io.resp_vec(0) <> fetch_ptw_resp
+
+  ptw_arb.io.req_vec(1) <> lsu_ptw_req
   ptw_arb.io.resp_vec(1) <> lsu_ptw_resp
 
   lsu_ptw_req.noenq()
@@ -175,6 +166,7 @@ class MMU(formal: Boolean = false) extends Module {
   def send_ptw_req(
       ptw_req: DecoupledIO[PTWReq],
       req_buf: TLBReq,
+      info: MMUEffectiveInfo,
       state: UInt,
       flush: Bool
   ) = {
@@ -182,6 +174,7 @@ class MMU(formal: Boolean = false) extends Module {
     ptw_req.valid := true.B
     ptw_req.bits.req_type := req_buf.req_type
     ptw_req.bits.vaddr := req_buf.vaddr
+    ptw_req.bits.info := info
     when(ptw_req.fire && !flush) {
       state := sWaitPTWResp
     }.elsewhen(flush) {
@@ -208,6 +201,10 @@ class MMU(formal: Boolean = false) extends Module {
     }
   }
 
+  // ----------------------------
+  // ITLB
+  // ----------------------------
+
   switch(itlb_state) {
     is(sIdle) {
       io.fetch_req.ready := true.B && !io.flush
@@ -231,6 +228,7 @@ class MMU(formal: Boolean = false) extends Module {
           send_ptw_req(
             ptw_req = fetch_ptw_req,
             req_buf = fetch_req_buf,
+            fetch_effective_info_buf,
             state = itlb_state,
             flush = io.flush
           )
@@ -303,6 +301,7 @@ class MMU(formal: Boolean = false) extends Module {
           send_ptw_req(
             ptw_req = lsu_ptw_req,
             req_buf = lsu_req_buf,
+            lsu_effective_info_buf,
             state = dtlb_state,
             flush = io.flush
           )
