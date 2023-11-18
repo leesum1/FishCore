@@ -93,6 +93,7 @@ class CSRDirectReadPorts extends Bundle {
   val mtvec = UInt(64.W)
   val mepc = UInt(64.W)
   val mtval = UInt(64.W)
+  val mscratch = UInt(64.W)
   val medeleg = UInt(64.W)
   val mideleg = UInt(64.W)
   // s mode
@@ -100,6 +101,7 @@ class CSRDirectReadPorts extends Bundle {
   val stvec = UInt(64.W)
   val sepc = UInt(64.W)
   val stval = UInt(64.W)
+  val sscratch = UInt(64.W)
 
   val satp = UInt(64.W)
 }
@@ -630,6 +632,7 @@ class CSRRegs extends Module {
   io.direct_read_ports.mtval := mtval
   io.direct_read_ports.medeleg := medeleg
   io.direct_read_ports.mideleg := mideleg
+  io.direct_read_ports.mscratch := mscratch
 
   // s mode
   io.direct_read_ports.scause := scause
@@ -637,6 +640,7 @@ class CSRRegs extends Module {
   io.direct_read_ports.sepc := sepc
   io.direct_read_ports.stval := stval
   io.direct_read_ports.satp := satp
+  io.direct_read_ports.sscratch := sscratch
 
   when(io.direct_write_ports.mip.valid) {
     mip := io.direct_write_ports.mip.bits

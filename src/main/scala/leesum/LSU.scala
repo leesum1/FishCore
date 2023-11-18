@@ -83,7 +83,7 @@ class LSU(
   agu.io.out.store_pipe <> store_queue.io.in
   agu.io.store_bypass <> store_queue.io.store_bypass
   // agu <> amo queue
-  agu.io.out.amo_pipe <> amo_queue.io.in
+  agu.io.out.atomic_pipe <> amo_queue.io.in
 
   // agu <> write-back
   io.agu_writeback <> agu.io.out.agu_pipe

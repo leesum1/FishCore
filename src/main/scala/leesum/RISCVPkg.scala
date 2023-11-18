@@ -1385,7 +1385,7 @@ object FuOP extends ChiselEnum {
     op_is_store
   }
 
-  def is_amo(op: FuOP.Type): Bool = {
+  def is_atomic(op: FuOP.Type): Bool = {
     val amo_op = Seq(
       FuOP.LsuAMOADD,
       FuOP.LsuAMOAND,
@@ -1418,7 +1418,7 @@ object FuOP extends ChiselEnum {
   }
 
   def is_lsu(op: FuOP.Type): Bool = {
-    is_store(op) || is_load(op) || is_amo(op)
+    is_store(op) || is_load(op) || is_atomic(op)
   }
 
   def lsu_need_sign_ext(op: FuOP.Type): Bool = {
@@ -2428,7 +2428,8 @@ object ExceptionCause extends ChiselEnum {
       Seq(
         TLBReqType.Fetch -> fetch_access,
         TLBReqType.LOAD -> load_access,
-        TLBReqType.STORE -> store_access
+        TLBReqType.STORE -> store_access,
+        TLBReqType.AMO -> store_access
       )
     }
   }
@@ -2438,7 +2439,8 @@ object ExceptionCause extends ChiselEnum {
       Seq(
         TLBReqType.Fetch -> fetch_page_fault,
         TLBReqType.LOAD -> load_page_fault,
-        TLBReqType.STORE -> store_page_fault
+        TLBReqType.STORE -> store_page_fault,
+        TLBReqType.AMO -> store_page_fault
       )
     }
   }
@@ -2448,7 +2450,8 @@ object ExceptionCause extends ChiselEnum {
       Seq(
         TLBReqType.Fetch -> misaligned_fetch,
         TLBReqType.LOAD -> misaligned_load,
-        TLBReqType.STORE -> misaligned_store
+        TLBReqType.STORE -> misaligned_store,
+        TLBReqType.AMO -> misaligned_store
       )
     }
   }

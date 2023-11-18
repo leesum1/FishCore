@@ -265,7 +265,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     // SRET should also raise an illegal instruction exception when TSR=1 in mstatus
     when(sstatus.tsr) {
       // TODO: raise an illegal instruction exception
-      printf("raise an illegal instruction exception")
+      assert(false.B, "raise an illegal instruction exception")
     }
 
     // supposing xPP holds the value y, 0: user mode 1: s mode
@@ -329,7 +329,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   ): Unit = {
     assert(entry.exception.valid === false.B)
     assert(FuOP.is_lsu(entry.fu_op), "fu_op must be lsu")
-    when(FuOP.is_amo(entry.fu_op)) {
+    when(FuOP.is_atomic(entry.fu_op)) {
       assert(entry.complete === true.B, "load must be complete")
       gpr_commit_port.write(entry.rd_addr, entry.result)
       ack := true.B
@@ -392,7 +392,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
               io.store_commit,
               pop_ack.head
             )
-          }.elsewhen(FuOP.is_amo(rob_data_seq.head.fu_op)) {
+          }.elsewhen(FuOP.is_atomic(rob_data_seq.head.fu_op)) {
             retire_amo(
               rob_data_seq.head,
               io.gpr_commit_ports.head,
@@ -440,7 +440,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
         ) {
           io.mmio_commit.valid := true.B
           io.mmio_commit.bits := true.B
-        }.elsewhen(FuOP.is_amo(rob_data_seq.head.fu_op)) {
+        }.elsewhen(FuOP.is_atomic(rob_data_seq.head.fu_op)) {
           io.amo_commit.valid := true.B
           io.amo_commit.bits := true.B
         }

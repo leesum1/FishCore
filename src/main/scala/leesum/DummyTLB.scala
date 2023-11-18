@@ -12,6 +12,16 @@ object TLBReqType extends ChiselEnum {
   val STORE = Value(1.U)
   val Fetch = Value(2.U)
   val AMO = Value(3.U)
+  val LR = Value(4.U)
+  val SC = Value(5.U)
+
+  def need_store(req_type: TLBReqType.Type): Bool = {
+    req_type === STORE || req_type === AMO || req_type === SC
+  }
+
+  def is_atomic(req_type: TLBReqType.Type): Bool = {
+    req_type === LR || req_type === AMO || req_type === SC
+  }
 }
 
 class TLBReq extends Bundle {

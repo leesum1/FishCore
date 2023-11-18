@@ -256,7 +256,9 @@ class PTW(formal: Boolean = false) extends Module {
               // 7. If pte.a = 0, or if the original memory access is a store and pte.d = 0, either raise a page-fault
               // exception corresponding to the original access type
               val pte_page_fault_cond7 =
-                !pte.a || (!pte.d && ptw_req_buf.req_type === TLBReqType.STORE)
+                !pte.a || (!pte.d && TLBReqType.need_store(
+                  ptw_req_buf.req_type
+                ))
 
               when(superpage_misaligned | pte_page_fault_cond7) {
                 send_page_fault(ptw_req_buf)

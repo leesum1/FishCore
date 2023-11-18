@@ -167,6 +167,8 @@ uint64_t SimBase::get_csr(int idx)
         return GET_CSR(top, medeleg);
     case MIDELEG:
         return GET_CSR(top, mideleg);
+    case MSCRATCH:
+        return GET_CSR(top, mscratch);
     case SSTATUS:
         return GET_CSR(top, mstatus);
     case SEPC:
@@ -179,6 +181,8 @@ uint64_t SimBase::get_csr(int idx)
         return GET_CSR(top, stvec);
     case SATP:
         return GET_CSR(top, satp);
+    case SSCRATCH:
+        return GET_CSR(top, sscratch);
 
 
     default:

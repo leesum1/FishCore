@@ -18,4 +18,5 @@
 #define STVEC  0x105
 #define SEPC 0x141
 #define SATP  0x180
+#define SSCRATCH  0x140
 

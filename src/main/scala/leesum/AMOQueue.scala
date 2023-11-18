@@ -2,7 +2,7 @@ package leesum
 
 import chisel3._
 import chisel3.util.{Decoupled, Enum, MuxLookup, is, switch}
-object AMOOP extends ChiselEnum {
+object AtomicOP extends ChiselEnum {
   val None = Value(0.U)
   val ADD = Value(1.U)
   val AND = Value(2.U)
@@ -16,40 +16,40 @@ object AMOOP extends ChiselEnum {
   val LR = Value(10.U)
   val SC = Value(11.U)
 
-  def isCmp(amo_op: AMOOP.Type): Bool = {
-    amo_op === AMOOP.MAX || amo_op === AMOOP.MAXU || amo_op === AMOOP.MIN || amo_op === AMOOP.MINU
+  def isCmp(amo_op: AtomicOP.Type): Bool = {
+    amo_op === AtomicOP.MAX || amo_op === AtomicOP.MAXU || amo_op === AtomicOP.MIN || amo_op === AtomicOP.MINU
   }
 
-  def FuOP2AMOOP(fu_op: FuOP.Type): AMOOP.Type = {
-    val amoop = Wire(AMOOP())
-    amoop := MuxLookup(fu_op.asUInt, AMOOP.None)(
+  def FuOP2AtomicOP(fu_op: FuOP.Type): AtomicOP.Type = {
+    val amoop = Wire(AtomicOP())
+    amoop := MuxLookup(fu_op.asUInt, AtomicOP.None)(
       Seq(
-        FuOP.LsuAMOADD.asUInt -> AMOOP.ADD,
-        FuOP.LsuAMOAND.asUInt -> AMOOP.AND,
-        FuOP.LsuAMOMAX.asUInt -> AMOOP.MAX,
-        FuOP.LsuAMOMAXU.asUInt -> AMOOP.MAXU,
-        FuOP.LsuAMOMIN.asUInt -> AMOOP.MIN,
-        FuOP.LsuAMOMINU.asUInt -> AMOOP.MINU,
-        FuOP.LsuAMOOR.asUInt -> AMOOP.OR,
-        FuOP.LsuAMOSWAP.asUInt -> AMOOP.SWAP,
-        FuOP.LsuAMOXOR.asUInt -> AMOOP.XOR,
-        FuOP.LsuLR.asUInt -> AMOOP.LR,
-        FuOP.LsuSC.asUInt -> AMOOP.SC
+        FuOP.LsuAMOADD.asUInt -> AtomicOP.ADD,
+        FuOP.LsuAMOAND.asUInt -> AtomicOP.AND,
+        FuOP.LsuAMOMAX.asUInt -> AtomicOP.MAX,
+        FuOP.LsuAMOMAXU.asUInt -> AtomicOP.MAXU,
+        FuOP.LsuAMOMIN.asUInt -> AtomicOP.MIN,
+        FuOP.LsuAMOMINU.asUInt -> AtomicOP.MINU,
+        FuOP.LsuAMOOR.asUInt -> AtomicOP.OR,
+        FuOP.LsuAMOSWAP.asUInt -> AtomicOP.SWAP,
+        FuOP.LsuAMOXOR.asUInt -> AtomicOP.XOR,
+        FuOP.LsuLR.asUInt -> AtomicOP.LR,
+        FuOP.LsuSC.asUInt -> AtomicOP.SC
       )
     )
     amoop
   }
 }
-class AMOQueueIn extends Bundle {
+class AtomicQueueIn extends Bundle {
   val rs1_data = UInt(64.W)
   val rs2_data = UInt(64.W)
   val is_rv32 = Bool()
-  val amo_op = AMOOP()
+  val atomic_op = AtomicOP()
   val trans_id = UInt(32.W)
 }
 class AMOQueue extends Module {
   val io = IO(new Bundle {
-    val in = Flipped(Decoupled(new AMOQueueIn))
+    val in = Flipped(Decoupled(new AtomicQueueIn))
     val flush = Input(Bool())
     val store_queue_empty = Input(Bool())
     val amo_commit = Flipped(Decoupled(Bool()))
@@ -70,8 +70,8 @@ class AMOQueue extends Module {
 
   val lr_sc_reservation = RegInit(0.U(64.W))
 
-  val is_sc = amo_queue.bits.amo_op === AMOOP.SC
-  val is_lr = amo_queue.bits.amo_op === AMOOP.LR
+  val is_sc = amo_queue.bits.atomic_op === AtomicOP.SC
+  val is_lr = amo_queue.bits.atomic_op === AtomicOP.LR
   val reservation_ok =
     is_sc && lr_sc_reservation === amo_queue.bits.rs1_data
 
@@ -83,10 +83,10 @@ class AMOQueue extends Module {
   io.store_resp.nodeq()
   io.amo_writeback.noenq()
 
-  def get_amo_result(amo_req: AMOQueueIn, mem_data: UInt) = {
+  def get_amo_result(amo_req: AtomicQueueIn, mem_data: UInt) = {
     val result = Wire(UInt(64.W))
     val adder = Module(new AluAdder())
-    adder.io.sub_req := AMOOP.isCmp(amo_req.amo_op)
+    adder.io.sub_req := AtomicOP.isCmp(amo_req.atomic_op)
     adder.io.adder_in1 := Mux(
       amo_req.is_rv32,
       SignExt(mem_data(31, 0), 32, 64, true.B),
@@ -98,18 +98,18 @@ class AMOQueue extends Module {
       amo_req.rs2_data
     )
 
-    result := MuxLookup(amo_req.amo_op.asUInt, 0.U) {
+    result := MuxLookup(amo_req.atomic_op.asUInt, 0.U) {
       Seq(
-        AMOOP.ADD.asUInt -> adder.io.adder_out,
-        AMOOP.AND.asUInt -> (mem_data & amo_req.rs2_data),
-        AMOOP.OR.asUInt -> (mem_data | amo_req.rs2_data),
-        AMOOP.XOR.asUInt -> (mem_data ^ amo_req.rs2_data),
-        AMOOP.SWAP.asUInt -> amo_req.rs2_data,
-        AMOOP.MAX.asUInt -> Mux(adder.io.slt, amo_req.rs2_data, mem_data),
-        AMOOP.MAXU.asUInt -> Mux(adder.io.sltu, amo_req.rs2_data, mem_data),
-        AMOOP.MIN.asUInt -> Mux(adder.io.slt, mem_data, amo_req.rs2_data),
-        AMOOP.MINU.asUInt -> Mux(adder.io.sltu, mem_data, amo_req.rs2_data),
-        AMOOP.SC.asUInt -> mem_data
+        AtomicOP.ADD.asUInt -> adder.io.adder_out,
+        AtomicOP.AND.asUInt -> (mem_data & amo_req.rs2_data),
+        AtomicOP.OR.asUInt -> (mem_data | amo_req.rs2_data),
+        AtomicOP.XOR.asUInt -> (mem_data ^ amo_req.rs2_data),
+        AtomicOP.SWAP.asUInt -> amo_req.rs2_data,
+        AtomicOP.MAX.asUInt -> Mux(adder.io.slt, amo_req.rs2_data, mem_data),
+        AtomicOP.MAXU.asUInt -> Mux(adder.io.sltu, amo_req.rs2_data, mem_data),
+        AtomicOP.MIN.asUInt -> Mux(adder.io.slt, mem_data, amo_req.rs2_data),
+        AtomicOP.MINU.asUInt -> Mux(adder.io.sltu, mem_data, amo_req.rs2_data),
+        AtomicOP.SC.asUInt -> mem_data
       )
     }
 
@@ -134,7 +134,7 @@ class AMOQueue extends Module {
       ) // 4 or 8 bytes
       when(io.load_req.fire) {
         // LOAD RESERVATION
-        when(amo_queue.bits.amo_op === AMOOP.LR) {
+        when(amo_queue.bits.atomic_op === AtomicOP.LR) {
           lr_sc_reservation := amo_queue.bits.rs1_data
         }
         state := sWaitLoadResp
@@ -219,7 +219,7 @@ class AMOQueue extends Module {
     is(sWaitLoadResp) {
       io.load_resp.ready := true.B
       when(io.load_resp.fire) {
-        when(amo_queue.bits.amo_op === AMOOP.LR) {
+        when(amo_queue.bits.atomic_op === AtomicOP.LR) {
           send_amo_writeback(io.load_resp.bits.data)
         }.otherwise {
           // the lsb of rdata is in the lsb of load_shifted_rdata

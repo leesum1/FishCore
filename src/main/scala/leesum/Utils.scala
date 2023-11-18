@@ -41,6 +41,7 @@ object GenVerilogHelper {
   }
 }
 
+// TODO: add comments
 object CheckUnique {
   def apply[T <: Data](vec: Vec[T], exclude: T): Bool = {
     val conflict = vec

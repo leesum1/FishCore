@@ -5,6 +5,7 @@ import chisel3.util.{
   Enum,
   MuxCase,
   MuxLookup,
+  PopCount,
   PriorityMux,
   Queue,
   is,
@@ -19,9 +20,12 @@ class AGUReq extends Bundle {
   val store_data = UInt(64.W)
   val trans_id = UInt(32.W)
   val is_store = Bool()
-  val amo_op = AMOOP()
+  val is_load = Bool()
+  val atomic_op = AtomicOP()
   // need by load
   val sign_ext = Bool()
+
+  def is_atomic = atomic_op =/= AtomicOP.None
 }
 
 class AGUWriteBack extends Bundle {
@@ -34,7 +38,7 @@ class AGUWriteBack extends Bundle {
 class AGUResp extends Bundle {
   val load_pipe = Decoupled(new LoadQueueIn())
   val store_pipe = Decoupled(new StoreQueueIn())
-  val amo_pipe = Decoupled(new AMOQueueIn())
+  val atomic_pipe = Decoupled(new AtomicQueueIn())
   val agu_pipe = Decoupled(new AGUWriteBack())
 }
 
@@ -88,18 +92,17 @@ class AGU(
   io.out.agu_pipe.noenq()
   io.out.store_pipe.noenq()
   io.out.load_pipe.noenq()
-  io.out.amo_pipe.noenq()
+  io.out.atomic_pipe.noenq()
   io.store_bypass.valid := false.B
   io.store_bypass.paddr := DontCare
 
   /** when tlb ready, accept the request from agu
     */
   def send_tlb_req(): Unit = {
-    val is_amo = agu_req.bits.amo_op =/= AMOOP.None
 
     assert(
-      !(agu_req.bits.is_store && is_amo),
-      "send_tlb_req error, is_store and is_amo should not be true at the same time"
+      !(agu_req.bits.is_store & agu_req.bits.is_atomic & agu_req.bits.is_load),
+      "send_tlb_req error, should not be true at the same time"
     )
 
     agu_req.ready := io.tlb_req.ready && !io.flush
@@ -110,7 +113,12 @@ class AGU(
       TLBReqType.LOAD,
       Seq(
         agu_req.bits.is_store -> TLBReqType.STORE,
-        (agu_req.bits.amo_op =/= AMOOP.None) -> TLBReqType.AMO
+        agu_req.bits.is_load -> TLBReqType.LOAD,
+        (agu_req.bits.atomic_op === AtomicOP.SC) -> TLBReqType.SC,
+        (agu_req.bits.atomic_op === AtomicOP.LR) -> TLBReqType.LR,
+        (
+          agu_req.bits.atomic_op =/= AtomicOP.None
+        ) -> TLBReqType.AMO
       )
     )
 
@@ -202,7 +210,7 @@ class AGU(
     // when current load addr conflict with uncommitted store addr, and the store is a mmio operation
     // then stall the current load.
     val need_stall =
-      io.store_bypass.data.valid && io.store_bypass.data.is_mmio || !io.out.amo_pipe.ready
+      io.store_bypass.data.valid && io.store_bypass.data.is_mmio || !io.out.atomic_pipe.ready
     val is_mmio = check_mmio(tlb_rsp)
 
     val load_fork_in = Wire(Decoupled(Bool()))
@@ -252,7 +260,7 @@ class AGU(
     // when current store addr conflict with uncommitted store addr.
     // than stall dispatch the current store
 
-    val need_stall = io.store_bypass.data.valid || !io.out.amo_pipe.ready
+    val need_stall = io.store_bypass.data.valid || !io.out.atomic_pipe.ready
     val is_mmio = check_mmio(tlb_rsp)
 
     val store_fork_in = Wire(Decoupled(Bool()))
@@ -300,26 +308,26 @@ class AGU(
     }
   }
 
-  def dispatch_to_amo(tlb_resp: TLBResp) = {
-    io.out.amo_pipe.valid := true.B
-    io.out.amo_pipe.bits.trans_id := agu_req_buf.trans_id
-    io.out.amo_pipe.bits.rs1_data := agu_req_buf.op_a
-    io.out.amo_pipe.bits.rs2_data := agu_req_buf.store_data // store_data is rs2_data
-    io.out.amo_pipe.bits.is_rv32 := agu_req_buf.size === DcacheConst.SIZE4.asUInt
-    io.out.amo_pipe.bits.amo_op := agu_req_buf.amo_op
+  def dispatch_to_atomic(tlb_resp: TLBResp) = {
+    io.out.atomic_pipe.valid := true.B
+    io.out.atomic_pipe.bits.trans_id := agu_req_buf.trans_id
+    io.out.atomic_pipe.bits.rs1_data := tlb_resp.paddr
+    io.out.atomic_pipe.bits.rs2_data := agu_req_buf.store_data // store_data is rs2_data
+    io.out.atomic_pipe.bits.is_rv32 := agu_req_buf.size === DcacheConst.SIZE4.asUInt
+    io.out.atomic_pipe.bits.atomic_op := agu_req_buf.atomic_op
 
-    when(io.out.amo_pipe.fire) {
+    when(io.out.atomic_pipe.fire) {
       assert(
-        !agu_req_buf.is_store,
-        "dispatch_to_amo error, should not be store"
+        !(agu_req_buf.is_store & agu_req_buf.is_load),
+        "dispatch_to_atomic error, should not be store"
       )
       assert(
-        agu_req_buf.amo_op =/= AMOOP.None,
-        "dispatch_to_amo error, amo_op should not be None"
+        agu_req_buf.atomic_op =/= AtomicOP.None,
+        "dispatch_to_atomic error, atomic_op should not be None"
       )
       assert(
         agu_req_buf.size === DcacheConst.SIZE8.asUInt || agu_req_buf.size === DcacheConst.SIZE4.asUInt,
-        "dispatch_to_amo error, size should be 8 or 4"
+        "dispatch_to_atomic error, size should be 8 or 4"
       )
       // back to back
       send_tlb_req()
@@ -346,8 +354,8 @@ class AGU(
           dispatch_to_store(io.tlb_resp.bits)
         }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.LOAD) {
           dispatch_to_load(io.tlb_resp.bits)
-        }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.AMO) {
-          dispatch_to_amo(io.tlb_resp.bits)
+        }.elsewhen(TLBReqType.is_atomic(io.tlb_resp.bits.req_type)) {
+          dispatch_to_atomic(io.tlb_resp.bits)
         }.otherwise {
           assert(false.B, "sWaitTLBRsp error, should not reach here")
         }
@@ -370,8 +378,8 @@ class AGU(
           dispatch_to_store(tlb_resp_buf)
         }.elsewhen(tlb_resp_buf.req_type === TLBReqType.LOAD) {
           dispatch_to_load(tlb_resp_buf)
-        }.elsewhen(io.tlb_resp.bits.req_type === TLBReqType.AMO) {
-          dispatch_to_amo(tlb_resp_buf)
+        }.elsewhen(TLBReqType.is_atomic(tlb_resp_buf.req_type)) {
+          dispatch_to_atomic(tlb_resp_buf)
         }.otherwise {
           assert(false.B, "sWaitFifo error, should not reach here")
         }
@@ -380,6 +388,28 @@ class AGU(
       }
     }
   }
+
+  // --------------------------
+  // formal
+  // --------------------------
+
+  when(io.in.fire) {
+    assume(
+      PopCount(
+        Seq(io.in.bits.is_store, io.in.bits.is_load, io.in.bits.is_atomic)
+      ) <= 1.U,
+      "AGUReq error, is_store and is_atomic should not be true at the same time"
+    )
+
+    when(io.in.bits.is_atomic) {
+      assume(
+        io.in.bits.atomic_op =/= AtomicOP.None,
+        "AGUReq error, atomic_op should not be None"
+      )
+      assume(io.in.bits.op_b === 0.U, "AGUReq error, op_b should be 0")
+    }
+  }
+
 }
 
 object gen_agu_verilog extends App {
