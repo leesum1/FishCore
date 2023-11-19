@@ -110,16 +110,19 @@ class PTW(formal: Boolean = false) extends Module {
     val sum_check_pass = is_mstatus_sum_check_pass(pte, ptw_req)
     when(ptw_req.req_type === TLBReqType.Fetch) {
       pte_permission_check_pass := pte.x
-    }.elsewhen(ptw_req.req_type === TLBReqType.LOAD) {
+    }.elsewhen(TLBReqType.need_store(ptw_req.req_type)) {
+      // STORE , AMO , lr
+      val store_check_pass = pte.w
+      pte_permission_check_pass := store_check_pass & sum_check_pass
+
+    }.elsewhen(TLBReqType.need_load(ptw_req.req_type)) {
       // When MXR=0, only loads from pages marked readable (R=1 in Figure 4.18) will succeed.
       // When MXR=1, loads from pages marked either readable or executable (R=1 or X=1) will succeed.
       // MXR has no effect when page-based virtual memory is not in effect.
       val load_check_pass = pte.r || pte.x & ptw_req.info.mstatus_field.mxr
       pte_permission_check_pass := load_check_pass & sum_check_pass
     }.otherwise {
-      // STORE or AMO
-      val store_check_pass = pte.w
-      pte_permission_check_pass := store_check_pass & sum_check_pass
+      assert(false.B, "unknown req_type")
     }
     pte_permission_check_pass
   }

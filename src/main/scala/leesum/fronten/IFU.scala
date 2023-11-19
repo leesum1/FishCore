@@ -17,10 +17,12 @@ import org.scalatest.flatspec.AnyFlatSpec
 class f2_f3_pipe_entry extends Bundle {
   val fetch_group = Vec(4, new INSTEntry)
   val exception = new ExceptionEntry()
+  val exception_pc = UInt(64.W)
 
   def clear(): Unit = {
     fetch_group.foreach(_.clear())
     exception.clear()
+    exception_pc := 0.U
   }
 }
 
@@ -88,7 +90,22 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
         f2_f3_pipe.io.in.bits.fetch_group := inst_realign.io.output.bits
         f2_f3_pipe.io.in.bits.exception := io.icache_resp.bits.exception
 
+        // if last half is valid, put exception to the start of the instruction
+        f2_f3_pipe.io.in.bits.exception_pc := Mux(
+          inst_realign.io.last_half_valid,
+          inst_realign.io.last_half_pc,
+          pc_f1_f2_buf
+        )
+
         f2_f3_buf.exception := io.icache_resp.bits.exception
+
+        // if last half is valid, put exception to the start of the instruction
+        f2_f3_buf.exception_pc := Mux(
+          inst_realign.io.last_half_valid,
+          inst_realign.io.last_half_pc,
+          pc_f1_f2_buf
+        )
+
         f2_f3_buf.fetch_group := inst_realign.io.output.bits
 
         when(f2_f3_pipe.io.in.fire) {
@@ -129,7 +146,7 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
     })
     // override the first entry
     inst_fifo.io.push.bits(0).valid := true.B
-    inst_fifo.io.push.bits(0).pc := f2_f3_pipe.io.out.bits.exception.tval
+    inst_fifo.io.push.bits(0).pc := f2_f3_pipe.io.out.bits.exception_pc
     inst_fifo.io.push.bits(0).exception := f2_f3_pipe.io.out.bits.exception
   }.otherwise {
     inst_fifo.io.push.bits := f2_f3_pipe.io.out.bits.fetch_group

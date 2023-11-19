@@ -45,6 +45,8 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
   val io = IO(new Bundle {
     val input = Flipped(Decoupled(new RspPacket))
     val output = Decoupled(Vec(4, new INSTEntry))
+    val last_half_valid = Output(Bool())
+    val last_half_pc = Output(UInt(64.W))
     val flush = Input(Bool())
   })
 
@@ -53,10 +55,14 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
 
   val unaligned_insts = io.input
 
-  val last_half_inst = RegInit(0.U(16.W));
+  val last_half_inst = RegInit(0.U(16.W))
+  val last_half_pc = RegInit(0.U(64.W))
   val last_half_valid = RegInit(false.B)
 
   val aligned_pc = Cat(unaligned_insts.bits.pc(63, 3), 0.U(3.W))
+
+  io.last_half_valid := last_half_valid
+  io.last_half_pc := last_half_pc
 
   def inst_mask(pc: UInt): Vec[Bool] = {
     val ret = MuxLookup(
@@ -118,6 +124,7 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
       last_half_valid := false.B
     }.otherwise {
       last_half_valid := true.B
+      last_half_pc := aligned_pc + 6.U
     }
   }
 

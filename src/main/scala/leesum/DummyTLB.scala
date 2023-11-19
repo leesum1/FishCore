@@ -15,6 +15,10 @@ object TLBReqType extends ChiselEnum {
   val LR = Value(4.U)
   val SC = Value(5.U)
 
+  def need_load(req_type: TLBReqType.Type): Bool = {
+    req_type === LOAD || req_type === LR
+  }
+
   def need_store(req_type: TLBReqType.Type): Bool = {
     req_type === STORE || req_type === AMO || req_type === SC
   }

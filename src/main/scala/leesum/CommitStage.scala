@@ -145,6 +145,19 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
   def retire_none(entry: ScoreBoardEntry, ack: Bool): Unit = {
     assert(entry.exception.valid === false.B)
+
+    // TODO: unimplemented
+    when(entry.fu_op === FuOP.SFenceVMA) {
+      printf("SFenceVMA at %x\n", entry.pc)
+      flush_next := true.B
+      io.branch_commit.valid := true.B
+      io.branch_commit.bits.target := entry.pc + 4.U
+    }.elsewhen(entry.fu_op === FuOP.Fence) {
+      printf("Fence at %x\n", entry.pc)
+    }.elsewhen(entry.fu_op === FuOP.FenceI) {
+      printf("FenceI at %x\n", entry.pc)
+    }
+
     ack := true.B
   }
 
