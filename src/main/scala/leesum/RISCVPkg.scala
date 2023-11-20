@@ -1309,6 +1309,7 @@ object FuOP extends ChiselEnum {
   val LsuAMOXOR = Value(57.U)
   val LsuLR = Value(58.U)
   val LsuSC = Value(59.U)
+  val WFI = Value(60.U)
 
   def is_xret(op: FuOP.Type): Bool = {
     val system_op_map = Seq(
@@ -2332,7 +2333,6 @@ object RVinst {
     ) ::: csri_op)
   )
 
-  // TODO: ecall ebreak scall
   val privilege_map: Array[(BitPat, List[Element])] = Array(
     // RaiseException(Breakpoint)
     Instructions.IType("EBREAK") -> (List(
@@ -2370,6 +2370,13 @@ object RVinst {
       false.B,
       InstType.I
     ) ::: none_op),
+    Instructions.SYSTEMType("WFI") -> (List(
+      true.B,
+      FuType.None,
+      FuOP.WFI,
+      false.B,
+      InstType.I
+    ) ::: none_op),
     // stype
     Instructions.SType("SRET") -> (List(
       true.B,
@@ -2383,10 +2390,20 @@ object RVinst {
       FuType.None,
       FuOP.SFenceVMA,
       false.B,
-      InstType.I
-    ) ::: none_op)
+      InstType.R
+    ) ::: reg_reg_op)
   )
 
+}
+
+object InterruptCause extends ChiselEnum {
+  val supervisor_software = Value(1.U)
+  val machine_software = Value(3.U)
+  val supervisor_timer = Value(5.U)
+  val machine_timer = Value(7.U)
+  val supervisor_external = Value(9.U)
+  val machine_external = Value(11.U)
+  val unknown = Value(16.U)
 }
 
 object ExceptionCause extends ChiselEnum {

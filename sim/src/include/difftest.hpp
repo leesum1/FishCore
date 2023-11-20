@@ -217,7 +217,7 @@ inline bool DiffTest::check_csrs(const read_csr_fuc& dut_csr,
                                  bool debug_en = false)
 {
     constexpr auto need_csr = std::array{
-        MCAUSE, MEPC, MTVEC, MSTATUS, MIE, MTVAL,MEDELEG,MIDELEG, SEPC, STVEC, SCAUSE, STVAL, SATP
+        MISA,MCAUSE, MEPC, MTVEC, MSTATUS, MIE, MTVAL,MEDELEG,MIDELEG, SEPC, STVEC, SCAUSE, STVAL, SATP
     };
     auto ref_csrs = std::vector<uint64_t>();
     auto dut_csrs = std::vector<uint64_t>();

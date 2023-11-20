@@ -2,6 +2,7 @@ package leesum
 import chisel3._
 import chisel3.util._
 import leesum.moniter.CommitMonitorPort
+import spire.math
 
 class RedirectPC extends Bundle {
   val target = UInt(64.W)
@@ -148,14 +149,35 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
     // TODO: unimplemented
     when(entry.fu_op === FuOP.SFenceVMA) {
+      val mstatus = new MstatusFiled(io.direct_read_ports.mstatus)
+      val require_privi =
+        Mux(mstatus.tvm, Privilegelevel.M.U, Privilegelevel.S.U)
       printf("SFenceVMA at %x\n", entry.pc)
-      flush_next := true.B
-      io.branch_commit.valid := true.B
-      io.branch_commit.bits.target := entry.pc + 4.U
+
+      when(privilege_mode >= require_privi) {
+        flush_next := true.B
+        io.branch_commit.valid := true.B
+        // same as interrupt to reduce area
+        io.branch_commit.bits.target := entry.pc + Mux(
+          entry.is_rv32,
+          2.U,
+          4.U
+        )
+      }.otherwise {
+        val vma_entry = WireInit(entry)
+        vma_entry.exception.valid := true.B
+        vma_entry.exception.cause := ExceptionCause.illegal_instruction
+        vma_entry.exception.tval := vma_entry.inst // TODO: set tval 0
+
+        retire_exception(vma_entry, ack)
+      }
+
     }.elsewhen(entry.fu_op === FuOP.Fence) {
       printf("Fence at %x\n", entry.pc)
     }.elsewhen(entry.fu_op === FuOP.FenceI) {
       printf("FenceI at %x\n", entry.pc)
+    }.elsewhen(entry.fu_op === FuOP.WFI) {
+      printf("WFI at %x\n", entry.pc)
     }
 
     ack := true.B
@@ -181,7 +203,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       // s mode
       val stvec = new MtvecFiled(io.direct_read_ports.stvec)
       io.branch_commit.valid := true.B
-      io.branch_commit.bits.target := stvec.get_exception_pc(exception_mcause)
+      io.branch_commit.bits.target := stvec.get_exception_pc
 
 //      when(io.branch_commit.fire) {
       ack := true.B
@@ -206,7 +228,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       // m mode
       val mtvec = new MtvecFiled(io.direct_read_ports.mtvec)
       io.branch_commit.valid := true.B
-      io.branch_commit.bits.target := mtvec.get_exception_pc(exception_mcause)
+      io.branch_commit.bits.target := mtvec.get_exception_pc
 
 //    when(io.branch_commit.fire) {
       ack := true.B
@@ -230,10 +252,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     // ------------------
     // assert
     // ------------------
-//    assert(
-//      mcause.interrupt === false.B,
-//      "exception cause must be exception"
-//    )
+
     assume(
       entry.complete,
       "exception must be complete"
@@ -277,29 +296,31 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
     // SRET should also raise an illegal instruction exception when TSR=1 in mstatus
     when(sstatus.tsr) {
-      // TODO: raise an illegal instruction exception
-      assert(false.B, "raise an illegal instruction exception")
+      val sret_entry = WireInit(entry)
+      sret_entry.exception.valid := true.B
+      sret_entry.exception.cause := ExceptionCause.illegal_instruction
+      sret_entry.exception.tval := entry.inst // TODO: set tval 0
+      retire_exception(sret_entry, ack)
+    }.otherwise {
+      // supposing xPP holds the value y, 0: user mode 1: s mode
+      val y = Mux(sstatus.spp, Privilegelevel.S.U(2.W), Privilegelevel.U.U(2.W))
+      // the privilege mode is changed to xPP
+      privilege_mode := y
+
+      // (If y!=M, x RET also sets MPRV=0.)
+      // reference to  https://github.com/riscv/riscv-isa-manual/pull/929
+      val new_mstatus = sstatus.get_sret_mstatus(y =/= Privilegelevel.M.U(2.W))
+
+      io.branch_commit.valid := true.B
+      io.branch_commit.bits.target := sepc
+
+      io.direct_write_ports.mstatus.valid := true.B
+      io.direct_write_ports.mstatus.bits := new_mstatus
+      ack := true.B
+      flush_next := true.B
+
     }
 
-    // supposing xPP holds the value y, 0: user mode 1: s mode
-    val y = Mux(sstatus.spp, Privilegelevel.S.U(2.W), Privilegelevel.U.U(2.W))
-    // the privilege mode is changed to xPP
-    privilege_mode := y
-
-    // (If y!=M, x RET also sets MPRV=0.)
-    // reference to  https://github.com/riscv/riscv-isa-manual/pull/929
-    val new_mstatus = sstatus.get_sret_mstatus(y =/= Privilegelevel.M.U(2.W))
-
-    io.branch_commit.valid := true.B
-    io.branch_commit.bits.target := sepc
-
-//    when(io.branch_commit.fire) {
-    io.direct_write_ports.mstatus.valid := true.B
-    io.direct_write_ports.mstatus.bits := new_mstatus
-    ack := true.B
-    flush_next := true.B
-
-//    }
   }
 
   // TODO: implement not correct!!!!!!!!!
@@ -465,8 +486,127 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     }
   }
 
+  // ----------------------
+  // interrupt
+  // ----------------------
+
+  val interrupt_inject_types = VecInit(
+    Seq(
+      FuType.Alu.asUInt,
+      FuType.Mul.asUInt,
+      FuType.Div.asUInt,
+      FuType.Lsu.asUInt,
+      FuType.Br.asUInt,
+      FuType.Csr.asUInt
+    )
+  )
+
+  val has_interrupt = WireInit(false.B)
+
+  dontTouch(has_interrupt)
+
+  when(
+    pop_ack.head && !rob_data_seq.head.exception.valid && interrupt_inject_types
+      .contains(
+        rob_data_seq.head.fu_type.asUInt
+      )
+  ) {
+    val mip_and_mie = io.direct_read_ports.mip & io.direct_read_ports.mie
+    dontTouch(mip_and_mie)
+
+    val mstatus = new MstatusFiled(io.direct_read_ports.mstatus)
+    val mideleg = io.direct_read_ports.mideleg
+
+    val interrupt_mmode =
+      mstatus.mie && privilege_mode === Privilegelevel.M.U || privilege_mode < Privilegelevel.M.U
+    val mmode_pending = new MipFiled(mip_and_mie & (~mideleg).asUInt)
+    val mmode_has_interrupt = mmode_pending.any_interrupt
+
+    dontTouch(interrupt_mmode)
+    dontTouch(mmode_has_interrupt)
+
+    val interrupt_smode =
+      mstatus.sie && privilege_mode === Privilegelevel.S.U || privilege_mode < Privilegelevel.S.U
+    val smode_pending = new MipFiled(mip_and_mie & mideleg)
+    val smode_has_interrupt = smode_pending.any_interrupt
+
+    dontTouch(interrupt_smode)
+    dontTouch(smode_has_interrupt)
+
+    val normal_pc = rob_data_seq.head.pc + Mux(
+      rob_data_seq.head.is_rv32,
+      2.U,
+      4.U
+    )
+
+    val br_pc = rob_data_seq.head.bp.predict_pc
+
+    val new_pc = Mux(
+      rob_data_seq.head.bp.is_miss_predict,
+      br_pc,
+      normal_pc
+    )
+
+    when(interrupt_mmode && mmode_has_interrupt) {
+      has_interrupt := true.B
+
+      val cause = mmode_pending.get_priority_interupt
+      val mtvec = new MtvecFiled(io.direct_read_ports.mtvec)
+      flush_next := true.B
+      privilege_mode := Privilegelevel.M.U
+
+      io.branch_commit.valid := true.B
+      io.branch_commit.bits.target := mtvec.get_interrupt_pc(cause.asUInt)
+
+      io.direct_write_ports.mepc.valid := true.B
+      io.direct_write_ports.mepc.bits := new_pc
+
+      io.direct_write_ports.mcause.valid := true.B
+
+      val cause_low = Wire(UInt(63.W))
+      cause_low := cause.asUInt
+
+      io.direct_write_ports.mcause.bits := Cat(true.B, cause_low)
+
+      io.direct_write_ports.mstatus.valid := true.B
+      io.direct_write_ports.mstatus.bits := mstatus.get_mmode_exception_mstatus(
+        privilege_mode
+      )
+    }.elsewhen(interrupt_smode && smode_has_interrupt) {
+      has_interrupt := true.B
+
+      val cause = smode_pending.get_priority_interupt
+      val stvec = new MtvecFiled(io.direct_read_ports.stvec)
+
+      flush_next := true.B
+      privilege_mode := Privilegelevel.S.U
+
+      io.branch_commit.valid := true.B
+      io.branch_commit.bits.target := stvec.get_interrupt_pc(cause.asUInt)
+
+      io.direct_write_ports.sepc.valid := true.B
+      io.direct_write_ports.sepc.bits := new_pc
+
+      val cause_low = Wire(UInt(63.W))
+      cause_low := cause.asUInt
+      io.direct_write_ports.scause.valid := true.B
+      io.direct_write_ports.scause.bits := Cat(true.B, cause_low)
+
+      io.direct_write_ports.mstatus.valid := true.B
+      io.direct_write_ports.mstatus.bits := mstatus.get_smode_exception_mstatus(
+        privilege_mode
+      )
+    }
+  }
+
+  // ---------------------
   // second inst
-  when(rob_valid_seq(1) && rob_data_seq(1).complete && !flush_next) {
+  // ---------------------
+  when(
+    rob_valid_seq(1) && rob_data_seq(
+      1
+    ).complete && !flush_next && !has_interrupt
+  ) {
 
     // TODO: more constraint on the second inst?
     when(
@@ -527,6 +667,23 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       rob_data_seq.head.pc =/= 0.U,
       "pc must not be zero"
     )
+  }
+
+  for (i <- 0 until num_commit_port) {
+    when(rob_valid_seq(i) && rob_data_seq(i).complete) {
+      assume(
+        rob_data_seq(i).pc =/= 0.U,
+        "pc must not be zero"
+      )
+
+      when(rob_data_seq(i).bp.is_miss_predict) {
+        assume(
+          rob_data_seq(i).bp.predict_pc =/= 0.U,
+          "predict_pc must not be zero"
+        )
+        assume(rob_data_seq(i).fu_type === FuType.Br, "fu_type must be branch")
+      }
+    }
   }
 
 }

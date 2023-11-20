@@ -151,6 +151,8 @@ uint64_t SimBase::get_csr(int idx)
 #define GET_CSR(top, name) (top->io_difftest_bits_csr_##name)
     switch (idx)
     {
+    case MISA:
+        return GET_CSR(top, misa);
     case MSTATUS:
         return GET_CSR(top, mstatus);
     case MIE:

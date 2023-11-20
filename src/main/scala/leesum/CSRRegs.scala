@@ -88,6 +88,7 @@ class CSRDirectReadPorts extends Bundle {
   val mstatus = UInt(64.W)
   val mie = UInt(64.W)
   val mip = UInt(64.W)
+  val misa = UInt(64.W)
   // m mode
   val mcause = UInt(64.W)
   val mtvec = UInt(64.W)
@@ -207,7 +208,13 @@ class MtvecFiled(data: UInt) {
   def base: UInt = data(63, 2)
   def mode: UInt = data(1, 0)
 
-  def get_exception_pc(cause: UInt): UInt = {
+  def get_exception_pc: UInt = {
+    val base = Cat(this.base, 0.U(2.W))
+    require(base.getWidth == 64)
+    base
+  }
+
+  def get_interrupt_pc(cause: UInt): UInt = {
     val mode = this.mode
     val base = Cat(this.base, 0.U(2.W))
 
@@ -222,6 +229,7 @@ class MtvecFiled(data: UInt) {
     }
     pc
   }
+
 }
 
 class McauseFiled(data: UInt) {
@@ -238,6 +246,8 @@ class MieFiled(data: UInt) {
   def mtie: Bool = data(7)
   def seie: Bool = data(9)
   def meie: Bool = data(11)
+
+  def raw: UInt = data
 }
 
 class MipFiled(data: UInt) {
@@ -248,6 +258,30 @@ class MipFiled(data: UInt) {
   def mtip: Bool = data(7)
   def seip: Bool = data(9)
   def meip: Bool = data(11)
+
+  def any_interrupt: Bool = {
+    ssip || msip || stip || mtip || seip || meip
+  }
+
+  def get_priority_interupt: InterruptCause.Type = {
+    val priority_int = WireInit(InterruptCause.unknown)
+    when(meip) {
+      priority_int := InterruptCause.machine_external
+    }.elsewhen(msip) {
+      priority_int := InterruptCause.machine_software
+    }.elsewhen(mtip) {
+      priority_int := InterruptCause.machine_timer
+    }.elsewhen(seip) {
+      priority_int := InterruptCause.supervisor_external
+    }.elsewhen(ssip) {
+      priority_int := InterruptCause.supervisor_software
+    }.elsewhen(stip) {
+      priority_int := InterruptCause.supervisor_timer
+    }
+    priority_int
+  }
+
+  def raw = data
 }
 
 class SatpFiled(data: UInt) {
@@ -440,23 +474,48 @@ class CSRRegs extends Module {
   // satp write func
   // ---------------------
 
+  def satp_permition_ok(cur_privilege: UInt) = {
+    require(cur_privilege.getWidth == 2)
+    val tvm = new MstatusFiled(mstatus).tvm
+    val require_privilege = Mux(tvm, Privilegelevel.M.U, Privilegelevel.S.U)
+    cur_privilege >= require_privilege
+  }
+
   val satp_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-
-    val satp_val = new SatpFiled(wdata)
-
-    // WAWL
-    val effective_mode =
-      Mux(
-        satp_val.mode_is_sv39 || satp_val.mode_is_bare,
-        satp_val.mode,
-        reg(63, 60)
-      )
-
     val write_result = Wire(Valid(UInt(64.W)))
-    write_result.valid := true.B
-    write_result.bits := Cat(effective_mode, satp_val.asid, satp_val.ppn)
-    reg := write_result.bits
+    when(satp_permition_ok(io.cur_privilege_mode)) {
+      val satp_val = new SatpFiled(wdata)
+      // WAWL
+      val effective_mode =
+        Mux(
+          satp_val.mode_is_sv39 || satp_val.mode_is_bare,
+          satp_val.mode,
+          reg(63, 60)
+        )
+      write_result.valid := true.B
+      write_result.bits := Cat(effective_mode, satp_val.asid, satp_val.ppn)
+      reg := write_result.bits
+    }.otherwise {
+      write_result.valid := false.B
+      write_result.bits := 0.U
+    }
     write_result
+  }
+
+  // ---------------------
+  // satp read func
+  // ---------------------
+
+  val satp_read = (addr: UInt, reg: UInt) => {
+    val read_result = Wire(Valid(UInt(64.W)))
+    when(satp_permition_ok(io.cur_privilege_mode)) {
+      read_result.valid := true.B
+      read_result.bits := reg
+    }.otherwise {
+      read_result.valid := false.B
+      read_result.bits := 0.U
+    }
+    read_result
   }
 
   // -----------------
@@ -468,7 +527,13 @@ class CSRRegs extends Module {
   misa_val.setField(MIsaMask.A, 1)
   misa_val.setField(MIsaMask.C, 1)
   misa_val.setField(MIsaMask.M, 1)
-  misa_val.setField(MIsaMask.U, 1)
+
+  if (umode_enable) {
+    misa_val.setField(MIsaMask.U, 1)
+  }
+  if (smode_enable) {
+    misa_val.setField(MIsaMask.S, 1)
+  }
   misa_val.setField(MIsaMask.MXL, 2) // xlen = 64
 
   // -----------------
@@ -501,6 +566,7 @@ class CSRRegs extends Module {
 
   // counters
   val mcounteren = RegInit(0.U(64.W))
+  val scounteren = RegInit(0.U(64.W))
 
   val cycle = RegInit(0.U(64.W))
   cycle := cycle + 1.U
@@ -556,7 +622,7 @@ class CSRRegs extends Module {
       (CSRs.stval, stval, normal_read, normal_write),
       (CSRs.sepc, sepc, normal_read, normal_write),
       (CSRs.sscratch, sscratch, normal_read, normal_write),
-      (CSRs.satp, satp, normal_read, satp_write),
+      (CSRs.satp, satp, satp_read, satp_write),
 
       // read only
       (CSRs.misa, misa, normal_read, empty_write),
@@ -565,7 +631,8 @@ class CSRRegs extends Module {
       (CSRs.marchid, marchid, normal_read, empty_write),
       (CSRs.mvendorid, mvendorid, normal_read, empty_write),
       // counters TODO: not support now
-      (CSRs.mcounteren, mcounteren, normal_read, empty_write),
+      (CSRs.mcounteren, mcounteren, normal_read, normal_write),
+      (CSRs.scounteren, scounteren, normal_read, normal_write),
       (CSRs.cycle, cycle, normal_read, empty_write),
       (CSRs.mcycle, cycle, normal_read, empty_write),
       (CSRs.tselect, tselect, normal_read, empty_write)
@@ -633,6 +700,7 @@ class CSRRegs extends Module {
   io.direct_read_ports.medeleg := medeleg
   io.direct_read_ports.mideleg := mideleg
   io.direct_read_ports.mscratch := mscratch
+  io.direct_read_ports.misa := misa
 
   // s mode
   io.direct_read_ports.scause := scause

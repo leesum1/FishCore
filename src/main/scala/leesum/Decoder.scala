@@ -133,9 +133,19 @@ class InstDecoder extends Module {
   // TODO: refactor me!!!
   val exception_valid = scoreboard_entry.exception.valid
 
-  scoreboard_entry.complete := exception_valid || FuOP.is_xret(
-    scoreboard_entry.fu_op
-  ) || FuOP.is_fence(scoreboard_entry.fu_op)
+  val need_complete_insts = VecInit(
+    Seq(
+      FuOP.Mret.asUInt,
+      FuOP.Sret.asUInt,
+      FuOP.Fence.asUInt,
+      FuOP.FenceI.asUInt,
+      FuOP.SFenceVMA.asUInt,
+      FuOP.WFI.asUInt
+    )
+  )
+  scoreboard_entry.complete := exception_valid || need_complete_insts.contains(
+    decode_sigs.fu_op.asUInt
+  )
 
   // ------------------------------------------
   //  scoreboard branch predictor information
