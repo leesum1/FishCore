@@ -313,6 +313,8 @@ class CSRDirectWritePorts extends Bundle {
   val sepc = Valid(UInt(64.W))
   val stval = Valid(UInt(64.W))
 
+  val instret_inc = Valid(UInt(4.W))
+
   def clear(): Unit = {
     mstatus.valid := false.B
     mcause.valid := false.B
@@ -325,6 +327,7 @@ class CSRDirectWritePorts extends Bundle {
     stval.valid := false.B
     stvec.valid := false.B
     scause.valid := false.B
+    instret_inc.valid := false.B
 
     mstatus.bits := 0.U
     mcause.bits := 0.U
@@ -337,6 +340,7 @@ class CSRDirectWritePorts extends Bundle {
     stval.bits := 0.U
     stvec.bits := 0.U
     scause.bits := 0.U
+    instret_inc.bits := 0.U
   }
 }
 
@@ -474,7 +478,7 @@ class CSRRegs extends Module {
   // satp write func
   // ---------------------
 
-  def satp_permition_ok(cur_privilege: UInt) = {
+  def satp_permission_ok(cur_privilege: UInt) = {
     require(cur_privilege.getWidth == 2)
     val tvm = new MstatusFiled(mstatus).tvm
     val require_privilege = Mux(tvm, Privilegelevel.M.U, Privilegelevel.S.U)
@@ -483,7 +487,7 @@ class CSRRegs extends Module {
 
   val satp_write = (addr: UInt, reg: UInt, wdata: UInt) => {
     val write_result = Wire(Valid(UInt(64.W)))
-    when(satp_permition_ok(io.cur_privilege_mode)) {
+    when(satp_permission_ok(io.cur_privilege_mode)) {
       val satp_val = new SatpFiled(wdata)
       // WAWL
       val effective_mode =
@@ -508,7 +512,7 @@ class CSRRegs extends Module {
 
   val satp_read = (addr: UInt, reg: UInt) => {
     val read_result = Wire(Valid(UInt(64.W)))
-    when(satp_permition_ok(io.cur_privilege_mode)) {
+    when(satp_permission_ok(io.cur_privilege_mode)) {
       read_result.valid := true.B
       read_result.bits := reg
     }.otherwise {
@@ -569,7 +573,11 @@ class CSRRegs extends Module {
   val scounteren = RegInit(0.U(64.W))
 
   val cycle = RegInit(0.U(64.W))
+  val instret = RegInit(0.U(64.W))
   cycle := cycle + 1.U
+  when(io.direct_write_ports.instret_inc.valid) {
+    instret := instret + io.direct_write_ports.instret_inc.bits
+  }
 
   val mideleg = RegInit(0.U(64.W))
   val medeleg = RegInit(0.U(64.W))
@@ -635,6 +643,8 @@ class CSRRegs extends Module {
       (CSRs.scounteren, scounteren, normal_read, normal_write),
       (CSRs.cycle, cycle, normal_read, empty_write),
       (CSRs.mcycle, cycle, normal_read, empty_write),
+      (CSRs.instret, instret, normal_read, empty_write),
+      (CSRs.minstret, instret, normal_read, empty_write),
       (CSRs.tselect, tselect, normal_read, empty_write)
     )
   m_map.foreach({ case (addr, reg, read_func, write_func) =>

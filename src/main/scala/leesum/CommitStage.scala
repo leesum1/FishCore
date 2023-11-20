@@ -196,7 +196,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     ).asUInt
 
     val trap_to_smode = medeleg(
-      exception_mcause
+      Cat(0.U, exception_mcause)
     ) && privilege_mode <= Privilegelevel.S.U
 
     when(trap_to_smode) {
@@ -625,6 +625,14 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       }
     }
   }
+
+  // ---------------------
+  // instret
+  // ---------------------
+
+  val commit_num = PopCountOrder(pop_ack)
+  io.direct_write_ports.instret_inc.valid := commit_num =/= 0.U
+  io.direct_write_ports.instret_inc.bits := commit_num
 
   // -----------------------
   // commit monitor
