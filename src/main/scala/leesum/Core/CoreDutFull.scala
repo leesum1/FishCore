@@ -45,7 +45,7 @@ class CoreDutFull(
   // pipeline stage
   val pc_gen_stage = Module(new PCGenStage(boot_pc, rvc_en))
   val ifu = Module(new IFUTop(rvc_en))
-  val mmmu = Module(new MMU())
+  val mmmu = Module(new MMU(addr_map))
 
   val decode_stage = Seq.tabulate(2)(i => Module(new InstDecoder))
 
@@ -58,7 +58,7 @@ class CoreDutFull(
 
   // fu
   val alu_seq = Seq.fill(2)(Module(new FuAlu))
-  val lsu = Module(new LSU(addr_map))
+  val lsu = Module(new LSU())
   val bru = Module(new FuBranch(rvc_en))
   val mul_div = Module(new FuMulDiv(muldiv_en))
   val csr = Module(new FuCSR)

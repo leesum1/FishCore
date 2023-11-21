@@ -34,7 +34,17 @@ class MMUEffectiveInfo extends Bundle {
   val satp_field = new SatpFiled(satp)
 }
 
-class MMU(formal: Boolean = false) extends Module {
+class MMU(
+    // ADDR_START, ADDR_END, mmio
+    addr_map: Seq[(Long, Long, Boolean)] = Seq(
+      (
+        0,
+        0xffffffffffffffffL,
+        false
+      ) // default addr map, 0x0 -> 0xffffffffffffffff, mmio = false
+    ),
+    formal: Boolean = false
+) extends Module {
   val io = IO(new Bundle {
     val fetch_req = Flipped(Decoupled(new TLBReq))
     val fetch_resp = Decoupled(new TLBResp)
@@ -78,6 +88,32 @@ class MMU(formal: Boolean = false) extends Module {
   val lsu_mmu_en =
     (!lsu_effective_info_buf.satp_field.mode_is_bare) && !(lsu_effective_info_buf.mmu_privilege === Privilegelevel.M.U)
 
+  def addr_in_range(addr: UInt): Bool = {
+    val in_range = addr_map
+      .map { case (start, end, _) =>
+        addr >= Long2UInt64(start) && addr <= Long2UInt64(end)
+      }
+      .reduce(_ || _)
+
+    in_range
+  }
+
+  def check_mmio(paddr: UInt): Bool = {
+
+    val is_mmio = WireInit(false.B)
+    addr_map
+      .foreach { case (start, end, ismmio) =>
+        when(
+          paddr >= Long2UInt64(start) && paddr < Long2UInt64(
+            end
+          )
+        ) {
+          is_mmio := ismmio.B
+        }
+      }
+    is_mmio
+  }
+
   def get_paddr(pte: UInt, va: UInt, pg_size: SV39PageSize.Type): UInt = {
     val pte_tmp = new SV39PTE(pte)
     val paddr = Wire(UInt(64.W))
@@ -100,9 +136,33 @@ class MMU(formal: Boolean = false) extends Module {
     no_mmu_resp.req_type := req_buf.req_type
     no_mmu_resp.paddr := req_buf.vaddr
     no_mmu_resp.size := req_buf.size
-    no_mmu_resp.exception.valid := false.B
-    no_mmu_resp.exception.tval := 0.U
-    no_mmu_resp.exception.cause := ExceptionCause.unknown
+    no_mmu_resp.is_mmio := check_mmio(req_buf.vaddr)
+
+    when(!addr_in_range(req_buf.vaddr)) {
+      // 2. out of range, TODO: not PMA
+      no_mmu_resp.exception.valid := true.B
+      no_mmu_resp.exception.tval := req_buf.vaddr
+      no_mmu_resp.exception.cause := ExceptionCause.get_access_cause(
+        req_buf.req_type
+      )
+    }.elsewhen(
+      !CheckAligned(
+        req_buf.vaddr,
+        req_buf.size
+      ) && req_buf.req_type =/= TLBReqType.Fetch
+    ) {
+      // 3. not aligned
+      no_mmu_resp.exception.valid := true.B
+      no_mmu_resp.exception.tval := req_buf.vaddr
+      no_mmu_resp.exception.cause := ExceptionCause.get_misaligned_cause(
+        req_buf.req_type
+      )
+    }.otherwise {
+      no_mmu_resp.exception.valid := false.B
+      no_mmu_resp.exception.tval := 0.U
+      no_mmu_resp.exception.cause := ExceptionCause.unknown
+    }
+
     no_mmu_resp
   }
 
@@ -249,14 +309,31 @@ class MMU(formal: Boolean = false) extends Module {
       when(fetch_ptw_resp.fire && !io.flush) {
         // PTW resp
         val tlb_tmp = fetch_ptw_resp.bits
-        fetch_resp_buf.paddr := get_paddr(
+        val paddr = get_paddr(
           pte = tlb_tmp.pte,
           va = tlb_tmp.va,
           pg_size = tlb_tmp.pg_size
         )
+        fetch_resp_buf.paddr := paddr
         fetch_resp_buf.req_type := fetch_req_buf.req_type
         fetch_resp_buf.size := fetch_req_buf.size
-        fetch_resp_buf.exception := fetch_ptw_resp.bits.exception
+        fetch_resp_buf.is_mmio := check_mmio(paddr)
+
+        // exception
+        when(fetch_ptw_resp.bits.exception.valid) {
+          // 1. exception from ptw
+          fetch_resp_buf.exception := fetch_ptw_resp.bits.exception
+        }.elsewhen(!addr_in_range(paddr)) {
+          // 2. out of range, TODO: not PMA
+          fetch_resp_buf.exception.valid := true.B
+          fetch_resp_buf.exception.tval := fetch_req_buf.vaddr
+          fetch_resp_buf.exception.cause := ExceptionCause.fetch_access
+        }.otherwise {
+          fetch_resp_buf.exception.valid := false.B
+          fetch_resp_buf.exception.tval := 0.U
+          fetch_resp_buf.exception.cause := ExceptionCause.unknown
+        }
+
         itlb_state := sSendResp
       }.elsewhen(io.flush) {
         assert(!fetch_ptw_resp.fire)
@@ -322,15 +399,41 @@ class MMU(formal: Boolean = false) extends Module {
       when(lsu_ptw_resp.fire && !io.flush) {
         // PTW resp
         val tlb_tmp = lsu_ptw_resp.bits
-        lsu_resp_buf.paddr := get_paddr(
+
+        val paddr = get_paddr(
           pte = tlb_tmp.pte,
           va = tlb_tmp.va,
           pg_size = tlb_tmp.pg_size
         )
+        lsu_resp_buf.paddr := paddr
 
         lsu_resp_buf.req_type := lsu_req_buf.req_type
         lsu_resp_buf.size := lsu_req_buf.size
-        lsu_resp_buf.exception := lsu_ptw_resp.bits.exception
+        lsu_resp_buf.is_mmio := check_mmio(paddr)
+
+        when(lsu_ptw_resp.bits.exception.valid) {
+          // 1. exception from ptw
+          lsu_resp_buf.exception := lsu_ptw_resp.bits.exception
+        }.elsewhen(!addr_in_range(paddr)) {
+          // 2. out of range, TODO: not PMA or page check
+          lsu_resp_buf.exception.valid := true.B
+          lsu_resp_buf.exception.tval := lsu_req_buf.vaddr
+          lsu_resp_buf.exception.cause := ExceptionCause.get_access_cause(
+            lsu_req_buf.req_type
+          )
+        }.elsewhen(!CheckAligned(paddr, lsu_req_buf.size)) {
+          // 3. not aligned
+          lsu_resp_buf.exception.valid := true.B
+          lsu_resp_buf.exception.tval := lsu_req_buf.vaddr
+          lsu_resp_buf.exception.cause := ExceptionCause.get_misaligned_cause(
+            lsu_req_buf.req_type
+          )
+        }.otherwise {
+          lsu_resp_buf.exception.valid := false.B
+          lsu_resp_buf.exception.tval := 0.U
+          lsu_resp_buf.exception.cause := ExceptionCause.unknown
+        }
+
         dtlb_state := sSendResp
       }.elsewhen(io.flush) {
         assert(!lsu_ptw_resp.fire)

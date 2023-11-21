@@ -29,17 +29,18 @@ class InstsFIFO extends Module {
     val flush = Input(Bool())
   })
 
-  val inst_fifo = new MultiPortValidFIFO(
+  val inst_fifo = new MultiPortFIFOBase(
     gen = new INSTEntry,
     size = 16,
-    name = "inst_fifo",
     num_push_ports = 4,
-    num_pop_ports = 2
+    num_pop_ports = 2,
+    use_mem = false,
+    with_valid = false
   )
   val push_cond = io.push.bits.map(_.valid && io.push.fire)
-  inst_fifo.push_pop_flush_cond_multi_port(
-    push_cond = VecInit(push_cond),
-    pop_cond = VecInit(io.pop.map(_.fire)),
+  inst_fifo.push_pop_flush_cond(
+    push_cond = push_cond,
+    pop_cond = io.pop.map(_.fire),
     flush_cond = io.flush,
     entry = io.push.bits
   )

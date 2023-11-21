@@ -61,19 +61,25 @@ class StoreQueue(
   // speculate store queue
   // --------------------------
 
-  val speculate_store_fifo = new ValidFIFO(
+  val speculate_store_fifo = new MultiPortFIFOBase(
     new StoreQueueIn,
     speculate_store_queue_size,
-    "speculate_fifo"
+    1,
+    1,
+    use_mem = false,
+    with_valid = true
   )
 
   // --------------------------
   // commit store queue
   // --------------------------
-  val commit_store_fifo = new ValidFIFO(
+  val commit_store_fifo = new MultiPortFIFOBase(
     new StoreQueueIn,
     commit_store_queue_size,
-    "commit_fifo"
+    1,
+    1,
+    use_mem = false,
+    with_valid = true
   )
 
   // --------------------------
@@ -82,10 +88,10 @@ class StoreQueue(
 
   io.in.ready := !speculate_store_fifo.full
   speculate_store_fifo.push_pop_flush_cond(
-    io.in.fire,
-    io.store_commit.fire,
+    Seq(io.in.fire),
+    Seq(io.store_commit.fire),
     io.flush,
-    io.in.bits
+    Seq(io.in.bits)
   )
 
   // -----------------------
@@ -94,16 +100,16 @@ class StoreQueue(
   val commit_pop_cond = WireInit(false.B)
 
   commit_store_fifo.push_pop_flush_cond(
-    io.store_commit.fire,
-    io.dcache_req.fire,
+    Seq(io.store_commit.fire),
+    Seq(io.dcache_req.fire),
     false.B,
-    speculate_store_fifo.peek().bits
+    Seq(speculate_store_fifo.peek().head.bits)
   )
 
   val dcache_req_buf = Reg(new Valid(new StoreQueueIn))
 
   when(io.dcache_req.fire) {
-    dcache_req_buf.bits := commit_store_fifo.peek().bits
+    dcache_req_buf.bits := commit_store_fifo.peek().head.bits
     dcache_req_buf.valid := true.B
   }.elsewhen(!io.dcache_req.fire && io.dcache_resp.fire) {
     dcache_req_buf.valid := false.B
@@ -128,7 +134,7 @@ class StoreQueue(
 
   def send_dcache_store_req() = {
     when(!commit_store_fifo.empty) {
-      val entry = commit_store_fifo.peek()
+      val entry = commit_store_fifo.peek().head
       assert(entry.valid, "commit store queue must be valid")
 
       io.dcache_req.valid := true.B
@@ -180,9 +186,9 @@ class StoreQueue(
 
   val all_fifo: Seq[Valid[StoreQueueIn]] =
     0.until(speculate_store_queue_size).indices.map { i =>
-      speculate_store_fifo.create_read_port(i.U)
+      speculate_store_fifo.read(i.U)
     } ++ 0.until(commit_store_queue_size).indices.map { i =>
-      commit_store_fifo.create_read_port(i.U)
+      commit_store_fifo.read(i.U)
     } ++ Seq(dcache_req_buf)
 
   val addr_match_mask = all_fifo.map { entry =>

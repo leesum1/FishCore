@@ -10,15 +10,16 @@ class IssueFIFO extends Module {
     val flush = Input(Bool())
   })
 
-  val issue_fifo = new MultiPortValidFIFO(
+  val issue_fifo = new MultiPortFIFOBase(
     new ScoreBoardEntry,
     8,
-    "issue_fifo",
     2,
-    2
+    2,
+    use_mem = false,
+    with_valid = false
   )
 
-  issue_fifo.push_pop_flush_cond_multi_port(
+  issue_fifo.push_pop_flush_cond(
     push_cond = VecInit(Seq.fill(2)(io.push.fire)),
     pop_cond = io.pop_valid,
     entry = io.push.bits,

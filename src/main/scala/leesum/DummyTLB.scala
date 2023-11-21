@@ -39,6 +39,7 @@ class TLBResp extends Bundle {
   val req_type = TLBReqType()
   // size: 0: 1 byte, 1: 2 bytes, 2: 4 bytes, 3: 8 bytes
   val size = UInt(2.W)
+  val is_mmio = Bool()
   val exception = new ExceptionEntry()
 }
 

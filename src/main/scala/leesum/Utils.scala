@@ -60,15 +60,19 @@ object CheckUnique {
   * fail check 1001 -> fail check 1100 -> fail check
   */
 object CheckOrder {
-  def apply(vec: Vec[Bool]): Bool = {
-    checkOrder_internal(vec, vec.length - 1)
+  def apply(vec: Iterable[Bool]): Bool = {
+    checkOrder_internal(vec, vec.size - 1)
   }
 
-  private def checkOrder_internal(vec: Vec[Bool], idx: Int): Bool = {
+  private def checkOrder_internal(vec: Iterable[Bool], idx: Int): Bool = {
+    val vec_seq = vec.toSeq
     idx match {
       case 0 => true.B
       case _ =>
-        ((vec(idx - 1) || !vec(idx))) && checkOrder_internal(vec, idx - 1)
+        (vec_seq(idx - 1) || !vec_seq(idx)) && checkOrder_internal(
+          vec,
+          idx - 1
+        )
     }
   }
 }
@@ -151,12 +155,14 @@ object GenMaskOne {
 /** PopCountOrder(vec) returns the number of valid bits before the first invalid
   */
 object PopCountOrder {
-  def apply(vec: Vec[Bool]): UInt = {
+  def apply(vec: Iterable[Bool]): UInt = {
     val order_count_width = log2Ceil(vec.size + 1)
+
+    val x = VecInit(vec.toSeq).asUInt
 
     assert(CheckOrder(vec), "PopCountOrder: vec must be in order")
     val order_count = MuxLookup(
-      vec.asUInt,
+      x,
       0.U
     )(
       0

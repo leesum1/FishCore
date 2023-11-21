@@ -39,15 +39,16 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
   // issue fifo
   // ----------------
 
-  val issue_fifo = new MultiPortValidFIFOUseMem(
+  val issue_fifo = new MultiPortFIFOBase(
     new ScoreBoardEntry(),
     8,
-    name = "i_fifo",
     num_push_port,
-    num_pop_port
+    num_pop_port,
+    use_mem = false,
+    with_valid = false
   )
 
-  issue_fifo.push_pop_flush_cond_multi_port(
+  issue_fifo.push_pop_flush_cond(
     VecInit(io.push_port.map(_.fire)),
     VecInit(io.pop_port.map(_.fire)),
     io.flush,

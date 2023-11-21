@@ -28,15 +28,24 @@ class FuCSR extends Module {
     val csr_read_port = new CSRReadPort
     val csr_write_port = new CSRWritePort
   })
-  val csr_fifo = new ValidFIFO(new FuCsrReq, 4, "csr_fifo")
-  val csr_peek = csr_fifo.peek()
+//  val csr_fifo = new ValidFIFO(new FuCsrReq, 4, "csr_fifo")
+  val csr_fifo = new MultiPortFIFOBase(
+    new FuCsrReq,
+    4,
+    1,
+    1,
+    use_mem = true,
+    with_valid = false
+  )
+
+  val csr_peek = csr_fifo.peek().head
 
   val csr_fifo_pop = WireInit(false.B)
   csr_fifo.push_pop_flush_cond(
-    io.csr_req.fire,
-    csr_fifo_pop,
+    io.csr_req.fire.asBools,
+    csr_fifo_pop.asBools,
     io.flush,
-    io.csr_req.bits
+    Seq(io.csr_req.bits)
   )
   io.csr_req.ready := !csr_fifo.full
 

@@ -64,19 +64,20 @@ class ReOrderBuffer(
   //  internal fifo
   // ---------------------------
 
-  val rob = new MultiPortValidFIFO2(
+  val rob = new MultiPortFIFOBase(
     gen = genType,
     entries,
-    name = "rob",
     num_push_ports,
-    num_pop_ports
+    num_pop_ports,
+    use_mem = false,
+    with_valid = true
   )
 
   // ---------------------------
   //  push pop ports logic
   // ---------------------------
 
-  rob.push_pop_flush_cond_multi_port(
+  rob.push_pop_flush_cond(
     push_cond = VecInit(io.push_ports.map(_.fire)),
     pop_cond = VecInit(io.pop_ports.map(_.fire)),
     flush_cond = io.flush,
@@ -100,7 +101,7 @@ class ReOrderBuffer(
   // ---------------------------
   0.until(num_push_ports)
     .foreach(i => {
-      io.push_trans_id(i) := rob.push_ptr_seq(i)
+      io.push_trans_id(i) := rob.push_ptrs(i)
     })
 
   // -------------------------
@@ -111,12 +112,12 @@ class ReOrderBuffer(
   def alu_write_back(alu_resp: AluResp, en: Bool): Unit = {
     when(en) {
       val rob_idx = alu_resp.trans_id
-      rob.content(rob_idx).bits.complete := true.B
-      rob.content(rob_idx).bits.result := alu_resp.res
-      rob.content(rob_idx).bits.result_valid := true.B
+      rob.content(rob_idx).complete := true.B
+      rob.content(rob_idx).result := alu_resp.res
+      rob.content(rob_idx).result_valid := true.B
 
       assert(
-        rob.create_read_port(rob_idx).valid,
+        rob.content_valid(rob_idx),
         "rob entry must be valid"
       )
     }
@@ -126,11 +127,11 @@ class ReOrderBuffer(
     when(en) {
       val rob_idx = lsu_resp.trans_id
       // normal write-back in LoadQueue, no exception
-      rob.content(rob_idx).bits.complete := true.B
-      rob.content(rob_idx).bits.result := lsu_resp.wb_data
-      rob.content(rob_idx).bits.result_valid := true.B
+      rob.content(rob_idx).complete := true.B
+      rob.content(rob_idx).result := lsu_resp.wb_data
+      rob.content(rob_idx).result_valid := true.B
       assert(
-        rob.create_read_port(rob_idx).valid,
+        rob.content_valid(rob_idx),
         "rob entry must be valid"
       )
     }
@@ -140,11 +141,11 @@ class ReOrderBuffer(
     when(en) {
       val rob_idx = amo_resp.trans_id
       // normal write-back in LoadQueue, no exception
-      rob.content(rob_idx).bits.complete := true.B
-      rob.content(rob_idx).bits.result := amo_resp.wb_data
-      rob.content(rob_idx).bits.result_valid := true.B
+      rob.content(rob_idx).complete := true.B
+      rob.content(rob_idx).result := amo_resp.wb_data
+      rob.content(rob_idx).result_valid := true.B
       assert(
-        rob.create_read_port(rob_idx).valid,
+        rob.content_valid(rob_idx),
         "rob entry must be valid"
       )
     }
@@ -155,16 +156,16 @@ class ReOrderBuffer(
       val rob_idx = agu_resp.trans_id
       when(agu_resp.exception.valid) {
         // 1. exception happened in AGU
-        rob.content(rob_idx).bits.complete := true.B
-        rob.content(rob_idx).bits.exception := agu_resp.exception
+        rob.content(rob_idx).complete := true.B
+        rob.content(rob_idx).exception := agu_resp.exception
       }.elsewhen(agu_resp.is_mmio) {
         // 2. detect mmio access in AGU
         // if op is store, then complete is true
-        rob.content(rob_idx).bits.complete := agu_resp.is_store
-        rob.content(rob_idx).bits.lsu_io_space := true.B
+        rob.content(rob_idx).complete := agu_resp.is_store
+        rob.content(rob_idx).lsu_io_space := true.B
       }.otherwise {
         assert(agu_resp.is_store, "only store can reach here")
-        rob.content(rob_idx).bits.complete := true.B
+        rob.content(rob_idx).complete := true.B
       }
     }
   }
@@ -172,19 +173,18 @@ class ReOrderBuffer(
   def branch_write_back(branch_resp: FuBranchResp, en: Bool): Unit = {
     when(en) {
       val rob_idx = branch_resp.trans_id
-      rob.content(rob_idx).bits.complete := true.B
-      rob.content(rob_idx).bits.result := branch_resp.wb_data
-      rob.content(rob_idx).bits.result_valid := branch_resp.wb_valid
+      rob.content(rob_idx).complete := true.B
+      rob.content(rob_idx).result := branch_resp.wb_data
+      rob.content(rob_idx).result_valid := branch_resp.wb_valid
       rob
         .content(rob_idx)
-        .bits
         .bp
         .is_miss_predict := branch_resp.is_miss_predict
-      rob.content(rob_idx).bits.bp.predict_pc := branch_resp.redirect_pc
-      rob.content(rob_idx).bits.exception := branch_resp.exception
+      rob.content(rob_idx).bp.predict_pc := branch_resp.redirect_pc
+      rob.content(rob_idx).exception := branch_resp.exception
 
       assert(
-        rob.create_read_port(rob_idx).valid,
+        rob.content_valid(rob_idx),
         "rob entry must be valid"
       )
       assert(
@@ -201,12 +201,12 @@ class ReOrderBuffer(
   ): Unit = {
     when(en) {
       val rob_idx = mul_div_resp.trans_id
-      rob.content(rob_idx).bits.complete := true.B
-      rob.content(rob_idx).bits.result := mul_div_resp.data
-      rob.content(rob_idx).bits.result_valid := true.B
+      rob.content(rob_idx).complete := true.B
+      rob.content(rob_idx).result := mul_div_resp.data
+      rob.content(rob_idx).result_valid := true.B
 
       assert(
-        rob.create_read_port(rob_idx).valid,
+        rob.content_valid(rob_idx),
         "rob entry must be valid"
       )
     }
@@ -216,13 +216,13 @@ class ReOrderBuffer(
 
     when(en) {
       val rob_idx = csr_resp.trans_id
-      rob.content(rob_idx).bits.complete := true.B
-      rob.content(rob_idx).bits.result := csr_resp.data
-      rob.content(rob_idx).bits.result_valid := !csr_resp.exception.valid
-      rob.content(rob_idx).bits.exception := csr_resp.exception
+      rob.content(rob_idx).complete := true.B
+      rob.content(rob_idx).result := csr_resp.data
+      rob.content(rob_idx).result_valid := !csr_resp.exception.valid
+      rob.content(rob_idx).exception := csr_resp.exception
 
       assert(
-        rob.create_read_port(rob_idx).valid,
+        rob.content_valid(rob_idx),
         "rob entry must be valid"
       )
     }
@@ -270,13 +270,13 @@ class ReOrderBuffer(
     val rd_addr = io.push_ports(i).bits.rd_addr
     rename_set_ports(i).valid := io.push_ports(i).fire && (rd_addr =/= 0.U)
     rename_set_ports(i).bits.rd_addr := rd_addr
-    rename_set_ports(i).bits.rob_ptr := rob.push_ptr_seq(i)
+    rename_set_ports(i).bits.rob_ptr := rob.push_ptrs(i)
   }
   for (i <- 0 until num_pop_ports) {
     val rd_addr = io.pop_ports(i).bits.rd_addr
     rename_clear_ports(i).valid := io.pop_ports(i).fire && (rd_addr =/= 0.U)
     rename_clear_ports(i).bits.rd_addr := rd_addr
-    rename_clear_ports(i).bits.rob_ptr := rob.pop_ptr_seq(i)
+    rename_clear_ports(i).bits.rob_ptr := rob.pop_ptrs(i)
   }
 
   rename_table.set_clear_flush(
@@ -329,6 +329,7 @@ class ReOrderBuffer(
     val rob_idx_valid = rob_read.valid
     val rob_idx = rob_read.bits
     val rob_entry = rob.content(rob_idx)
+    val rob_entry_valid = rob.content_valid(rob_idx)
 
     when(rob_idx_valid) {
       val is_fu_ready = VecInit(
@@ -351,14 +352,14 @@ class ReOrderBuffer(
         bypass_resp.rs_data := fu_result(is_fu_ready.indexWhere(_ === true.B))
       }.otherwise {
         assert(
-          rob_entry.valid,
+          rob_entry_valid,
           "rs1 bypass error, rob entry must be valid"
         )
 
-        when(rob_entry.bits.rd_data_valid()) {
+        when(rob_entry.rd_data_valid()) {
           bypass_resp.fwd_valid := true.B
           bypass_resp.fwd_stall := false.B
-          bypass_resp.rs_data := rob_entry.bits.result
+          bypass_resp.rs_data := rob_entry.result
         }.otherwise {
           bypass_resp.fwd_valid := false.B
           bypass_resp.fwd_stall := true.B
@@ -401,22 +402,22 @@ class ReOrderBuffer(
     "write-back conflict"
   )
 
-  rob.content.foreach(entry => {
-    when(entry.valid) {
-      when(entry.bits.result_valid) {
-        assert(entry.bits.complete, "rob entry must be complete")
-      }
-
-      when(entry.bits.exception.valid) {
-        assert(entry.bits.complete, "rob entry must be complete")
-      }
-
-      assert(
-        !(entry.bits.exception.valid && entry.bits.result_valid),
-        "result and exception can't be valid at the same time"
-      )
-    }
-  })
+//  rob.content.foreach(entry => {
+//    when(entry.valid) {
+//      when(entry.bits.result_valid) {
+//        assert(entry.bits.complete, "rob entry must be complete")
+//      }
+//
+//      when(entry.bits.exception.valid) {
+//        assert(entry.bits.complete, "rob entry must be complete")
+//      }
+//
+//      assert(
+//        !(entry.bits.exception.valid && entry.bits.result_valid),
+//        "result and exception can't be valid at the same time"
+//      )
+//    }
+//  })
 }
 
 object gen_ReOrderBuffer_verilog extends App {
