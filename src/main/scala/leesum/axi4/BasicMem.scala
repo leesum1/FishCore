@@ -3,7 +3,12 @@ package leesum.axi4
 import chisel3._
 import chisel3.util.experimental.loadMemoryFromFileInline
 import chisel3.util.{Cat, RegEnable, log2Ceil}
-import leesum.{GenVerilogHelper, writeByteArrayToStringsToFile}
+import leesum.{
+  CheckAligned,
+  DcacheConst,
+  GenVerilogHelper,
+  writeByteArrayToStringsToFile
+}
 
 import java.nio.file.{Files, Paths}
 
@@ -15,6 +20,61 @@ class BasicMemoryIO(ADDR_WIDTH: Int, DATA_WIDTH: Int) extends Bundle {
   val i_rd = Input(Bool())
   val i_raddr = Input(UInt(ADDR_WIDTH.W))
   val o_rdata = Output(UInt(DATA_WIDTH.W))
+}
+
+class MemoryIO64to32(addr_width: Int) extends Module {
+  val io = IO(new Bundle {
+    val before = new BasicMemoryIO(addr_width, 64)
+    val after = Flipped(new BasicMemoryIO(addr_width, 32))
+  })
+
+  io.after.i_we := io.before.i_we
+  io.after.i_waddr := io.before.i_waddr
+
+  io.after.i_wstrb := Mux(
+    io.before.i_waddr(2),
+    io.before.i_wstrb(7, 4),
+    io.before.i_wstrb(3, 0)
+  )
+  io.after.i_wdata := Mux(
+    io.before.i_waddr(2),
+    io.before.i_wdata(63, 32),
+    io.before.i_wdata(31, 0)
+  )
+
+  io.after.i_rd := io.before.i_rd
+  io.after.i_raddr := io.before.i_raddr
+  io.before.o_rdata := Mux(
+    io.after.i_raddr(2),
+    Cat(io.after.o_rdata(31, 0), 0.U(32.W)),
+    Cat(0.U(32.W), io.after.o_rdata(31, 0))
+  )
+
+  // -------------------------
+  // formal
+  // -------------------------
+  when(io.before.i_we) {
+    assert(CheckAligned(io.before.i_waddr, DcacheConst.SIZE4))
+    when(io.before.i_waddr(2)) {
+      assert(
+        io.before.i_wstrb(3, 0) === 0.U,
+        "when addr[2] is 1, wstrb[3:0] must be 0"
+      )
+    }.otherwise {
+      assert(
+        io.before.i_wstrb(7, 4) === 0.U,
+        "when addr[2] is 0, wstrb[7:4] must be 0"
+      )
+    }
+  }
+  when(io.before.i_rd) {
+    assert(CheckAligned(io.before.i_raddr, DcacheConst.SIZE4))
+  }
+
+}
+
+object gen_memory_io64to32_verilog extends App {
+  GenVerilogHelper(new MemoryIO64to32(32))
 }
 
 /** sync memory with one read port and one write port, with 1 latency of read or
@@ -70,14 +130,13 @@ class BasicMemorySyncReadMem(
     }
   }
 
-  val mem_seq = 0
-    .until(contents_per_bit.size)
-    .map { case idx =>
+  val mem_seq = contents_per_bit.indices
+    .map { idx =>
       val mem = SyncReadMem(
         MEM_SIZE / 8,
         UInt(8.W)
       )
-      if (!contents.isEmpty) {
+      if (contents.nonEmpty) {
         loadMemoryFromFileInline(
           mem,
           s"src/main/resources/BasicMemorySyncReadMemInit_$idx.txt"

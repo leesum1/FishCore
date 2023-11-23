@@ -2,35 +2,22 @@ package leesum.axi4
 
 import chisel3._
 import chisel3.util.{Decoupled, Enum, is, isPow2, log2Ceil, switch}
+import chiseltest.ChiselScalatestTester
+import chiseltest.formal.{BoundedCheck, Formal, stable}
+import leesum.FormalUtils
+import org.scalatest.flatspec.AnyFlatSpec
 
 class AXI4SlaveBridge(
     AXI_AW: Int, // axi address width
     AXI_DW: Int, // axi data width
-    INTERNAL_MEM_SIZE: Long, // internal memory size
-    INTERNAL_MEM_DW: Int, // internal memory data width
-    INTERNAL_MEM_BASE: Long, // internal memory base address,
-    memoryFile: String = "" // initial value of internal memory
+    formal: Boolean = false
 ) extends Module {
   require(AXI_DW == 32 || AXI_DW == 64, "AXI_DW must be 32 or 64")
   require(AXI_AW == 32 || AXI_AW == 64, "AXI_AW must be 32 or 64")
-  require(AXI_DW == INTERNAL_MEM_DW, "AXI_DW must be equal to INTERNAL_MEM_DW")
-  require(
-    isPow2(INTERNAL_MEM_SIZE),
-    "INTERNAL_MEM_SIZE must be power of 2"
-  )
-  require(INTERNAL_MEM_BASE >= 0, "INTERNAL_MEM_BASE must be positive")
-  require(
-    INTERNAL_MEM_BASE % INTERNAL_MEM_SIZE == 0,
-    "INTERNAL_MEM_BASE must be multiple of INTERNAL_MEM_SIZE"
-  )
-
-  val ADDR_WIDTH = log2Ceil(INTERNAL_MEM_BASE + INTERNAL_MEM_SIZE)
-  val DATA_WIDTH = INTERNAL_MEM_DW
-  val BASE_ADDR = INTERNAL_MEM_BASE
 
   val io = IO(new Bundle {
     val axi_slave = new AXISlaveIO(AXI_AW, AXI_DW)
-    val mem_port = Flipped(new BasicMemoryIO(ADDR_WIDTH, DATA_WIDTH))
+    val mem_port = Flipped(new BasicMemoryIO(AXI_AW, AXI_DW))
   })
 
   ///////////////////////////////
@@ -79,14 +66,13 @@ class AXI4SlaveBridge(
   /// internal memory
   ////////////////////////////
 
-  val x = WireInit
   val i_we = WireInit(Bool(), false.B)
-  val i_wstrb = WireInit(UInt((DATA_WIDTH / 8).W), 0.U)
-  val i_waddr = WireInit(UInt(ADDR_WIDTH.W), 0.U)
-  val i_wdata = WireInit(UInt(DATA_WIDTH.W), 0.U)
+  val i_wstrb = WireInit(UInt((AXI_DW / 8).W), 0.U)
+  val i_waddr = WireInit(UInt(AXI_AW.W), 0.U)
+  val i_wdata = WireInit(UInt(AXI_DW.W), 0.U)
   val i_rd = WireInit(Bool(), false.B)
-  val i_raddr = WireInit(UInt(ADDR_WIDTH.W), 0.U)
-  val o_rdata = WireInit(UInt(DATA_WIDTH.W), 0.U)
+  val i_raddr = WireInit(UInt(AXI_AW.W), 0.U)
+  val o_rdata = WireInit(UInt(AXI_DW.W), 0.U)
   io.mem_port.i_rd := i_rd
   io.mem_port.i_raddr := i_raddr
   io.mem_port.i_we := i_we
@@ -95,7 +81,7 @@ class AXI4SlaveBridge(
   io.mem_port.i_wstrb := i_wstrb
   o_rdata := io.mem_port.o_rdata
 
-  def send_internal_read_req(addr: UInt) = {
+  def send_internal_read_req(addr: UInt): Unit = {
     i_rd := true.B
     i_raddr := addr
   }
@@ -305,5 +291,51 @@ class AXI4SlaveBridge(
         send_internal_write_req(next_waddr, axi_w.bits.data, axi_w.bits.strb)
       }
     }
+  }
+
+  // --------------------------
+  // formal
+  // --------------------------
+  if (formal) {
+    when(FormalUtils.StreamShouldStable(io.axi_slave.ar)) {
+      assume(io.axi_slave.ar.valid)
+      assume(stable(io.axi_slave.ar.bits))
+    }
+    when(FormalUtils.StreamShouldStable(io.axi_slave.aw)) {
+      assume(io.axi_slave.aw.valid)
+      assume(stable(io.axi_slave.aw.bits))
+    }
+    when(FormalUtils.StreamShouldStable(io.axi_slave.w)) {
+      assume(io.axi_slave.w.valid)
+      assume(stable(io.axi_slave.w.bits))
+    }
+    when(FormalUtils.StreamShouldStable(io.axi_slave.b)) {
+      assert(io.axi_slave.b.valid)
+      assert(stable(io.axi_slave.b.bits))
+    }
+    when(FormalUtils.StreamShouldStable(io.axi_slave.r)) {
+      assert(io.axi_slave.r.valid)
+      assert(stable(io.axi_slave.r.bits))
+    }
+
+    when(!io.mem_port.i_rd) {
+      assume(stable(io.mem_port.o_rdata))
+    }
+  }
+}
+
+class AXIBridgeFormal
+    extends AnyFlatSpec
+    with ChiselScalatestTester
+    with Formal {
+  "AXIBridge" should "pass with assumption" in {
+    verify(
+      new AXI4SlaveBridge(
+        AXI_AW = 32,
+        AXI_DW = 64,
+        formal = true
+      ),
+      Seq(BoundedCheck(20))
+    )
   }
 }

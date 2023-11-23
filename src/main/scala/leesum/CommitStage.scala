@@ -678,18 +678,18 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   }
 
   for (i <- 0 until num_commit_port) {
-    when(rob_valid_seq(i) && rob_data_seq(i).complete) {
-      assume(
+    when(rob_valid_seq(i) && rob_data_seq(i).complete && pop_ack(i)) {
+      assert(
         rob_data_seq(i).pc =/= 0.U,
         "pc must not be zero"
       )
 
       when(rob_data_seq(i).bp.is_miss_predict) {
-        assume(
+        assert(
           rob_data_seq(i).bp.predict_pc =/= 0.U,
           "predict_pc must not be zero"
         )
-        assume(rob_data_seq(i).fu_type === FuType.Br, "fu_type must be branch")
+        assert(rob_data_seq(i).fu_type === FuType.Br, "fu_type must be branch")
       }
     }
   }

@@ -352,6 +352,12 @@ class CSRRegs extends Module {
     val direct_write_ports = Input(new CSRDirectWritePorts)
     // privilege mode
     val cur_privilege_mode = Input(UInt(2.W))
+
+    val mtime = Input(UInt(64.W))
+    val time_int = Input(Bool())
+    val soft_int = Input(Bool())
+    val mext_int = Input(Bool())
+    val sext_int = Input(Bool())
   })
 
   // TODO: use config replace hard code
@@ -643,6 +649,7 @@ class CSRRegs extends Module {
       (CSRs.scounteren, scounteren, normal_read, normal_write),
       (CSRs.cycle, cycle, normal_read, empty_write),
       (CSRs.mcycle, cycle, normal_read, empty_write),
+      (CSRs.time, RegNext(io.mtime), normal_read, empty_write),
       (CSRs.instret, instret, normal_read, empty_write),
       (CSRs.minstret, instret, normal_read, empty_write),
       (CSRs.tselect, tselect, normal_read, empty_write)
@@ -704,6 +711,10 @@ class CSRRegs extends Module {
   io.direct_read_ports.mcause := mcause
   io.direct_read_ports.mie := mie
   io.direct_read_ports.mip := mip
+    .bitSet(InterruptCause.machine_timer.asUInt, io.time_int)
+    .bitSet(InterruptCause.machine_software.asUInt, io.soft_int)
+    .bitSet(InterruptCause.machine_external.asUInt, io.mext_int)
+    .bitSet(InterruptCause.supervisor_external.asUInt, io.sext_int)
   io.direct_read_ports.mtvec := mtvec
   io.direct_read_ports.mepc := mepc
   io.direct_read_ports.mtval := mtval

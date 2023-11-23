@@ -1,6 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, Enum, is, log2Ceil, switch}
+import chisel3.util.{Decoupled, Enum, Valid, is, log2Ceil, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal, stable}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -35,15 +35,18 @@ class ReqRespArbiter[T <: Data, U <: Data](
 
     val req_arb = Decoupled(reqType)
     val resp_arb = Flipped(Decoupled(respType))
+    val sel_idx = Output(Valid(UInt(log2Ceil(numInputs).W)))
   })
 
-  val sel_buf = RegInit(0.U(log2Ceil(numInputs).W))
   val sIdle :: sWaitResp :: Nil = Enum(2)
 
   val state = RegInit(sIdle)
   val sel_idx = VecInit(io.req_vec.map(_.valid)).indexWhere(_ === true.B)
   dontTouch(sel_idx)
   val sel_idx_valid = io.req_vec.map(_.valid).reduce(_ || _)
+
+  val sel_buf = RegInit(0.U(log2Ceil(numInputs).W))
+  val sel_buf_valid = state =/= sIdle
 
   val lock_valid = RegInit(false.B)
 
@@ -52,6 +55,9 @@ class ReqRespArbiter[T <: Data, U <: Data](
   }.otherwise {
     lock_valid := false.B
   }
+
+  io.sel_idx.valid := sel_buf_valid
+  io.sel_idx.bits := sel_idx
 
   io.req_vec.foreach(_.nodeq())
   io.resp_vec.foreach(_.noenq())

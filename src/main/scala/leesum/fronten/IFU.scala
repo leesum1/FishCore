@@ -149,6 +149,7 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
     inst_fifo.io.push.bits(0).pc := f2_f3_pipe.io.out.bits.exception_pc
     inst_fifo.io.push.bits(0).exception := f2_f3_pipe.io.out.bits.exception
   }.otherwise {
+    // TODO: do branch prediction here
     inst_fifo.io.push.bits := f2_f3_pipe.io.out.bits.fetch_group
   }
 
