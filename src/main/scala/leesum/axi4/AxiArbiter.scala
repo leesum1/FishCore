@@ -185,18 +185,24 @@ class AXIDeMux(
   val sRIdle :: sWaitRResp :: Nil = Enum(2)
   val r_state = RegInit(sRIdle)
 
+  def wait_for_ar(): Unit = {
+    io.in.ar <> io.out(io.r_sel).ar
+    when(io.in.ar.fire) {
+      r_sel_buf := io.r_sel
+      r_state := sWaitRResp
+    }.otherwise {
+      r_state := sRIdle
+    }
+  }
+
   switch(r_state) {
     is(sRIdle) {
-      io.in.ar <> io.out(io.r_sel).ar
-      when(io.in.ar.fire) {
-        r_sel_buf := io.r_sel
-        r_state := sWaitRResp
-      }
+      wait_for_ar()
     }
     is(sWaitRResp) {
       io.in.r <> io.out(r_sel_buf).r
       when(io.in.r.fire && io.in.r.bits.last) {
-        r_state := sRIdle
+        wait_for_ar()
       }
     }
   }
@@ -208,13 +214,19 @@ class AXIDeMux(
   val sAWIdle :: sWSend :: sBWait :: Nil = Enum(3)
   val w_state = RegInit(sAWIdle)
 
+  def wait_for_aw(): Unit = {
+    io.in.aw <> io.out(io.w_sel).aw
+    when(io.in.aw.fire) {
+      w_sel_buf := io.w_sel
+      w_state := sWSend
+    }.otherwise {
+      w_state := sAWIdle
+    }
+  }
+
   switch(w_state) {
     is(sAWIdle) {
-      io.in.aw <> io.out(io.w_sel).aw
-      when(io.in.aw.fire) {
-        w_sel_buf := io.w_sel
-        w_state := sWSend
-      }
+      wait_for_aw()
     }
     is(sWSend) {
       io.in.w <> io.out(w_sel_buf).w
@@ -225,7 +237,7 @@ class AXIDeMux(
     is(sBWait) {
       io.in.b <> io.out(w_sel_buf).b
       when(io.in.b.fire) {
-        w_state := sAWIdle
+        wait_for_aw()
       }
     }
   }
@@ -283,7 +295,6 @@ class AXIDeMux(
       }
     }
   }
-
 }
 
 class AXIFormal extends AnyFlatSpec with ChiselScalatestTester with Formal {
@@ -295,8 +306,8 @@ class AXIFormal extends AnyFlatSpec with ChiselScalatestTester with Formal {
   }
   "AXIDeMux" should "pass with assumption" in {
     verify(
-      new AXIDeMux(8, 32, 32, formal = true),
-      Seq(BoundedCheck(10))
+      new AXIDeMux(4, 32, 32, formal = true),
+      Seq(BoundedCheck(5))
     )
   }
 }

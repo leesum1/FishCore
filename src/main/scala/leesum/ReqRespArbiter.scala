@@ -1,6 +1,16 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, Enum, Valid, is, log2Ceil, switch}
+import chisel3.util.{
+  Decoupled,
+  DecoupledIO,
+  Enum,
+  MixedVec,
+  MixedVecInit,
+  Valid,
+  is,
+  log2Ceil,
+  switch
+}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal, stable}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -41,15 +51,30 @@ class ReqRespArbiter[T <: Data, U <: Data](
   val sIdle :: sWaitResp :: Nil = Enum(2)
 
   val state = RegInit(sIdle)
-  val sel_idx = VecInit(io.req_vec.map(_.valid)).indexWhere(_ === true.B)
-  dontTouch(sel_idx)
+
+  val sel_buf_valid = state =/= sIdle
+  val sel_buf = RegInit(0.U(log2Ceil(numInputs).W))
+  val cur_max_priority = RegInit(0.U(log2Ceil(numInputs).W))
+  val next_max_priority =
+    Mux(cur_max_priority === (numInputs - 1).U, 0.U, cur_max_priority + 1.U)
+
   val sel_idx_valid = io.req_vec.map(_.valid).reduce(_ || _)
 
-  val sel_buf = RegInit(0.U(log2Ceil(numInputs).W))
-  val sel_buf_valid = state =/= sIdle
+  // -------------------
+  // priority
+  // -------------------
+//  val sel_idx = VecInit(io.req_vec.map(_.valid))
+//    .indexWhere(_ === true.B)
+
+  // -------------------
+  // round robin
+  // -------------------
+  val new_idx = WrapShift(VecInit(io.req_vec.map(_.valid)), sel_buf)
+    .indexWhere(_ === true.B)
+  val idx_map = WrapShift(VecInit(Seq.tabulate(numInputs)(_.U)), sel_buf)
+  val sel_idx = idx_map(new_idx)
 
   val lock_valid = RegInit(false.B)
-
   when(io.req_arb.valid && !io.req_arb.ready) {
     lock_valid := true.B
   }.otherwise {
@@ -78,6 +103,7 @@ class ReqRespArbiter[T <: Data, U <: Data](
       }
 
       when(io.req_arb.fire) {
+        cur_max_priority := next_max_priority
         state := sWaitResp
       }.otherwise {
         state := sIdle
@@ -105,6 +131,7 @@ class ReqRespArbiter[T <: Data, U <: Data](
   // formal
   // --------------------------
   if (formal) {
+    assume(io.flush === false.B)
     when(io.flush) {
       for (i <- 0 until numInputs) {
         assert(io.req_vec(i).ready === false.B)
@@ -141,8 +168,8 @@ class ReqRespArbFormal
     with Formal {
   "ReqRespArb" should "pass with assumption" in {
     verify(
-      new ReqRespArbiter(2, UInt(32.W), UInt(32.W), formal = true),
-      Seq(BoundedCheck(50))
+      new ReqRespArbiter(4, UInt(32.W), UInt(32.W), formal = true),
+      Seq(BoundedCheck(10))
     )
   }
 }

@@ -115,6 +115,12 @@ object SignExt {
   }
 }
 
+object ZeroExt {
+  def apply(x: UInt, input_width: Int, output_width: Int): UInt = {
+    SignExt(x, input_width, output_width, false.B)
+  }
+}
+
 object GenMaskZero {
   def apply(width: Int, zero_count: Int, start_left: Boolean = false): UInt = {
     require(zero_count <= width)
@@ -175,6 +181,46 @@ object PopCountOrder {
     require(order_count.getWidth == order_count_width)
     order_count
   }
+}
+
+object WrapShift {
+
+  def WrapShiftRightIn[T <: Data](x: Iterable[T], shift: Int): Vec[T] = {
+    val shiftedVec = Wire(Vec(x.size, x.head.cloneType))
+    for (i <- 0 until x.size) {
+      val new_idx = (i + shift) % x.size
+      shiftedVec(new_idx) := x.toSeq(i)
+    }
+    shiftedVec
+  }
+
+  def WrapShiftLeftIn[T <: Data](x: Vec[T], shift: Int): Vec[T] = {
+    VecInit(WrapShiftRightIn(x.reverse, shift).reverse)
+  }
+
+  def apply[T <: Data](x: Vec[T], shift: UInt, left: Bool = false.B): Vec[T] = {
+    val shiftedVec = Wire(Vec(x.size, x.head.cloneType))
+
+    shiftedVec := MuxLookup(shift, x) {
+      0.to(x.size)
+        .map(i => {
+          // TODO: use a more efficient way to implement this
+          i.U -> Mux(left, WrapShiftLeftIn(x, i), WrapShiftRightIn(x, i))
+        })
+    }
+    shiftedVec
+  }
+}
+
+object gen_shift_right_verilog extends App {
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val in = Input(Vec(5, UInt(8.W)))
+      val shift = Input(UInt(3.W))
+      val out = Output(Vec(5, UInt(8.W)))
+    })
+    io.out := WrapShift(io.in, io.shift)
+  })
 }
 
 object gen_PopCountOrder_verilog extends App {
@@ -542,13 +588,13 @@ class RegMap {
   type WriteFunc = (UInt, UInt, UInt) => Valid[UInt]
 
   val normal_read = (addr: UInt, reg: UInt) => {
-    val read_result = Wire(Valid(UInt(64.W)))
+    val read_result = Wire(Valid(UInt(reg.getWidth.W)))
     read_result.valid := true.B
     read_result.bits := reg
     read_result
   }
   val normal_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-    val write_result = Wire(Valid(UInt(64.W)))
+    val write_result = Wire(Valid(UInt(reg.getWidth.W)))
     write_result.valid := true.B
     write_result.bits := wdata
     reg := write_result.bits
@@ -556,7 +602,7 @@ class RegMap {
   }
 
   val empty_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-    val write_result = Wire(Valid(UInt(64.W)))
+    val write_result = Wire(Valid(UInt(reg.getWidth.W)))
     write_result.valid := true.B
     write_result.bits := 0.U
     write_result
@@ -619,7 +665,9 @@ class RegMap {
       (addr.U, read_result)
     })
 
-    val default = Wire(Valid(UInt(64.W)))
+    val reg_width = csr_map.head._2._1.getWidth
+
+    val default = Wire(Valid(UInt(reg_width.W)))
     default.valid := false.B
     default.bits := 0.U
 
@@ -639,7 +687,7 @@ class RegMap {
     *   Valid(UInt): bits is the write result
     */
   def write(waddr: UInt, wdata: UInt): Valid[UInt] = {
-    val write_result = Wire(Valid(UInt(64.W)))
+    val write_result = Wire(Valid(UInt(wdata.getWidth.W)))
     write_result.valid := false.B
     write_result.bits := 0.U
     csr_map.foreach({ case (addr, (reg, _, write_func)) =>

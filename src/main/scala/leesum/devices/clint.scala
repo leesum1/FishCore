@@ -36,14 +36,32 @@ class clint(harts_num: Int = 1, device_base: Int) extends Module {
 
   val clint_regs = new RegMap
 
-  // TODO: not correct now !!!!!!!!1
+  // unused high 63 bits
   val msip = RegInit(VecInit(Seq.fill(harts_num)(0.U(64.W))))
-  val mtimecmp = RegInit(VecInit(Seq.fill(harts_num)(0.U(64.W))))
 
+  // TODO: only support 64-bit access
+  val mtimecmp = RegInit(VecInit(Seq.fill(harts_num)(0.U(64.W))))
   val mtime = RegInit(0.U(64.W))
 
+  // msip read function
+  val msip_read = (addr: UInt, reg: UInt) => {
+    val read_result = Wire(Valid(UInt(64.W)))
+    read_result.valid := true.B
+    read_result.bits := Cat(0.U(63.W), reg(0))
+    read_result
+  }
+
+  // msip write function
+  val msip_write = (addr: UInt, reg: UInt, wdata: UInt) => {
+    val write_result = Wire(Valid(UInt(64.W)))
+    write_result.valid := true.B
+    write_result.bits := Cat(0.U(63.W), wdata(0))
+    reg := write_result.bits
+    write_result
+  }
+
   val has_overflow = VecInit(mtimecmp.map(mtime >= _))
-  val has_soft_int = VecInit(msip.map(_ =/= 0.U))
+  val has_soft_int = VecInit(msip.map(_(0)))
 
   io.soft_int := has_soft_int
   io.time_int := has_overflow
@@ -64,8 +82,8 @@ class clint(harts_num: Int = 1, device_base: Int) extends Module {
     clint_regs.add_reg(
       device_base + ClintConst.msip + i * ClintConst.msip_per_hart,
       msip(i),
-      clint_regs.normal_read,
-      clint_regs.normal_write
+      msip_read,
+      msip_write
     )
     clint_regs.add_reg(
       device_base + ClintConst.mtimecmp + i * ClintConst.mtimecmp_per_hart,
@@ -81,12 +99,12 @@ class clint(harts_num: Int = 1, device_base: Int) extends Module {
 
   when(io.mem.i_rd) {
     last_read := clint_regs.read(io.mem.i_raddr).bits
-    assume(clint_regs.in_range(io.mem.i_raddr))
+    assert(clint_regs.in_range(io.mem.i_raddr), "clint read out of range")
   }
 
   when(io.mem.i_we) {
     clint_regs.write(io.mem.i_waddr, io.mem.i_wdata)
-    assume(clint_regs.in_range(io.mem.i_waddr))
+    assert(clint_regs.in_range(io.mem.i_waddr), "clint write out of range")
   }
 
   io.mem.o_rdata := last_read

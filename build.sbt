@@ -30,5 +30,8 @@ lazy val root = (project in file("."))
     ),
     addCompilerPlugin(
       "org.chipsalliance" % "chisel-plugin" % chiselVersion cross CrossVersion.full
-    )
+    ),
+
+    // Add this line in your build.sbt
+    unmanagedSourceDirectories in Test += baseDirectory.value / "src/main/scala/leesum"
   )
