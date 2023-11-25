@@ -153,8 +153,8 @@ int main(int argc, char** argv)
                 {
                     auto cause = top->io_difftest_bits_exception_cause;
 
-                    std::cout << std::format("exception cause 0x{:x},pc 0x{:016x}\n",
-                                             cause, sim_base.get_pc());
+//                    std::cout << std::format("exception cause 0x{:x},pc 0x{:016x}\n",
+//                                             cause, sim_base.get_pc());
                     if (am_en && cause == 3)
                     {
                         // ebreak

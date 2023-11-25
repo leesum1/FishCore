@@ -246,6 +246,9 @@ class AXIDeMux(
   // formal verification
   // ---------------------
 
+  assert(io.r_sel < out_nums.U)
+  assert(io.w_sel < out_nums.U)
+
   if (formal) {
     when(FormalUtils.StreamShouldStable(io.in.ar)) {
       assume(io.in.ar.valid)

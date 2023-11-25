@@ -97,21 +97,31 @@ object GenOrderVec {
 
 object SignExt {
   def apply(x: UInt, input_width: Int, output_width: Int): UInt = {
-    require(input_width < output_width)
+    require(input_width <= output_width)
     require(x.getWidth >= input_width && x.getWidth <= output_width)
-    val sign = x(input_width - 1)
-    val sign_ext = Fill(output_width - input_width, sign)
-    Cat(sign_ext, x(input_width - 1, 0))
+
+    if (input_width == output_width) {
+      x
+    } else {
+      val sign = x(input_width - 1)
+      val sign_ext = Fill(output_width - input_width, sign)
+      Cat(sign_ext, x(input_width - 1, 0))
+    }
   }
 
   def apply(x: UInt, input_width: Int, output_width: Int, en: Bool): UInt = {
-    require(input_width < output_width)
+    require(input_width <= output_width)
     require(x.getWidth >= input_width && x.getWidth <= output_width)
-    Mux(
-      en,
-      SignExt(x, input_width, output_width),
-      Cat(0.U((output_width - input_width).W), x(input_width - 1, 0))
-    )
+
+    if (input_width == output_width) {
+      x
+    } else {
+      Mux(
+        en,
+        SignExt(x, input_width, output_width),
+        Cat(0.U((output_width - input_width).W), x(input_width - 1, 0))
+      )
+    }
   }
 }
 
@@ -183,43 +193,102 @@ object PopCountOrder {
   }
 }
 
-object WrapShift {
+/** from rocket-chip Util
+  */
+object BarrelShifter {
+  private trait ShiftType
 
-  def WrapShiftRightIn[T <: Data](x: Iterable[T], shift: Int): Vec[T] = {
-    val shiftedVec = Wire(Vec(x.size, x.head.cloneType))
-    for (i <- 0 until x.size) {
-      val new_idx = (i + shift) % x.size
-      shiftedVec(new_idx) := x.toSeq(i)
-    }
-    shiftedVec
+  private object LeftShift extends ShiftType
+
+  private object RightShift extends ShiftType
+
+  private object LeftRotate extends ShiftType
+
+  private object RightRotate extends ShiftType
+
+  private def apply[T <: Data](
+      inputs: Vec[T],
+      shiftInput: UInt,
+      shiftType: ShiftType,
+      shiftGranularity: Int = 1
+  ): Vec[T] = {
+    require(shiftGranularity > 0)
+    val elementType: T = chiselTypeOf(inputs.head)
+    shiftInput.asBools
+      .grouped(shiftGranularity)
+      .map(VecInit(_).asUInt)
+      .zipWithIndex
+      .foldLeft(inputs) { case (prev, (shiftBits, layer)) =>
+        Mux1H(
+          UIntToOH(shiftBits),
+          Seq.tabulate(1 << shiftBits.getWidth)(i => {
+            // For each layer of barrel shifter, it needs to
+            // Mux between shift 0 and i * 2^(depthOfLayer*granularity)
+            //
+            // e.g, when depth = 2 and granu = 1, the first layer Mux between 0 and 1
+            // while the second layer Mux between 0 and 2, thus Vec.shift(UInt(2.W))
+            //
+            // e.g, when depth = 2 and granu = 2, the first layer Mux between 0, 1, 2 and 3
+            // while the second layer Mux between 0, 4, 8, and 12, thus achieving Vec.shift(UInt(4.W))
+            //
+            // Also, shift no more than inputs length since prev.drop will not warn about overflow
+            // this is for Vec with length not the exponential of 2, e.g. 13
+            val layerShift: Int =
+              (i * (1 << (layer * shiftGranularity))).min(prev.length)
+            VecInit(shiftType match {
+              case LeftRotate =>
+                prev.drop(layerShift) ++ prev.take(layerShift)
+              case LeftShift =>
+                prev.drop(layerShift) ++ Seq
+                  .fill(layerShift)(0.U.asTypeOf(elementType))
+              case RightRotate =>
+                prev.takeRight(layerShift) ++ prev.dropRight(layerShift)
+              case RightShift =>
+                Seq.fill(layerShift)(0.U.asTypeOf(elementType)) ++ prev
+                  .dropRight(layerShift)
+            })
+          })
+        )
+      }
   }
 
-  def WrapShiftLeftIn[T <: Data](x: Vec[T], shift: Int): Vec[T] = {
-    VecInit(WrapShiftRightIn(x.reverse, shift).reverse)
-  }
+  def leftShift[T <: Data](
+      inputs: Vec[T],
+      shift: UInt,
+      layerSize: Int = 1
+  ): Vec[T] =
+    apply(inputs, shift, LeftShift, layerSize)
 
-  def apply[T <: Data](x: Vec[T], shift: UInt, left: Bool = false.B): Vec[T] = {
-    val shiftedVec = Wire(Vec(x.size, x.head.cloneType))
+  def rightShift[T <: Data](
+      inputs: Vec[T],
+      shift: UInt,
+      layerSize: Int = 1
+  ): Vec[T] =
+    apply(inputs, shift, RightShift, layerSize)
 
-    shiftedVec := MuxLookup(shift, x) {
-      0.to(x.size)
-        .map(i => {
-          // TODO: use a more efficient way to implement this
-          i.U -> Mux(left, WrapShiftLeftIn(x, i), WrapShiftRightIn(x, i))
-        })
-    }
-    shiftedVec
-  }
+  def leftRotate[T <: Data](
+      inputs: Vec[T],
+      shift: UInt,
+      layerSize: Int = 1
+  ): Vec[T] =
+    apply(inputs, shift, LeftRotate, layerSize)
+
+  def rightRotate[T <: Data](
+      inputs: Vec[T],
+      shift: UInt,
+      layerSize: Int = 1
+  ): Vec[T] =
+    apply(inputs, shift, RightRotate, layerSize)
 }
 
 object gen_shift_right_verilog extends App {
   GenVerilogHelper(new Module {
     val io = IO(new Bundle {
-      val in = Input(Vec(5, UInt(8.W)))
-      val shift = Input(UInt(3.W))
-      val out = Output(Vec(5, UInt(8.W)))
+      val in = Input(Vec(32, UInt(32.W)))
+      val shift = Input(UInt(6.W))
+      val out = Output(Vec(32, UInt(32.W)))
     })
-    io.out := WrapShift(io.in, io.shift)
+    io.out := BarrelShifter.rightRotate(io.in, io.shift)
   })
 }
 
@@ -560,6 +629,13 @@ object Long2UInt64 {
     }
   }
 }
+
+object Long2UInt32 {
+  def apply(x: Long): UInt = {
+    Long2UInt64(x)(31, 0)
+  }
+}
+
 object ToAugmented {
   implicit class SeqToAugmentedSeq[T <: Data](private val x: Seq[T])
       extends AnyVal {
@@ -637,7 +713,7 @@ class RegMap {
   }
 
   def in_range(addr: UInt): Bool = {
-    val all_addr = VecInit(csr_map.keys.toSeq.map(_.U(32.W)))
+    val all_addr = VecInit(csr_map.keys.toSeq.map(Long2UInt32(_)))
     all_addr.contains(addr)
   }
 
@@ -661,8 +737,9 @@ class RegMap {
     */
   def read(raddr: UInt): Valid[UInt] = {
     val raddr_map = csr_map.map({ case (addr, (reg, read_func, _)) =>
-      val read_result = read_func(addr.U, reg)
-      (addr.U, read_result)
+      val addr_u = Long2UInt32(addr)
+      val read_result = read_func(addr_u, reg)
+      (addr_u, read_result)
     })
 
     val reg_width = csr_map.head._2._1.getWidth
@@ -671,6 +748,7 @@ class RegMap {
     default.valid := false.B
     default.bits := 0.U
 
+    // TODO: use reduceTree lookup?
     val rdata = MuxLookup(raddr, default)(
       raddr_map.toSeq
     )
@@ -691,8 +769,9 @@ class RegMap {
     write_result.valid := false.B
     write_result.bits := 0.U
     csr_map.foreach({ case (addr, (reg, _, write_func)) =>
-      when(waddr === addr.U) {
-        write_result := write_func(addr.U, reg, wdata)
+      val addr_u = Long2UInt32(addr)
+      when(waddr === addr_u) {
+        write_result := write_func(addr_u, reg, wdata)
       }
     })
     write_result

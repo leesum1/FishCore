@@ -637,6 +637,8 @@ class CSRRegs extends Module {
       (CSRs.sepc, sepc, normal_read, normal_write),
       (CSRs.sscratch, sscratch, normal_read, normal_write),
       (CSRs.satp, satp, satp_read, satp_write),
+      (CSRs.sip, mip, normal_read, normal_write), // TODO: add mask
+      (CSRs.sie, mie, normal_read, normal_write), // TODO: add mask
 
       // read only
       (CSRs.misa, misa, normal_read, empty_write),

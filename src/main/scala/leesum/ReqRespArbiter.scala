@@ -69,9 +69,11 @@ class ReqRespArbiter[T <: Data, U <: Data](
   // -------------------
   // round robin
   // -------------------
-  val new_idx = WrapShift(VecInit(io.req_vec.map(_.valid)), sel_buf)
+  val new_idx = BarrelShifter
+    .rightRotate(VecInit(io.req_vec.map(_.valid)), sel_buf)
     .indexWhere(_ === true.B)
-  val idx_map = WrapShift(VecInit(Seq.tabulate(numInputs)(_.U)), sel_buf)
+  val idx_map =
+    BarrelShifter.rightRotate(VecInit(Seq.tabulate(numInputs)(_.U)), sel_buf)
   val sel_idx = idx_map(new_idx)
 
   val lock_valid = RegInit(false.B)

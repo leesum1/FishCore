@@ -1,6 +1,7 @@
 package leesum.fronten
 
 import chisel3._
+import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.{Cat, Decoupled, Enum, is, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{
@@ -42,7 +43,10 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
   val pc_f1_f2_buf = RegInit(0.U(64.W))
 
   val f2_f3_buf = Reg(new f2_f3_pipe_entry)
-  f2_f3_buf.clear()
+
+  when(reset.asBool) {
+    f2_f3_buf.clear()
+  }
 
   val f2_f3_pipe = Module(new PipeLine(new f2_f3_pipe_entry))
   f2_f3_pipe.io.flush := io.flush

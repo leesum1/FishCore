@@ -50,6 +50,11 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   val flush_next = RegInit(false.B)
   val privilege_mode = RegInit(3.U(2.W)) // machine mode
 
+  // when csr has side effect, flush the pipeline and rerun the current inst
+  val csr_side_effect = RegInit(
+    false.B
+  )
+
   io.cur_privilege_mode := privilege_mode
 
   when(flush_next) {
@@ -173,9 +178,9 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       }
 
     }.elsewhen(entry.fu_op === FuOP.Fence) {
-      printf("Fence at %x\n", entry.pc)
+//      printf("Fence at %x\n", entry.pc)
     }.elsewhen(entry.fu_op === FuOP.FenceI) {
-      printf("FenceI at %x\n", entry.pc)
+//      printf("FenceI at %x\n", entry.pc)
     }.elsewhen(entry.fu_op === FuOP.WFI) {
       printf("WFI at %x\n", entry.pc)
     }
@@ -333,6 +338,20 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     assert(FuOP.is_csr(entry.fu_op), "fu_op must be csr")
     assert(entry.exception.valid === false.B)
 
+    val csr_addr = entry.inst(31, 20)
+
+    val side_effect_csrs = Seq(
+      CSRs.satp.asUInt,
+      CSRs.mstatus.asUInt,
+      CSRs.sstatus.asUInt
+    )
+    val csr_next_pc = RegInit(0.U(64.W))
+
+    // TODO: only write csr with side effect
+    val has_side_effect = VecInit(side_effect_csrs).contains(csr_addr)
+
+    dontTouch(has_side_effect)
+
     val sIdle :: sACK :: Nil = Enum(2)
     val state = RegInit(sIdle)
     state.suggestName("csr_state")
@@ -343,13 +362,19 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
         csr_commit_port.bits := true.B
         csr_commit_port.valid := true.B
         when(csr_commit_port.fire) {
+          csr_next_pc := entry.pc + 4.U
           state := sACK
         }
       }
       is(sACK) {
         assert(entry.complete === true.B, "csr must be complete")
         gpr_commit_port.write(entry.rd_addr, entry.result)
+
         ack := true.B
+        when(has_side_effect) {
+//          printf("csr side effect at %x\n", entry.pc)
+          csr_side_effect := true.B
+        }
         state := sIdle
       }
     }
@@ -394,7 +419,12 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
   // first inst
   when(rob_valid_seq.head && rob_data_seq.head.complete && !flush_next) {
-    when(rob_data_seq.head.exception.valid) {
+    when(csr_side_effect) {
+      flush_next := true.B
+      csr_side_effect := false.B
+      io.branch_commit.valid := true.B
+      io.branch_commit.bits.target := rob_data_seq.head.pc
+    }.elsewhen(rob_data_seq.head.exception.valid) {
       retire_exception(rob_data_seq.head, pop_ack.head)
     }.elsewhen(
       FuOP.is_xret(rob_data_seq.head.fu_op)
@@ -605,7 +635,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   when(
     rob_valid_seq(1) && rob_data_seq(
       1
-    ).complete && !flush_next && !has_interrupt
+    ).complete && !flush_next && !has_interrupt && !csr_side_effect
   ) {
 
     // TODO: more constraint on the second inst?

@@ -375,8 +375,12 @@ class plic(
     val read_result = Wire(Valid(UInt(32.W)))
     read_result.valid := true.B
     read_result.bits := plic_regs.read(io.mem.i_raddr).bits
-    assert(plic_regs.in_range(io.mem.i_raddr), "plic read out of range")
     last_read := read_result.bits
+
+    when(!plic_regs.in_range(io.mem.i_raddr)) {
+      printf("plic read out of range: %x\n", io.mem.i_raddr)
+      assert(false.B)
+    }
   }
   io.mem.o_rdata := last_read
   // --------------------------
@@ -384,7 +388,10 @@ class plic(
   // --------------------------
   when(io.mem.i_we) {
     plic_regs.write(io.mem.i_waddr, io.mem.i_wdata)
-    assert(plic_regs.in_range(io.mem.i_waddr), "plic write out of range")
+    when(!plic_regs.in_range(io.mem.i_waddr)) {
+      printf("plic write out of range: %x\n", io.mem.i_waddr)
+      assert(false.B)
+    }
   }
 
   // --------------------------

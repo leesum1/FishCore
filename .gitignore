@@ -352,3 +352,4 @@ gen_verilog
 /src/main/resources/BasicMemorySyncReadMemInit_3.txt
 /src/main/resources/BasicMemorySyncReadMemInit_2.txt
 /src/main/resources/random_data_readmemh.txt
+/sim/log.txt

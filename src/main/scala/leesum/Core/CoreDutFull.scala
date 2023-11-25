@@ -15,93 +15,6 @@ import leesum._
 import leesum.devices.clint
 import leesum.fronten.IFUTop
 
-class FishSoc(
-    muldiv_en: Boolean = true,
-    rvc_en: Boolean = false
-) extends Module {
-  val boot_pc = 0x80000000L
-  val mem_addr = 0x80000000L
-  val mem_size = 0x8000000L
-  val monitor_en = true
-  val addr_width = log2Ceil(mem_addr + mem_size)
-
-  val DEVICE_BASE = 0xa0000000L
-  val SERIAL_PORT = DEVICE_BASE + 0x00003f8L
-  val RTC_ADDR = DEVICE_BASE + 0x0000048L
-  val KBD_ADDR = DEVICE_BASE + 0x0000060L
-  val VGACTRL_ADDR = DEVICE_BASE + 0x0000100L
-  val FB_ADDR = DEVICE_BASE + 0x1000000L
-
-  val CLINT_BASE = 0x2000000L
-
-  val addr_map = Seq(
-    (mem_addr, mem_addr + mem_size, false),
-    (SERIAL_PORT, SERIAL_PORT + 0x8, true),
-    (RTC_ADDR, RTC_ADDR + 0x8, true),
-    (KBD_ADDR, KBD_ADDR + 0x8, true),
-    (VGACTRL_ADDR, VGACTRL_ADDR + 0x8, true),
-    (FB_ADDR, FB_ADDR + 300 * 400 * 4, true),
-    (CLINT_BASE, CLINT_BASE + 0x10000, true)
-  )
-
-  def demux_sel_idx(addr: UInt): UInt = {
-    // 0 -> mem
-    // 1 -> clint
-    addr >= CLINT_BASE.U && addr < (CLINT_BASE + 0x10000).U
-  }
-
-  val io = IO(new Bundle {
-    val difftest = Output(Valid(new DifftestPort))
-    val mem_port = Flipped(new BasicMemoryIO(32, 64))
-  })
-
-  val core = Module(
-    new FishCore(muldiv_en, rvc_en, monitor_en, boot_pc, addr_map)
-  )
-
-  core.io.difftest <> io.difftest
-
-  val axi_demux = Module(
-    new AXIDeMux(2, 32, 64)
-  )
-
-  // core <> axi_demux
-  core.io.axi_master <> axi_demux.io.in
-
-  axi_demux.io.r_sel := demux_sel_idx(core.io.axi_master.ar.bits.addr)
-  axi_demux.io.w_sel := demux_sel_idx(core.io.axi_master.aw.bits.addr)
-
-  // mem_port <>  mem_axi_bridge <> axi_demux
-  val mem_axi_bridge = Module(
-    new AXI4SlaveBridge(
-      32,
-      64
-    )
-  )
-  io.mem_port <> mem_axi_bridge.io.mem_port
-
-  mem_axi_bridge.io.axi_slave <> axi_demux.io.out(0)
-
-  // clint32 <> clint64to32 <> clint_axi_bridge <> axi_demux
-  val clint = Module(new clint(1, 0x2000000))
-  val clint_axi_bridge = Module(
-    new AXI4SlaveBridge(
-      32,
-      64
-    )
-  )
-
-  clint.io.mem <> clint_axi_bridge.io.mem_port
-  clint_axi_bridge.io.axi_slave <> axi_demux.io.out(1)
-
-  // clint <> core
-  core.io.mtime := clint.io.mtime
-  core.io.time_int := clint.io.time_int.head
-  core.io.soft_int := clint.io.soft_int.head
-  core.io.mext_int := false.B
-  core.io.sext_int := false.B
-}
-
 class FishCore(
     muldiv_en: Boolean = true,
     rvc_en: Boolean = false,
@@ -137,7 +50,7 @@ class FishCore(
 
   val decode_stage = Seq.tabulate(2)(i => Module(new InstDecoder))
 
-  val rob = Module(new ReOrderBuffer(8, 2, 2))
+  val rob = Module(new ReOrderBuffer(4, 2, 2))
   val issue_stage_rob = Module(new IssueStageNew(2, 2))
 
   val commit_stage = Module(new CommitStage(2, monitor_en))
@@ -329,26 +242,4 @@ class FishCore(
   lsu.io.dcache_load_resp <> dcache_load_arb.io.resp_vec(0)
   lsu.io.dcache_store_resp <> dcache.io.store_resp
 
-}
-
-object gen_FishSoc extends App {
-  GenVerilogHelper(
-    new FishSoc(
-      muldiv_en = true,
-      rvc_en = true
-    ),
-    "/home/leesum/workhome/chisel-fish/sim/vsrc/ysyx_v2.sv"
-  )
-}
-
-/** This is a simplified version of CoreDutFull, which is used for VIVADO STA.
-  */
-object gen_CoreTestSTA extends App {
-  GenVerilogHelper(
-    new FishCore(
-      muldiv_en = false,
-      rvc_en = false
-    ),
-    "/home/leesum/vivado_project/ysyx_v2/ysyx_v2.srcs/sources_1/imports/ysyx_v2/ysyx_v2.sv"
-  )
 }
