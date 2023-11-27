@@ -50,7 +50,7 @@ class FishCore(
 
   val decode_stage = Seq.tabulate(2)(i => Module(new InstDecoder))
 
-  val rob = Module(new ReOrderBuffer(4, 2, 2))
+  val rob = Module(new ReOrderBuffer(8, 2, 2))
   val issue_stage_rob = Module(new IssueStageNew(2, 2))
 
   val commit_stage = Module(new CommitStage(2, monitor_en))

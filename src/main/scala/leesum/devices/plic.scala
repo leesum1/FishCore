@@ -401,8 +401,8 @@ class plic(
   assert(claimed_bits(0) === false.B, "claimed_bit0 should be false")
   assert(pending_bits(0) === false.B, "pending_bit0 should be false")
 
-  enable_regs.foreach((x) => {
-    assert(x.enable(0) === false.B, "enable_bit0 should be false")
+  enable_regs.foreach(x => {
+    assert(x.enable(0)(0) === false.B, "enable_bit0 should be false")
   })
 
 }

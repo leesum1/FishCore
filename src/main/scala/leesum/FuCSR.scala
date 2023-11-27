@@ -74,7 +74,7 @@ class FuCSR extends Module {
     assert(io.csr_commit.valid, "csr_commit should be valid")
     assert(io.csr_resp.ready, "csr_resp should be ready")
 
-    io.csr_commit.ready := true.B
+    io.csr_commit.ready := true.B && !io.flush
     io.csr_resp.valid := true.B
     csr_fifo_pop := true.B
     state := sIdleRead
@@ -102,9 +102,10 @@ class FuCSR extends Module {
   val state = RegInit(sIdleRead)
   val csr_read_buf = RegInit(0.U(64.W))
 
+  // TODO: need check carefully
   switch(state) {
     is(sIdleRead) {
-      when(csr_peek.valid && io.csr_commit.valid) {
+      when(csr_peek.valid && io.csr_commit.valid && !io.flush) {
         io.csr_read_port.addr := csr_peek.bits.csr_addr
         io.csr_read_port.read_en := csr_peek.bits.read_en
         csr_read_buf := Mux(
@@ -118,27 +119,38 @@ class FuCSR extends Module {
         }.otherwise {
           state := sWrite
         }
+      }.otherwise {
+        state := sIdleRead
       }
     }
     is(sWrite) {
-      val csr_wdata = get_csr_result(
-        csr_peek.bits.csr_op,
-        csr_read_buf,
-        csr_peek.bits.rs1_or_zimm
-      )
-      io.csr_write_port.addr := csr_peek.bits.csr_addr
-      io.csr_write_port.write_en := csr_peek.bits.write_en
-      io.csr_write_port.write_data := csr_wdata
-      when(io.csr_write_port.write_ex_resp) {
-        send_csr_resp(true.B)
+
+      when(!io.flush) {
+        val csr_wdata = get_csr_result(
+          csr_peek.bits.csr_op,
+          csr_read_buf,
+          csr_peek.bits.rs1_or_zimm
+        )
+        io.csr_write_port.addr := csr_peek.bits.csr_addr
+        io.csr_write_port.write_en := csr_peek.bits.write_en
+        io.csr_write_port.write_data := csr_wdata
+        when(io.csr_write_port.write_ex_resp) {
+          send_csr_resp(true.B)
+        }.otherwise {
+          send_csr_resp(false.B)
+        }
       }.otherwise {
-        send_csr_resp(false.B)
+        state := sIdleRead
       }
+
     }
     is(sException) {
-      send_csr_resp(true.B)
+      when(!io.flush) {
+        send_csr_resp(true.B)
+      }.otherwise {
+        state := sIdleRead
+      }
     }
-
   }
 
   // --------------------------

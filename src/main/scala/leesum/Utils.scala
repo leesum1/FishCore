@@ -778,3 +778,29 @@ class RegMap {
   }
 
 }
+
+class MSBDivFreq(val N: Int) extends Module {
+  val io = IO(new Bundle {
+    val clk_div = Output(Bool())
+  })
+  require(N > 1, "N must be greater than 1")
+  val cnt = RegInit(0.U(log2Ceil(N).W))
+  when(cnt === (N - 1).U) {
+    cnt := 0.U
+  }.otherwise {
+    cnt := cnt + 1.U
+  }
+  io.clk_div := cnt(log2Ceil(N) - 1) // msb
+}
+
+object EdgeDetect {
+  def up(x: Bool): Bool = {
+    x && !RegNext(x)
+  }
+  def down(x: Bool): Bool = {
+    !x && RegNext(x)
+  }
+  def change(x: Bool): Bool = {
+    x =/= RegNext(x)
+  }
+}

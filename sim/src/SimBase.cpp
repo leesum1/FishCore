@@ -15,7 +15,7 @@ void SimBase::dump_wave() const
 #if VM_TRACE_FST == 1
     if (wave_trace_flag)
     {
-        if (tfp->isOpen())
+        if (tfp->isOpen() && top->contextp()->time() > wave_stime * 2)
         {
             tfp->dump(top->contextp()->time());
         }
@@ -24,10 +24,11 @@ void SimBase::dump_wave() const
     top->contextp()->timeInc(1);
 }
 
-void SimBase::enable_wave_trace(const std::string& file_name)
+void SimBase::enable_wave_trace(const std::string& file_name, const uint64_t wave_stime)
 {
 #if VM_TRACE_FST == 1
     wave_trace_flag = true;
+    this->wave_stime = wave_stime;
     tfp = new VerilatedFstC;
     Verilated::traceEverOn(true);
     top->trace(tfp, 99);

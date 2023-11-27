@@ -2,7 +2,7 @@ package leesum.Core
 
 import chisel3._
 import chisel3.util.{Valid, log2Ceil}
-import leesum.GenVerilogHelper
+import leesum.{GenVerilogHelper, MSBDivFreq}
 import leesum.axi4.{
   AXI4SlaveBridge,
   AXIDeMux,
@@ -106,6 +106,11 @@ class FishSoc(
   )
 
   // -------------------
+  // rtc clk
+  // -------------------
+  val rtc_clk = Module(new MSBDivFreq(64))
+
+  // -------------------
   // devices
   // -------------------
 
@@ -127,6 +132,7 @@ class FishSoc(
       64
     )
   )
+  clint.io.rtc_clk := rtc_clk.io.clk_div
   clint.io.mem <> clint_axi_bridge.io.mem_port
   clint_axi_bridge.io.axi_slave <> axi_demux.io.out(1)
 

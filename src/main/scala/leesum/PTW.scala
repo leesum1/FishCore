@@ -111,7 +111,7 @@ class PTW(formal: Boolean = false) extends Module {
     when(ptw_req.req_type === TLBReqType.Fetch) {
       pte_permission_check_pass := pte.x
     }.elsewhen(TLBReqType.need_store(ptw_req.req_type)) {
-      // STORE , AMO , lr
+      // STORE , AMO , sc
       val store_check_pass = pte.w
       pte_permission_check_pass := store_check_pass & sum_check_pass
 

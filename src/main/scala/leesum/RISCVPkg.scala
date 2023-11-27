@@ -238,6 +238,15 @@ class CSRBitField(private var value: Long) {
   def getRawValue = value
 }
 
+object MipMask {
+  final val ssip = 0x00000002L
+  final val msip = 0x00000008L
+  final val stip = 0x00000020L
+  final val mtip = 0x00000080L
+  final val seip = 0x00000200L
+  final val meip = 0x00000800L
+}
+
 object MIsaMask {
   final val A = 0x00000001L
   final val B = 0x00000002L
@@ -2396,16 +2405,6 @@ object RVinst {
 
 }
 
-object InterruptCause extends ChiselEnum {
-  val supervisor_software = Value(1.U)
-  val machine_software = Value(3.U)
-  val supervisor_timer = Value(5.U)
-  val machine_timer = Value(7.U)
-  val supervisor_external = Value(9.U)
-  val machine_external = Value(11.U)
-  val unknown = Value(16.U)
-}
-
 object ExceptionCause extends ChiselEnum {
   val misaligned_fetch = Value(0x0.U)
   val fetch_access = Value(0x1.U)
@@ -2427,6 +2426,13 @@ object ExceptionCause extends ChiselEnum {
   val virtual_instruction = Value(0x16.U)
   val store_guest_page_fault = Value(0x17.U)
   val unknown = Value(0x18.U)
+
+  val supervisor_software_interrupt = Value(Long2UInt64(0x80000000_00000001L))
+  val machine_software_interrupt = Value(Long2UInt64(0x80000000_00000003L))
+  val supervisor_timer_interrupt = Value(Long2UInt64(0x80000000_00000005L))
+  val machine_timer_interrupt = Value(Long2UInt64(0x80000000_00000007L))
+  val supervisor_external_interrupt = Value(Long2UInt64(0x80000000_00000009L))
+  val machine_external_interrupt = Value(Long2UInt64(0x80000000_0000000bL))
 
   def get_call_cause(privilege: UInt): ExceptionCause.Type = {
     require(privilege.getWidth == 2)

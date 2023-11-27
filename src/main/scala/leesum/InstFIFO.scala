@@ -31,7 +31,7 @@ class InstsFIFO extends Module {
 
   val inst_fifo = new MultiPortFIFOBase(
     gen = new INSTEntry,
-    size = 8,
+    size = 16,
     num_push_ports = 4,
     num_pop_ports = 2,
     use_mem = false,

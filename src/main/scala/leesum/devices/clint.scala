@@ -3,7 +3,7 @@ package leesum.devices
 import chisel3._
 import chisel3.util.{Cat, Valid}
 import leesum.axi4.BasicMemoryIO
-import leesum.{GenVerilogHelper, RegMap}
+import leesum.{EdgeDetect, GenVerilogHelper, RegMap}
 
 //const MSIP_BASE: u64 = 0x0;
 //const MSIP_PER_HART: u64 = 0x4;
@@ -28,6 +28,7 @@ class clint(harts_num: Int = 1, device_base: Int) extends Module {
 
   val io = IO(new Bundle {
     val mem = new BasicMemoryIO(32, 64)
+    val rtc_clk = Input(Bool())
     val mtime = Output(UInt(64.W))
     val mtimecmp = Output(Vec(harts_num, UInt(64.W)))
     val time_int = Output(Vec(harts_num, Bool()))
@@ -66,7 +67,9 @@ class clint(harts_num: Int = 1, device_base: Int) extends Module {
   io.soft_int := has_soft_int
   io.time_int := has_overflow
 
-  mtime := mtime + 1.U
+  when(EdgeDetect.up(io.rtc_clk)) {
+    mtime := mtime + 1.U
+  }
 
   io.mtime := mtime
   io.mtimecmp := mtimecmp

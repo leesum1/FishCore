@@ -219,20 +219,21 @@ class AMOQueue extends Module {
     is(sWaitLoadResp) {
       io.load_resp.ready := true.B
       when(io.load_resp.fire) {
+        val shifted_rdata = GetAxiRdata(
+          io.load_resp.bits.data,
+          amo_queue.bits.rs1_data,
+          Mux(
+            amo_queue.bits.is_rv32,
+            2.U, // 4 bytes
+            3.U // 8 bytes
+          ),
+          amo_queue.bits.is_rv32
+        )
         when(amo_queue.bits.atomic_op === AtomicOP.LR) {
-          send_amo_writeback(io.load_resp.bits.data)
+          send_amo_writeback(shifted_rdata)
         }.otherwise {
           // the lsb of rdata is in the lsb of load_shifted_rdata
-          load_shifted_rdata := GetAxiRdata(
-            io.load_resp.bits.data,
-            amo_queue.bits.rs1_data,
-            Mux(
-              amo_queue.bits.is_rv32,
-              2.U, // 4 bytes
-              3.U // 8 bytes
-            ),
-            amo_queue.bits.is_rv32
-          )
+          load_shifted_rdata := shifted_rdata
           state := sWaitStoreReq
         }
       }

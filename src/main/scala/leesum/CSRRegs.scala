@@ -263,20 +263,20 @@ class MipFiled(data: UInt) {
     ssip || msip || stip || mtip || seip || meip
   }
 
-  def get_priority_interupt: InterruptCause.Type = {
-    val priority_int = WireInit(InterruptCause.unknown)
+  def get_priority_interupt: ExceptionCause.Type = {
+    val priority_int = WireInit(ExceptionCause.unknown)
     when(meip) {
-      priority_int := InterruptCause.machine_external
+      priority_int := ExceptionCause.machine_external_interrupt
     }.elsewhen(msip) {
-      priority_int := InterruptCause.machine_software
+      priority_int := ExceptionCause.machine_software_interrupt
     }.elsewhen(mtip) {
-      priority_int := InterruptCause.machine_timer
+      priority_int := ExceptionCause.machine_timer_interrupt
     }.elsewhen(seip) {
-      priority_int := InterruptCause.supervisor_external
+      priority_int := ExceptionCause.supervisor_external_interrupt
     }.elsewhen(ssip) {
-      priority_int := InterruptCause.supervisor_software
+      priority_int := ExceptionCause.supervisor_software_interrupt
     }.elsewhen(stip) {
-      priority_int := InterruptCause.supervisor_timer
+      priority_int := ExceptionCause.supervisor_timer_interrupt
     }
     priority_int
   }
@@ -480,6 +480,31 @@ class CSRRegs extends Module {
     reg := write_result.bits
     write_result
   }
+
+  // -------------------------
+  // sip & sie read write func
+  // -------------------------
+  val sip_sie_mask = new CSRBitField(0)
+  sip_sie_mask.setField(MipMask.seip, 1)
+  sip_sie_mask.setField(MipMask.ssip, 1)
+  sip_sie_mask.setField(MipMask.stip, 1)
+  val sip_sie_mask_raw = Long2UInt64(sip_sie_mask.getRawValue)
+
+  val sip_sie_read = (addr: UInt, reg: UInt) => {
+    val read_result = Wire(Valid(UInt(64.W)))
+    read_result.valid := true.B
+    read_result.bits := reg & sip_sie_mask_raw
+    read_result
+  }
+
+  val sip_sie_write = (addr: UInt, reg: UInt, wdata: UInt) => {
+    val write_result = Wire(Valid(UInt(64.W)))
+    write_result.valid := true.B
+    write_result.bits := wdata & sip_sie_mask_raw | reg & (~sip_sie_mask_raw).asUInt
+    reg := write_result.bits
+    write_result
+  }
+
   // ---------------------
   // satp write func
   // ---------------------
@@ -637,8 +662,8 @@ class CSRRegs extends Module {
       (CSRs.sepc, sepc, normal_read, normal_write),
       (CSRs.sscratch, sscratch, normal_read, normal_write),
       (CSRs.satp, satp, satp_read, satp_write),
-      (CSRs.sip, mip, normal_read, normal_write), // TODO: add mask
-      (CSRs.sie, mie, normal_read, normal_write), // TODO: add mask
+      (CSRs.sip, mip, sip_sie_read, sip_sie_write),
+      (CSRs.sie, mie, sip_sie_read, sip_sie_write),
 
       // read only
       (CSRs.misa, misa, normal_read, empty_write),
@@ -712,11 +737,16 @@ class CSRRegs extends Module {
   io.direct_read_ports.mstatus := mstatus
   io.direct_read_ports.mcause := mcause
   io.direct_read_ports.mie := mie
+
+  // TODO: improve this
   io.direct_read_ports.mip := mip
-    .bitSet(InterruptCause.machine_timer.asUInt, io.time_int)
-    .bitSet(InterruptCause.machine_software.asUInt, io.soft_int)
-    .bitSet(InterruptCause.machine_external.asUInt, io.mext_int)
-    .bitSet(InterruptCause.supervisor_external.asUInt, io.sext_int)
+    .bitSet(ExceptionCause.machine_timer_interrupt.asUInt(3, 0), io.time_int)
+    .bitSet(ExceptionCause.machine_software_interrupt.asUInt(3, 0), io.soft_int)
+    .bitSet(ExceptionCause.machine_external_interrupt.asUInt(3, 0), io.mext_int)
+    .bitSet(
+      ExceptionCause.supervisor_external_interrupt.asUInt(3, 0),
+      io.sext_int
+    )
   io.direct_read_ports.mtvec := mtvec
   io.direct_read_ports.mepc := mepc
   io.direct_read_ports.mtval := mtval

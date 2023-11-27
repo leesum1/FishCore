@@ -21,12 +21,13 @@ class SimBase
 #if VM_TRACE_FST == 1
     VerilatedFstC* tfp = nullptr;
     bool wave_trace_flag = false;
+    uint64_t wave_stime = 0;
 #endif
 
 public:
     SimBase();
 
-    void enable_wave_trace(const std::string& file_name);
+    void enable_wave_trace(const std::string& file_name, const uint64_t wave_stime);
 
     void dump_wave() const;
 

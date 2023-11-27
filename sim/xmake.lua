@@ -2,7 +2,8 @@ add_rules("mode.release", "mode.debug")
 
 
 if is_mode("release") then
-    set_optimize("faster")
+    set_optimize("fastest")
+--     set_policy("build.optimization.lto", true)
 --     set_policy("build.sanitizer.address", true)
 end
 
@@ -13,11 +14,11 @@ if is_mode("debug") then
 end
 
 add_requires("cli11",{system = false})
-add_requires("catch2",{system = false})
 add_requires("assert",{system = true})
 add_requires("elfio",{system = false})
 add_requires("libsdl",{system = false})
 add_requires("readerwriterqueue",{system = false})
+add_requires("spdlog", {system = false})
 
 set_policy("build.warning", true)
 -- set_warnings("all", "extra")
@@ -34,22 +35,22 @@ target("Vtop")
     add_files("vsrc/*.sv")
     add_values("verilator.flags","--top","FishSoc")
     add_values("verilator.flags","--trace-fst")
---     add_values("verilator.flags","--threads","3")
+--     add_values("verilator.flags","--threads","2")
     add_includedirs("src/include/")
-    add_packages("catch2","cli11","assert","elfio","libsdl","readerwriterqueue")
+    add_packages("cli11","assert","elfio","libsdl","readerwriterqueue","spdlog")
     add_links("rv64emu_cbinding")
 
-for _, file in ipairs(os.files("test/*.cpp")) do
-    local name = path.basename(file)
-    target(name)
-        set_kind("binary")
-        set_default(false)
-        add_files(file)
-        add_includedirs("src/include/")
-        add_packages("catch2","assert","elfio")
-        add_tests("default")
-
-end
+-- for _, file in ipairs(os.files("test/*.cpp")) do
+--     local name = path.basename(file)
+--     target(name)
+--         set_kind("binary")
+--         set_default(false)
+--         add_files(file)
+--         add_includedirs("src/include/")
+--         add_packages("catch2","assert","elfio")
+--         add_tests("default")
+--
+-- end
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io

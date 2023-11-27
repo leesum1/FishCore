@@ -12,7 +12,7 @@ class IssueFIFO extends Module {
 
   val issue_fifo = new MultiPortFIFOBase(
     new ScoreBoardEntry,
-    4,
+    8,
     2,
     2,
     use_mem = false,

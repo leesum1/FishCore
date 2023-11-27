@@ -3,12 +3,10 @@
 
 #include <readerwriterqueue.h>
 #include "DeviceBase.h"
+#include <SDL2/SDL.h>
 
-
-namespace SimDevices
-{
-    class AMKBDDev final : public DeviceBase
-    {
+namespace SimDevices {
+    class AMKBDDev final : public DeviceBase {
         uint64_t rtc_time = 0;
         uint64_t mem_addr;
         uint64_t mem_size;
