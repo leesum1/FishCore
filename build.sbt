@@ -2,11 +2,11 @@ import sbt.Keys.parallelExecution
 import sbt.Test
 // See README.md for license details.
 
-ThisBuild / scalaVersion := "2.13.8"
+ThisBuild / scalaVersion := "2.13.12"
 ThisBuild / version := "0.1.0"
 ThisBuild / organization := "%ORGANIZATION%"
 
-val chiselVersion = "5.0.0"
+val chiselVersion = "5.1.0"
 
 lazy val root = (project in file("."))
   .settings(
@@ -14,7 +14,6 @@ lazy val root = (project in file("."))
     Test / parallelExecution := false,
     libraryDependencies ++= Seq(
       "org.chipsalliance" %% "chisel" % chiselVersion,
-      "edu.berkeley.cs" %% "firrtl" % chiselVersion,
       "edu.berkeley.cs" %% "chiseltest" % "5.0.2",
       "net.fornwall" % "jelf" % "0.7.0",
       "org.typelevel" %% "spire" % "0.18.0",
@@ -25,13 +24,9 @@ lazy val root = (project in file("."))
       "-deprecation",
       "-feature",
       "-Xcheckinit",
-      "-Ymacro-annotations",
-      "-P:chiselplugin:genBundleElements"
+      "-Ymacro-annotations"
     ),
     addCompilerPlugin(
       "org.chipsalliance" % "chisel-plugin" % chiselVersion cross CrossVersion.full
-    ),
-
-    // Add this line in your build.sbt
-    unmanagedSourceDirectories in Test += baseDirectory.value / "src/main/scala/leesum"
+    )
   )
