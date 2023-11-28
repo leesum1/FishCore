@@ -18,11 +18,12 @@ class AluReq extends Bundle {
   val b = UInt(alu_width.W)
   val trans_id = UInt(32.W)
 
-  val op = AluOP()
+  val op = UInt(AluOP.width.W)
   val is_rv32 = Bool()
 
-  def convert_fuop2aluop(fuop: FuOP.Type): AluOP.Type = {
-    val aluop = Wire(AluOP())
+  def convert_fuop2aluop(fuop: UInt): UInt = {
+    require(FuOP.check_width(fuop), "op width is not correct")
+    val aluop = Wire(UInt(AluOP.width.W))
 
     aluop := MuxLookup(fuop.asUInt, AluOP.None)(
       Seq(

@@ -184,10 +184,17 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
   }
 
   def check_fu_hazard(
-      fu_seq: Vec[FuType.Type],
+      fu_seq: Vec[UInt],
       stall_seq: Vec[Bool]
   ): Unit = {
     require(fu_seq.length == stall_seq.length)
+    require(
+      fu_seq
+        .map(_.getWidth)
+        .distinct
+        .length == 1 && fu_seq.head.getWidth == FuType.width,
+      "fu_seq should have same width"
+    )
     val fu_hazard_seq = VecInit(Seq.fill(fu_seq.length)(false.B))
 
     for (i <- 0 until stall_seq.length) {

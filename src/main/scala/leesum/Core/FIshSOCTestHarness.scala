@@ -199,9 +199,9 @@ object gen_FishSoc extends App {
   */
 object gen_CoreTestSTA extends App {
   GenVerilogHelper(
-    new FishCore(
+    new FishSoc(
       muldiv_en = false,
-      rvc_en = false
+      rvc_en = true
     ),
     "/home/leesum/vivado_project/ysyx_v2/ysyx_v2.srcs/sources_1/imports/ysyx_v2/ysyx_v2.sv"
   )

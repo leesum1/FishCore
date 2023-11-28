@@ -8,7 +8,7 @@ class DivReq extends Bundle {
   val op_a = UInt(Div_width.W)
   val op_b = UInt(Div_width.W)
   val trans_id = UInt(32.W)
-  val op_type = FuOP()
+  val op_type = UInt(FuOP.width.W)
   val is_rv32 = Bool()
 }
 

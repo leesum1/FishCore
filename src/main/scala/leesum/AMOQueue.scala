@@ -1,7 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{Decoupled, Enum, MuxLookup, is, switch}
+import chisel3.util.{Decoupled, Enum, MuxLookup, Queue, is, switch}
 object AtomicOP extends ChiselEnum {
   val None = Value(0.U)
   val ADD = Value(1.U)
@@ -20,7 +20,8 @@ object AtomicOP extends ChiselEnum {
     amo_op === AtomicOP.MAX || amo_op === AtomicOP.MAXU || amo_op === AtomicOP.MIN || amo_op === AtomicOP.MINU
   }
 
-  def FuOP2AtomicOP(fu_op: FuOP.Type): AtomicOP.Type = {
+  def FuOP2AtomicOP(fu_op: UInt): AtomicOP.Type = {
+    require(FuOP.check_width(fu_op), "op width is not correct")
     val amoop = Wire(AtomicOP())
     amoop := MuxLookup(fu_op.asUInt, AtomicOP.None)(
       Seq(
@@ -61,7 +62,8 @@ class AMOQueue extends Module {
     val store_resp = Flipped(Decoupled(new StoreDcacheResp))
   })
 
-  val amo_queue = PipeLine(io.in, io.flush)
+//  val amo_queue = PipeLine(io.in, io.flush)
+  val amo_queue = Queue(io.in, 1, flush = Some(io.flush))
 
   val sIdle :: sWaitLoadResp :: sWaitStoreReq :: sWaitStoreResp :: Nil =
     Enum(4)

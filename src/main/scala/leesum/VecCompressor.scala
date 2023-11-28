@@ -80,18 +80,60 @@ class VecCompressor[T <: Data](gen: T, num: Int, formal: Boolean = false)
   assert(PopCount(io.out.map(_.valid)) === PopCount(io.in.map(_.valid)))
   assert(CheckOrder(VecInit(io.out.map(_.valid))))
 }
+
+/** This module is used to convert a InstsItem to a stream of INSTEntry
+  * InstsItem is a bundle of 4 INSTEntry, and all InstEntry may be valid or not.
+  * Such as [Valid, inValid, inValid, Valid], and this module will convert it to
+  * [Valid, Valid, inValid,inValid] and keep the order of InstEntry. It remove
+  * bubble and keep the order of InstEntry.
+  */
+class VecCompressorNew[T <: Data](gen: T, num: Int, formal: Boolean = false)
+    extends Module {
+  val io = IO(new Bundle {
+    val in = Input(Vec(num, Valid(gen)))
+    val out = Output(Vec(num, Valid(gen)))
+  })
+
+  require(num == 4, "only support 4 now")
+
+  val valid_seq = VecInit(io.in.map(_.valid))
+  val valid_count = PopCount(valid_seq)
+  val compressed_valid = MuxLookup(valid_count, 0.U)(
+    Seq(
+      0.U -> 0.U,
+      1.U -> 1.U,
+      2.U -> 3.U,
+      3.U -> 7.U,
+      4.U -> 15.U
+    )
+  ).asBools
+
+  val out = Gather(io.in)
+
+  io.out.zipWithIndex.foreach { case (x, i) =>
+    x.valid := compressed_valid(i)
+    x.bits := out(i)
+  }
+
+  // --------------------------
+  // formal
+  // --------------------------
+  assert(PopCount(io.out.map(_.valid)) === PopCount(io.in.map(_.valid)))
+  assert(CheckOrder(VecInit(io.out.map(_.valid))))
+}
+
 class VecCompressFormal
     extends AnyFlatSpec
     with ChiselScalatestTester
     with Formal {
   "VecCompress" should "pass with assumption" in {
     verify(
-      new VecCompressor(UInt(8.W), 4, formal = true),
+      new VecCompressorNew(UInt(8.W), 4, formal = true),
       Seq(BoundedCheck(10))
     )
   }
 }
 
 object gen_VecCompressor_verilog extends App {
-  GenVerilogHelper(new VecCompressor(UInt(32.W), 4))
+  GenVerilogHelper(new VecCompressorNew(UInt(32.W), 4))
 }

@@ -339,7 +339,8 @@ class ReOrderBuffer(
         }
       )
 
-      val is_any_fu_ready = is_fu_ready.reduce(_ | _)
+      val bypass_from_fu_en = false.B
+      val is_any_fu_ready = is_fu_ready.reduce(_ | _) && bypass_from_fu_en
 
       assert(
         PopCount(is_fu_ready) <= 1.U,
@@ -347,10 +348,12 @@ class ReOrderBuffer(
       )
 
       when(is_any_fu_ready) {
+        // bypass from fu
         bypass_resp.fwd_valid := true.B
         bypass_resp.fwd_stall := false.B
         bypass_resp.rs_data := fu_result(is_fu_ready.indexWhere(_ === true.B))
       }.otherwise {
+        // bypass from rob
         assert(
           rob_entry_valid,
           "rs1 bypass error, rob entry must be valid"

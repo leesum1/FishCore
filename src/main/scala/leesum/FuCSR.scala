@@ -8,7 +8,7 @@ class FuCsrReq extends Bundle {
   val read_en = Bool()
   val write_en = Bool()
   val trans_id = UInt(32.W)
-  val csr_op = FuOP()
+  val csr_op = UInt(FuOP.width.W)
 }
 
 class FuCsrResp extends Bundle {
@@ -50,12 +50,13 @@ class FuCSR extends Module {
   io.csr_req.ready := !csr_fifo.full
 
   def get_csr_result(
-      csr_op: FuOP.Type,
+      csr_op: UInt,
       csr_rdata: UInt,
       rs_or_imm: UInt
   ): UInt = {
     assert(FuOP.is_csr(csr_op), "csr_op should be csr")
     require(csr_rdata.getWidth == rs_or_imm.getWidth, "width should be equal")
+    require(FuOP.check_width(csr_op), "op width is not correct")
     val csr_result = MuxLookup(
       csr_op.asUInt,
       0.U

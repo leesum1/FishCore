@@ -804,3 +804,141 @@ object EdgeDetect {
     x =/= RegNext(x)
   }
 }
+
+trait PrefixSum {
+  // out[0] = summands[0]
+  // out[1] = summands[0] + summands[1]
+  // out[2] = summands[0] + summands[1] + summands[2]
+  // ...
+  // where + is your associative operator (reflexivity not required)
+  // layerOp is called on each level of the circuit
+  def apply[T](summands: Seq[T])(
+      associativeOp: (T, T) => T,
+      layerOp: (Int, Vector[T]) => Vector[T] = idLayer[T] _
+  ): Vector[T]
+  def layers(size: Int): Int
+  def idLayer[T](x: Int, y: Vector[T]) = y
+}
+
+// N-1 area, N-1 depth
+object RipplePrefixSum extends PrefixSum {
+  def layers(size: Int) = if (size == 0) 1 else size
+  def apply[T](summands: Seq[T])(
+      associativeOp: (T, T) => T,
+      layerOp: (Int, Vector[T]) => Vector[T]
+  ): Vector[T] = {
+    def helper(layer: Int, offset: Int, x: Vector[T]): Vector[T] = {
+      if (offset >= x.size) {
+        x
+      } else {
+        helper(
+          layer + 1,
+          offset + 1,
+          layerOp(
+            layer,
+            Vector.tabulate(x.size) { i =>
+              if (i != offset) {
+                x(i)
+              } else {
+                associativeOp(x(i - 1), x(i))
+              }
+            }
+          )
+        )
+      }
+    }
+    helper(1, 1, layerOp(0, summands.toVector))
+  }
+}
+
+// O(NlogN) area, logN depth
+object DensePrefixSum extends PrefixSum {
+  def layers(size: Int) = if (size == 0) 1 else 1 + log2Ceil(size)
+  def apply[T](summands: Seq[T])(
+      associativeOp: (T, T) => T,
+      layerOp: (Int, Vector[T]) => Vector[T]
+  ): Vector[T] = {
+    def helper(layer: Int, offset: Int, x: Vector[T]): Vector[T] = {
+      if (offset >= x.size) {
+        x
+      } else {
+        helper(
+          layer + 1,
+          offset << 1,
+          layerOp(
+            layer,
+            Vector.tabulate(x.size) { i =>
+              if (i < offset) {
+                x(i)
+              } else {
+                associativeOp(x(i - offset), x(i))
+              }
+            }
+          )
+        )
+      }
+    }
+    helper(1, 1, layerOp(0, summands.toVector))
+  }
+}
+
+object Gather {
+  // Compress all the valid data to the lowest indices
+  def apply[T <: Data](data: Seq[ValidIO[T]]): Vec[T] =
+    apply(data, DensePrefixSum)
+  def apply[T <: Data](data: Seq[ValidIO[T]], prefixSum: PrefixSum): Vec[T] = {
+    val popBits = log2Ceil(data.size)
+    val holes = data.map(x => WireInit(UInt(popBits.W), (!x.valid).asUInt))
+    apply(data.map(_.bits), prefixSum(holes)(_ + _))
+  }
+  def apply[T <: Data](
+      data: Seq[T],
+      holeSum: Seq[UInt],
+      layerOp: (Int, Seq[T], Seq[UInt]) => (Seq[T], Seq[UInt]) = idLayer[T] _
+  ): Vec[T] = {
+    def helper(
+        layer: Int,
+        offset: Int,
+        holeSum0: Vector[UInt],
+        data0: Vector[T]
+    ): Vector[T] = {
+      val (a, b) = layerOp(layer, data0, holeSum0)
+      val data = a.toVector
+      val holeSum = b.toVector
+      if (offset >= data.size) {
+        data
+      } else {
+        val bit = log2Ceil(offset)
+        helper(
+          layer + 1,
+          offset << 1,
+          holeSum,
+          Vector.tabulate(data.size) { i =>
+            if (i + offset >= data.size) {
+              data(i)
+            } else {
+              Mux(holeSum(i + offset - 1)(bit), data(i + offset), data(i))
+            }
+          }
+        )
+      }
+    }
+    VecInit(helper(0, 1, holeSum.toVector, data.toVector))
+  }
+  def layers(size: Int) = if (size == 0) 1 else 1 + log2Ceil(size)
+  def idLayer[T](layer: Int, data: Seq[T], holeSum: Seq[UInt]) = (data, holeSum)
+}
+
+object gen_Gather_verilog extends App {
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val in = Input(Vec(8, ValidIO(UInt(32.W))))
+      val out = Output(Vec(8, UInt(32.W)))
+    })
+    io.out := Gather(io.in)
+
+    val cpress = Module(new VecCompressor(UInt(32.W), 4))
+//    cpress.io.in := io.in
+//    io.out := cpress.io.out.map(_.bits)
+  })
+}

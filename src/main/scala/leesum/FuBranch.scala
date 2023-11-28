@@ -4,7 +4,7 @@ import chisel3.util.{Cat, Decoupled, MuxLookup}
 import leesum.axi4.SkidBufferWithFLush
 
 class FuBranchReq extends Bundle {
-  val fu_op = FuOP()
+  val fu_op = UInt(FuOP.width.W)
   val trans_id = UInt(32.W)
   val bp = new BpEntry()
   val is_rvc = Bool()

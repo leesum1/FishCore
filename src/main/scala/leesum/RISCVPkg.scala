@@ -1,6 +1,6 @@
 package leesum
 
-import chisel3.util.{BitPat, Cat, Fill, MuxLookup}
+import chisel3.util.{BitPat, Cat, Fill, MuxLookup, log2Ceil}
 import chisel3.{ChiselEnum, _}
 
 object RISCVPkg {
@@ -1246,81 +1246,93 @@ object Privilegelevel {
   val M = 3
 }
 
-object FuType extends ChiselEnum {
-  val None = Value(0.U)
-  val Alu = Value(1.U)
-  val Lsu = Value(2.U)
-  val Csr = Value(3.U)
-  val Br = Value(4.U)
-  val Mul = Value(5.U)
-  val Div = Value(6.U)
+object FuType {
+  val end = 7.U
+  def width = log2Ceil(end.litValue)
+
+  val None = 0.U(width.W)
+  val Alu = 1.U(width.W)
+  val Lsu = 2.U(width.W)
+  val Csr = 3.U(width.W)
+  val Br = 4.U(width.W)
+  val Mul = 5.U(width.W)
+  val Div = 6.U(width.W)
+
 }
 
-object FuOP extends ChiselEnum {
+object FuOP {
 
-  val None = Value(0.U)
-  val AluAdd = Value(1.U)
-  val AluSub = Value(2.U)
-  val AluXor = Value(3.U)
-  val AluOr = Value(4.U)
-  val AluAnd = Value(5.U)
-  val AluSrl = Value(6.U)
-  val AluSra = Value(7.U)
-  val AluSll = Value(8.U)
-  val AluSlt = Value(9.U)
-  val AluSltu = Value(10.U)
-  val LsuLb = Value(11.U)
-  val LsuLbu = Value(12.U)
-  val LsuLh = Value(13.U)
-  val LsuLhu = Value(14.U)
-  val LsuLw = Value(15.U)
-  val LsuLwu = Value(16.U)
-  val LsuLd = Value(17.U)
-  val LsuSb = Value(18.U)
-  val LsuSh = Value(19.U)
-  val LsuSw = Value(20.U)
-  val LsuSd = Value(21.U)
-  val BrBeq = Value(22.U)
-  val BrBne = Value(23.U)
-  val BrBlt = Value(24.U)
-  val BrBge = Value(25.U)
-  val BrBltu = Value(26.U)
-  val BrBgeu = Value(27.U)
-  val BrJal = Value(28.U)
-  val BrJalr = Value(29.U)
-  val MulMul = Value(30.U)
-  val MulMulh = Value(31.U)
-  val MulMulhsu = Value(32.U)
-  val MulMulhu = Value(33.U)
-  val DivDiv = Value(34.U)
-  val DivDivu = Value(35.U)
-  val DivRem = Value(36.U)
-  val DivRemu = Value(37.U)
-  val Ebreak = Value(38.U)
-  val Fence = Value(39.U)
-  val Ecall = Value(40.U)
-  val Scall = Value(41.U)
-  val Mret = Value(42.U)
-  val Sret = Value(43.U)
-  val FenceI = Value(44.U)
-  val SFenceVMA = Value(45.U)
-  val CSRRW = Value(46.U)
-  val CSRRS = Value(47.U)
-  val CSRRC = Value(48.U)
-  val LsuAMOADD = Value(49.U)
-  val LsuAMOAND = Value(50.U)
-  val LsuAMOMAX = Value(51.U)
-  val LsuAMOMAXU = Value(52.U)
-  val LsuAMOMIN = Value(53.U)
-  val LsuAMOMINU = Value(54.U)
-  val LsuAMOOR = Value(55.U)
-  val LsuAMOSWAP = Value(56.U)
-  val LsuAMOXOR = Value(57.U)
-  val LsuLR = Value(58.U)
-  val LsuSC = Value(59.U)
-  val WFI = Value(60.U)
+  val end = 61.U
+  def width = log2Ceil(end.litValue)
 
-  def is_xret(op: FuOP.Type): Bool = {
+  val None = 0.U(width.W)
+  val AluAdd = 1.U(width.W)
+  val AluSub = 2.U(width.W)
+  val AluXor = 3.U(width.W)
+  val AluOr = 4.U(width.W)
+  val AluAnd = 5.U(width.W)
+  val AluSrl = 6.U(width.W)
+  val AluSra = 7.U(width.W)
+  val AluSll = 8.U(width.W)
+  val AluSlt = 9.U(width.W)
+  val AluSltu = 10.U(width.W)
+  val LsuLb = 11.U(width.W)
+  val LsuLbu = 12.U(width.W)
+  val LsuLh = 13.U(width.W)
+  val LsuLhu = 14.U(width.W)
+  val LsuLw = 15.U(width.W)
+  val LsuLwu = 16.U(width.W)
+  val LsuLd = 17.U(width.W)
+  val LsuSb = 18.U(width.W)
+  val LsuSh = 19.U(width.W)
+  val LsuSw = 20.U(width.W)
+  val LsuSd = 21.U(width.W)
+  val BrBeq = 22.U(width.W)
+  val BrBne = 23.U(width.W)
+  val BrBlt = 24.U(width.W)
+  val BrBge = 25.U(width.W)
+  val BrBltu = 26.U(width.W)
+  val BrBgeu = 27.U(width.W)
+  val BrJal = 28.U(width.W)
+  val BrJalr = 29.U(width.W)
+  val MulMul = 30.U(width.W)
+  val MulMulh = 31.U(width.W)
+  val MulMulhsu = 32.U(width.W)
+  val MulMulhu = 33.U(width.W)
+  val DivDiv = 34.U(width.W)
+  val DivDivu = 35.U(width.W)
+  val DivRem = 36.U(width.W)
+  val DivRemu = 37.U(width.W)
+  val Ebreak = 38.U(width.W)
+  val Fence = 39.U(width.W)
+  val Ecall = 40.U(width.W)
+  val Scall = 41.U(width.W)
+  val Mret = 42.U(width.W)
+  val Sret = 43.U(width.W)
+  val FenceI = 44.U(width.W)
+  val SFenceVMA = 45.U(width.W)
+  val CSRRW = 46.U(width.W)
+  val CSRRS = 47.U(width.W)
+  val CSRRC = 48.U(width.W)
+  val LsuAMOADD = 49.U(width.W)
+  val LsuAMOAND = 50.U(width.W)
+  val LsuAMOMAX = 51.U(width.W)
+  val LsuAMOMAXU = 52.U(width.W)
+  val LsuAMOMIN = 53.U(width.W)
+  val LsuAMOMINU = 54.U(width.W)
+  val LsuAMOOR = 55.U(width.W)
+  val LsuAMOSWAP = 56.U(width.W)
+  val LsuAMOXOR = 57.U(width.W)
+  val LsuLR = 58.U(width.W)
+  val LsuSC = 59.U(width.W)
+  val WFI = 60.U(width.W)
+
+  def check_width(op: UInt): Boolean = {
+    op.getWidth == width
+  }
+
+  def is_xret(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val system_op_map = Seq(
       FuOP.Mret,
       FuOP.Sret
@@ -1330,7 +1342,8 @@ object FuOP extends ChiselEnum {
     op_is_system
   }
 
-  def is_fence(op: FuOP.Type): Bool = {
+  def is_fence(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val fence_op_map = Seq(
       FuOP.Fence,
       FuOP.FenceI,
@@ -1341,7 +1354,8 @@ object FuOP extends ChiselEnum {
     op_is_fence
   }
 
-  def is_csr(op: FuOP.Type): Bool = {
+  def is_csr(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val csr_op_map = Seq(
       FuOP.CSRRW,
       FuOP.CSRRS,
@@ -1352,7 +1366,8 @@ object FuOP extends ChiselEnum {
     op_is_csr
   }
 
-  def is_alu(op: FuOP.Type): Bool = {
+  def is_alu(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val alu_op_map = Seq(
       FuOP.AluAdd,
       FuOP.AluSub,
@@ -1370,13 +1385,16 @@ object FuOP extends ChiselEnum {
     op_is_alu
   }
 
-  def is_jal(op: FuOP.Type): Bool = {
+  def is_jal(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     op === FuOP.BrJal
   }
-  def is_jalr(op: FuOP.Type): Bool = {
+  def is_jalr(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     op === FuOP.BrJalr
   }
-  def is_branch(op: FuOP.Type): Bool = {
+  def is_branch(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val branch_op = Seq(
       FuOP.BrBeq,
       FuOP.BrBne,
@@ -1388,14 +1406,16 @@ object FuOP extends ChiselEnum {
     val op_is_branch = VecInit(branch_op.map(_.asUInt)).contains(op.asUInt)
     op_is_branch
   }
-  def is_store(op: FuOP.Type): Bool = {
+  def is_store(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val store_op = Seq(FuOP.LsuSb, FuOP.LsuSh, FuOP.LsuSw, FuOP.LsuSd)
 
     val op_is_store = VecInit(store_op.map(_.asUInt)).contains(op.asUInt)
     op_is_store
   }
 
-  def is_atomic(op: FuOP.Type): Bool = {
+  def is_atomic(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val amo_op = Seq(
       FuOP.LsuAMOADD,
       FuOP.LsuAMOAND,
@@ -1413,7 +1433,8 @@ object FuOP extends ChiselEnum {
     op_is_amo
   }
 
-  def is_load(op: FuOP.Type): Bool = {
+  def is_load(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val load_op = Seq(
       FuOP.LsuLb,
       FuOP.LsuLbu,
@@ -1427,11 +1448,13 @@ object FuOP extends ChiselEnum {
     op_is_load
   }
 
-  def is_lsu(op: FuOP.Type): Bool = {
+  def is_lsu(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     is_store(op) || is_load(op) || is_atomic(op)
   }
 
-  def lsu_need_sign_ext(op: FuOP.Type): Bool = {
+  def lsu_need_sign_ext(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     assert(is_lsu(op), "not a load/store operation")
     val sign_ext_op = List(FuOP.LsuLb, FuOP.LsuLh, FuOP.LsuLw)
 
@@ -1439,7 +1462,8 @@ object FuOP extends ChiselEnum {
       VecInit(sign_ext_op.map(_.asUInt)).contains(op.asUInt)
     lsu_need_sign_ext
   }
-  def get_lsu_size(op: FuOP.Type): UInt = {
+  def get_lsu_size(op: UInt): UInt = {
+    require(check_width(op), "op width is not correct")
     assert(is_lsu(op), "not a load/store operation")
     val size_map = List(
       FuOP.LsuLb -> DcacheConst.SIZE1,
@@ -1457,7 +1481,8 @@ object FuOP extends ChiselEnum {
     MuxLookup(op, 0.U)(size_map)
   }
 
-  def is_mul(op: FuOP.Type): Bool = {
+  def is_mul(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val mul_op = Seq(
       FuOP.MulMul,
       FuOP.MulMulh,
@@ -1468,7 +1493,8 @@ object FuOP extends ChiselEnum {
     op_is_mul
   }
 
-  def get_mul_signed_info(op: FuOP.Type): Vec[Bool] = {
+  def get_mul_signed_info(op: UInt): Vec[Bool] = {
+    require(check_width(op), "op width is not correct")
     val signed_map = List(
       FuOP.MulMul -> VecInit(true.B, true.B),
       FuOP.MulMulh -> VecInit(true.B, true.B),
@@ -1478,18 +1504,21 @@ object FuOP extends ChiselEnum {
     MuxLookup(op, VecInit(true.B, true.B))(signed_map)
   }
 
-  def is_div(op: FuOP.Type): Bool = {
+  def is_div(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val div_op = Seq(FuOP.DivDiv, FuOP.DivDivu)
     val div_op_vec = VecInit(div_op.map(_.asUInt))
     div_op_vec.contains(op.asUInt)
   }
-  def is_rem(op: FuOP.Type): Bool = {
+  def is_rem(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val rem_op = Seq(FuOP.DivRem, FuOP.DivRemu)
     val rem_op_vec = VecInit(rem_op.map(_.asUInt))
     rem_op_vec.contains(op.asUInt)
   }
 
-  def is_div_rem_signed(op: FuOP.Type): Bool = {
+  def is_div_rem_signed(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     val is_mul_div_signed = VecInit(
       Seq(
         FuOP.DivDiv,
@@ -1499,7 +1528,8 @@ object FuOP extends ChiselEnum {
     is_mul_div_signed
   }
 
-  def is_div_rem(op: FuOP.Type): Bool = {
+  def is_div_rem(op: UInt): Bool = {
+    require(check_width(op), "op width is not correct")
     is_div(op) || is_rem(op)
   }
 
@@ -1509,7 +1539,7 @@ object gen_fu_op_verilog extends App {
   GenVerilogHelper(
     (new Module {
       val io = IO(new Bundle {
-        val fu_op = Input(FuOP())
+        val fu_op = Input(UInt(FuOP.width.W))
         val is_load = Output(Bool())
         val is_store = Output(Bool())
       })
@@ -1519,44 +1549,68 @@ object gen_fu_op_verilog extends App {
   )
 }
 
-object AluOP extends ChiselEnum {
-  val None = Value(0.U)
-  val Add = Value(1.U)
-  val Sub = Value(2.U)
-  val Xor = Value(3.U)
-  val Or = Value(4.U)
-  val And = Value(5.U)
-  val Srl = Value(6.U)
-  val Sra = Value(7.U)
-  val Sll = Value(8.U)
-  val Slt = Value(9.U)
-  val Sltu = Value(10.U)
+object AluOP {
+
+  val end = 11.U
+  def width = log2Ceil(end.litValue)
+
+  val None = 0.U(width.W)
+  val Add = 1.U(width.W)
+  val Sub = 2.U(width.W)
+  val Xor = 3.U(width.W)
+  val Or = 4.U(width.W)
+  val And = 5.U(width.W)
+  val Srl = 6.U(width.W)
+  val Sra = 7.U(width.W)
+  val Sll = 8.U(width.W)
+  val Slt = 9.U(width.W)
+  val Sltu = 10.U(width.W)
+
 }
 
-object InstType extends ChiselEnum {
-  val R = Value(0.U)
-  val I = Value(1.U)
-  val S = Value(2.U)
-  val B = Value(3.U)
-  val U = Value(4.U)
-  val J = Value(5.U)
+object InstType {
+
+  val end = 6.U
+
+  def width = log2Ceil(end.litValue)
+
+  val R = 0.U(width.W)
+  val I = 1.U(width.W)
+  val S = 2.U(width.W)
+  val B = 3.U(width.W)
+  val U = 4.U(width.W)
+  val J = 5.U(width.W)
+
 }
 
 class DecoderSignals extends Bundle {
-  val inst_valid = Output(Bool())
-  val inst = Output(UInt(32.W))
-  val inst_pc = Output(UInt(64.W))
-  val inst_rvc = Output(Bool())
-  val fu_type = Output(FuType())
-  val fu_op = Output(FuOP())
-  val need_rs1 = Output(Bool())
-  val need_rs2 = Output(Bool())
-  val need_rd = Output(Bool())
-  val need_imm = Output(Bool())
-  val need_immz = Output(Bool())
-  val need_pc = Output(Bool())
-  val is_rv32 = Output(Bool())
-  val inst_type = Output(InstType())
+
+//  val inst_default = {
+//    List(
+//      false.B, // 0-> valid
+//      FuType.None, // 1-> function unit
+//      FuOP.None, // 2-> alu operation
+//      false.B, // 3-> is rv32
+//      InstType.R, // 4-> inst type
+//      false.B, // 5-> need rs1
+//      false.B, // 6-> need rs2
+//      false.B, // 7-> need rd
+//      false.B, // 8-> need imm
+//      false.B, // 9-> need pc
+//      false.B // 10-> need immz
+//    )
+//  }
+  val valid = Bool()
+  val fu_type = UInt(FuType.width.W)
+  val fu_op = UInt(FuOP.width.W)
+  val is_rv32 = Bool()
+  val inst_type = UInt(InstType.width.W)
+  val need_rs1 = Bool()
+  val need_rs2 = Bool()
+  val need_rd = Bool()
+  val need_imm = Bool()
+  val need_pc = Bool()
+  val need_immz = Bool()
 }
 
 object RVinst {
@@ -1596,7 +1650,7 @@ object RVinst {
 
   val none_op = List(false.B, false.B, false.B, false.B, false.B, false.B)
 
-  val i_common_map: Array[(BitPat, List[Element])] = Array(
+  val i_common_map: Array[(BitPat, List[UInt])] = Array(
     // x[rd] = x[rs1] + x[rs2]
     Instructions.IType("ADD") -> (List(
       true.B,
@@ -1890,7 +1944,7 @@ object RVinst {
     ) ::: reg_imm_op)
   )
 
-  val i64_map: Array[(BitPat, List[Element])] = Array(
+  val i64_map: Array[(BitPat, List[UInt])] = Array(
     // addiw rd, rs1, immediate
     // x[rd] = sext((x[rs1] + sext(immediate))[31:0])
     Instructions.I64Type("ADDIW") -> (List(
@@ -2033,7 +2087,7 @@ object RVinst {
     ) ::: reg_reg_op)
   )
 
-  val m64_map: Array[(BitPat, List[Element])] = Array(
+  val m64_map: Array[(BitPat, List[UInt])] = Array(
     // divuw rd, rs1, rs2
     // x[rd] = sext(x[rs1][31:0] ÷u x[rs2][31:0])
     Instructions.M64Type("DIVUW") -> (List(
@@ -2081,7 +2135,7 @@ object RVinst {
     ) ::: reg_reg_op)
   )
 
-  val m_map: Array[(BitPat, List[Element])] = Array(
+  val m_map: Array[(BitPat, List[UInt])] = Array(
     Instructions.MType("DIV") -> (List(
       true.B,
       FuType.Div,
@@ -2140,7 +2194,7 @@ object RVinst {
     ) ::: reg_reg_op)
   )
 
-  val a_map: Array[(BitPat, List[Element])] = Array(
+  val a_map: Array[(BitPat, List[UInt])] = Array(
     Instructions.A64Type("AMOADD_D") -> (List(
       true.B,
       FuType.Lsu,
@@ -2297,7 +2351,7 @@ object RVinst {
     ) ::: reg_reg_op)
   )
 
-  val zicsr_map: Array[(BitPat, List[Element])] = Array(
+  val zicsr_map: Array[(BitPat, List[UInt])] = Array(
     Instructions.ZICSRType("CSRRC") -> (List(
       true.B,
       FuType.Csr,
@@ -2342,7 +2396,7 @@ object RVinst {
     ) ::: csri_op)
   )
 
-  val privilege_map: Array[(BitPat, List[Element])] = Array(
+  val privilege_map: Array[(BitPat, List[UInt])] = Array(
     // RaiseException(Breakpoint)
     Instructions.IType("EBREAK") -> (List(
       true.B,
@@ -2556,8 +2610,8 @@ class ScoreBoardEntry extends Bundle {
   val inst = UInt(32.W) // instruction, may be compressed
   val is_rvc = Bool() // is rvc instruction
   val is_rv32 = Bool() // is rv32 instruction
-  val fu_type = FuType() // function unit types
-  val fu_op = FuOP() // function unit operation
+  val fu_type = UInt(FuType.width.W) // function unit types
+  val fu_op = UInt(FuOP.width.W) // function unit operation
   val rs1_addr = UInt(5.W) // rs1 address
   val rs2_addr = UInt(5.W) // rs2 address
   val rd_addr = UInt(5.W) // rd address

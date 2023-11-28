@@ -195,7 +195,7 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
     }
   }
 
-  val vec_compress = Module(new VecCompressor(new INSTEntry, 4))
+  val vec_compress = Module(new VecCompressorNew(new INSTEntry, 4))
 
   vec_compress.io.in.zipWithIndex.foreach {
     case (x, i) => {
