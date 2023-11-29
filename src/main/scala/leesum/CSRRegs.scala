@@ -693,16 +693,10 @@ class CSRRegs extends Module {
   io.read_port.read_data := 0.U
 
   def check_csr_permission(addr: UInt, privilege_mode: UInt, is_write: Bool) = {
-
     assert(addr < 4096.U, "csr addr should be in [0, 4096)")
-
-    val csr_privilege_mode = Wire(UInt(2.W))
-    csr_privilege_mode := addr(9, 8)
-
+    val csr_privilege_mode = addr(9, 8)
     val csr_privilege_mode_ok = privilege_mode >= csr_privilege_mode
-
     val csr_read_only = addr(11, 10) === 3.U
-
     val csr_ok = csr_privilege_mode_ok && Mux(is_write, !csr_read_only, true.B)
     csr_ok
   }

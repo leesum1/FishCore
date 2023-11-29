@@ -10,13 +10,11 @@ class IssueFIFO extends Module {
     val flush = Input(Bool())
   })
 
-  val issue_fifo = new MultiPortFIFOBase(
+  val issue_fifo = new MultiPortFIFOUseMEM(
     new ScoreBoardEntry,
-    8,
+    16,
     2,
-    2,
-    use_mem = false,
-    with_valid = false
+    2
   )
 
   issue_fifo.push_pop_flush_cond(

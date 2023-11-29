@@ -3,6 +3,8 @@ package leesum
 import chisel3._
 import chisel3.util._
 import _root_.circt.stage.ChiselStage
+import chisel3.util.experimental.decode.{TruthTable, decoder}
+import leesum.Utils.DecoderTree
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import scala.collection.IterableOnce.iterableOnceExtensionMethods
@@ -95,33 +97,40 @@ object GenOrderVec {
   }
 }
 
+/** SignExt is an object that provides methods for sign extending a given UInt.
+  * The width of the UInt is specified by input_width. The width of the sign
+  * extended UInt is specified by output_width.
+  */
 object SignExt {
+  private def processInput(
+      x: UInt,
+      input_width: Int,
+      output_width: Int
+  ): UInt = {
+    val sign = x(input_width - 1)
+    val sign_ext = Fill(output_width - input_width, sign)
+    Cat(sign_ext, x(input_width - 1, 0))
+  }
+
   def apply(x: UInt, input_width: Int, output_width: Int): UInt = {
     require(input_width <= output_width)
     require(x.getWidth >= input_width && x.getWidth <= output_width)
 
-    if (input_width == output_width) {
-      x
-    } else {
-      val sign = x(input_width - 1)
-      val sign_ext = Fill(output_width - input_width, sign)
-      Cat(sign_ext, x(input_width - 1, 0))
-    }
+    if (input_width == output_width) x
+    else processInput(x, input_width, output_width)
   }
 
   def apply(x: UInt, input_width: Int, output_width: Int, en: Bool): UInt = {
     require(input_width <= output_width)
     require(x.getWidth >= input_width && x.getWidth <= output_width)
 
-    if (input_width == output_width) {
-      x
-    } else {
+    if (input_width == output_width) x
+    else
       Mux(
         en,
-        SignExt(x, input_width, output_width),
+        processInput(x, input_width, output_width),
         Cat(0.U((output_width - input_width).W), x(input_width - 1, 0))
       )
-    }
   }
 }
 
@@ -303,7 +312,9 @@ object gen_PopCountOrder_verilog extends App {
 }
 
 object CheckAligned {
-  // size: 0 -> 1 byte, 1 -> 2 bytes, 2 -> 4 bytes, 3 -> 8 bytes
+  // Determines if address is aligned to specified size.
+  // Size: 0 -> 1 byte, 1 -> 2 bytes, 2 -> 4 bytes, 3 -> 8 bytes
+  // Address (addr) should be at least be 3 bits wide and size should be 2 bits.
   def apply(addr: UInt, size: UInt): Bool = {
     require(
       size.getWidth == 2 && addr.getWidth >= 3,
@@ -552,16 +563,15 @@ object gen_GetAxiRdata_verilog extends App {
 
 object GenSizeByAddr {
   def apply(addr: UInt): UInt = {
-    val size = Lookup(
-      addr(2, 0),
-      0.U,
-      List(
-        BitPat("b000") -> 3.U, // 8 bytes
-        BitPat("b100") -> 2.U, // 4 bytes
-        BitPat("b?10") -> 1.U, // 2 bytes
-        BitPat("b??1") -> 0.U // 1 byte
-      )
+
+    val mapping = List(
+      BitPat("b000") -> 3.U(2.W), // 8 bytes
+      BitPat("b100") -> 2.U(2.W), // 4 bytes
+      BitPat("b?10") -> 1.U(2.W), // 2 bytes
+      BitPat("b??1") -> 0.U(2.W) // 1 byte
     )
+
+    val size = DecoderTree(addr(2, 0), 0.U(2.W), mapping)
     size
   }
 }

@@ -339,8 +339,7 @@ class ReOrderBuffer(
         }
       )
 
-      val bypass_from_fu_en = false.B
-      val is_any_fu_ready = is_fu_ready.reduce(_ | _) && bypass_from_fu_en
+      val is_any_fu_ready = is_fu_ready.reduce(_ | _)
 
       assert(
         PopCount(is_fu_ready) <= 1.U,

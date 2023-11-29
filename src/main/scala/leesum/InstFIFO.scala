@@ -29,29 +29,47 @@ class InstsFIFO extends Module {
     val flush = Input(Bool())
   })
 
-  val inst_fifo = new MultiPortFIFOBase(
-    gen = new INSTEntry,
-    size = 16,
-    num_push_ports = 4,
-    num_pop_ports = 2,
-    use_mem = false,
-    with_valid = false
+  val inst_fifo = Module(
+    new DummyMultiPortFIFO(
+      gen = new INSTEntry,
+      size = 8,
+      num_push_ports = 4,
+      num_pop_ports = 2
+    )
   )
   val push_cond = io.push.bits.map(_.valid && io.push.fire)
-  inst_fifo.push_pop_flush_cond(
-    push_cond = push_cond,
-    pop_cond = io.pop.map(_.fire),
-    flush_cond = io.flush,
-    entry = io.push.bits
-  )
-
-  io.push.ready := inst_fifo.free_entries >= 4.U
-
-  val fifo_peek = inst_fifo.peek()
-  fifo_peek.zip(io.pop).foreach { case (peek, io_pop) =>
-    io_pop.bits := peek.bits
-    io_pop.valid := peek.valid
+  io.push.ready := inst_fifo.io.in.map(_.ready).reduce(_ && _)
+  for (i <- 0 until 4) {
+    inst_fifo.io.in(i).valid := push_cond(i)
+    inst_fifo.io.in(i).bits := io.push.bits(i)
   }
+
+  inst_fifo.io.out <> io.pop
+  inst_fifo.io.flush := io.flush
+
+//  val inst_fifo = new MultiPortFIFOBase(
+//    gen = new INSTEntry,
+//    size = 16,
+//    num_push_ports = 4,
+//    num_pop_ports = 2,
+//    use_mem = false,
+//    with_valid = false
+//  )
+//  val push_cond = io.push.bits.map(_.valid && io.push.fire)
+//  inst_fifo.push_pop_flush_cond(
+//    push_cond = push_cond,
+//    pop_cond = io.pop.map(_.fire),
+//    flush_cond = io.flush,
+//    entry = io.push.bits
+//  )
+//
+//  io.push.ready := inst_fifo.free_entries >= 4.U
+//
+//  val fifo_peek = inst_fifo.peek()
+//  fifo_peek.zip(io.pop).foreach { case (peek, io_pop) =>
+//    io_pop.bits := peek.bits
+//    io_pop.valid := peek.valid
+//  }
 }
 
 object gen_InstFIFO_test2 extends App {

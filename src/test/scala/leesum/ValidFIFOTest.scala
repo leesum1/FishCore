@@ -8,7 +8,7 @@ import org.scalatest.freespec.AnyFreeSpec
 class ValidFIFOTest extends AnyFreeSpec with ChiselScalatestTester {
 
   "multi_ports_valid_fifo_flush_test" in {
-    test(new DummyMultiPortValidFIFO(UInt(64.W), 4, 2, 2))
+    test(new DummyMultiPortFIFO(UInt(64.W), 4, 2, 2))
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
@@ -75,7 +75,7 @@ class ValidFIFOTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   "multi_ports_valid_fifo_push_pop_test" in {
-    test(new DummyMultiPortValidFIFO(UInt(64.W), 4, 2, 2))
+    test(new DummyMultiPortFIFO(UInt(64.W), 4, 2, 2))
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
@@ -176,7 +176,7 @@ class ValidFIFOTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   private def multi_port_pop(
-      dut: DummyMultiPortValidFIFO[UInt],
+      dut: DummyMultiPortFIFO[UInt],
       expected_seq: List[UInt],
       with_bubble: Boolean
   ): Unit = {
@@ -212,7 +212,7 @@ class ValidFIFOTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   private def multi_port_push(
-      dut: DummyMultiPortValidFIFO[UInt],
+      dut: DummyMultiPortFIFO[UInt],
       input_seq: List[UInt],
       with_bubble: Boolean
   ): Unit = {

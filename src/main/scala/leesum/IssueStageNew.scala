@@ -39,13 +39,33 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
   // issue fifo
   // ----------------
 
-  val issue_fifo = new MultiPortFIFOBase(
+//  val issue_fifo2 = Module(
+//    new DummyMultiPortFIFO(
+//      gen = new ScoreBoardEntry,
+//      size = 8,
+//      num_push_port,
+//      num_pop_port
+//    )
+//  )
+//
+//  issue_fifo2.io.in <> io.push_port
+//  issue_fifo2.io.flush := io.flush
+//  issue_fifo2.io.out <> io.pop_port
+//
+//  val issue_peek = Wire(Vec(num_pop_port, Valid(new ScoreBoardEntry)))
+//
+//  for (i <- 0 until num_pop_port) {
+//    issue_peek(i).valid := issue_fifo2.io.out(i).valid
+//    issue_peek(i).bits := issue_fifo2.io.out(i).bits
+//  }
+
+  val issue_fifo = new MultiPortFIFOUseMEM(
     new ScoreBoardEntry(),
     8,
     num_push_port,
-    num_pop_port,
-    use_mem = false,
-    with_valid = false
+    num_pop_port
+//    use_mem = false,
+//    with_valid = false
   )
 
   issue_fifo.push_pop_flush_cond(

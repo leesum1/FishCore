@@ -60,9 +60,9 @@ int main(int argc, char** argv) {
     auto _console = spdlog::stdout_color_mt("console");
     // create a file rotating logger with 5mb size max and 3 rotated files
     auto _trace = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
-        "trace", "/home/leesum/workhome/chisel-fish/sim/trace.txt", 1024 * 1024 * 4, 1);
+        "trace", "trace.txt", 1024 * 1024 * 4, 1);
     auto _ipc = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
-        "ipc", "/home/leesum/workhome/chisel-fish/sim/ipc.txt", 1024 * 1024 * 4, 1);
+        "ipc", "ipc.txt", 1024 * 1024 * 4, 1);
 
     _trace->set_level(spdlog::level::info);
 
