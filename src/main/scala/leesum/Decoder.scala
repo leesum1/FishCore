@@ -4,7 +4,7 @@ import chisel3.util.{BitPat, Cat, Decoupled, ListLookup, MuxLookup}
 import chisel3._
 import chisel3.util.experimental.decode.{TruthTable, decoder}
 import leesum.RVinst._
-import leesum.Utils.DecoderTree
+import leesum.Utils.DecoderHelper
 
 /** Decode risk-v instruction to [ScoreBoardEntry], only support 32-bit
   * instruction

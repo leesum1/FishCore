@@ -4,6 +4,7 @@ import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
 import leesum.TestUtils.{check_aligned, int2UInt32, long2UInt64}
+import leesum.fronten.PCGenStage
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 

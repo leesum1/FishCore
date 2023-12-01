@@ -2587,6 +2587,13 @@ class BpEntry extends Bundle {
   val predict_pc = UInt(64.W) // use to store predict pc and target pc
   val is_taken: Bool = Bool()
   val is_miss_predict = Bool()
+
+  def clear(): Unit = {
+    bp_type := BpType.None
+    predict_pc := 0.U
+    is_taken := false.B
+    is_miss_predict := false.B
+  }
 }
 
 // TODO: RENAME THIS

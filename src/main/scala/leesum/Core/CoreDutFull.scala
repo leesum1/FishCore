@@ -13,7 +13,7 @@ import leesum.axi4.{
 import leesum.moniter.{DifftestPort, MonitorTop}
 import leesum._
 import leesum.devices.clint
-import leesum.fronten.IFUTop
+import leesum.fronten.{IFUTop, PCGenStage}
 
 class FishCore(
     muldiv_en: Boolean = true,
@@ -116,6 +116,7 @@ class FishCore(
 
   // pc_gen_stage <> fetch_stage
   pc_gen_stage.io.pc <> ifu.io.pc_in
+  pc_gen_stage.io.f3_redirect_pc <> ifu.io.f3_redirect_pc
 
   // ifu <> icache
   ifu.io.icache_req <> icache_top.io.req
@@ -137,7 +138,6 @@ class FishCore(
   mmmu.io.cur_privilege := commit_stage.io.cur_privilege_mode
 
   // mmu <> dcache
-  // TODO: not implement
   mmmu.io.dcache_load_req <> dcache_load_arb.io.req_vec(1)
   mmmu.io.dcache_load_resp <> dcache_load_arb.io.resp_vec(1)
 
@@ -156,8 +156,7 @@ class FishCore(
       .inst_fifo_pop(i)
       .bits
       .exception
-    decode_stage(i).io.in.bits.bp := DontCare // TODO: not implement
-    decode_stage(i).io.in.bits.bp.is_taken := false.B
+    decode_stage(i).io.in.bits.bp := ifu.io.inst_fifo_pop(i).bits.bp
   }
 
   // decode stage <> issue stage

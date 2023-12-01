@@ -33,7 +33,7 @@ class FuBranch(rvc_en: Boolean = false) extends Module {
 
   val pc_imm = io.in.bits.pc + io.in.bits.imm
   val rs1_imm = io.in.bits.rs1 + io.in.bits.imm
-  val ra_target = io.in.bits.pc + Mux(io.in.bits.is_rvc, 2.U, 4.U)
+  val pc_inc = io.in.bits.pc + Mux(io.in.bits.is_rvc, 2.U, 4.U)
 
   val taraget_pc = MuxLookup(
     io.in.bits.fu_op.asUInt,
@@ -50,6 +50,7 @@ class FuBranch(rvc_en: Boolean = false) extends Module {
       FuOP.BrBgeu.asUInt -> pc_imm
     )
   )
+  dontTouch(taraget_pc)
 
   val branch_taken = MuxLookup(
     io.in.bits.fu_op.asUInt,
@@ -67,6 +68,8 @@ class FuBranch(rvc_en: Boolean = false) extends Module {
     )
   )
 
+  dontTouch(branch_taken)
+
   val is_miss_predict = (io.in.bits.bp.is_taken =/= branch_taken) ||
     (io.in.bits.bp.is_taken && io.in.bits.bp.predict_pc =/= taraget_pc)
 
@@ -81,8 +84,14 @@ class FuBranch(rvc_en: Boolean = false) extends Module {
   io.in.ready := br_resp.ready
 
   br_resp.bits.is_miss_predict := is_miss_predict
-  br_resp.bits.redirect_pc := taraget_pc
-  br_resp.bits.wb_data := ra_target
+
+  // used in commit stage
+  br_resp.bits.redirect_pc := Mux(
+    io.in.bits.bp.is_taken,
+    pc_inc,
+    taraget_pc
+  )
+  br_resp.bits.wb_data := pc_inc
   br_resp.bits.trans_id := io.in.bits.trans_id
   br_resp.bits.exception.valid := exception_valid
   br_resp.bits.exception.cause := ExceptionCause.misaligned_fetch

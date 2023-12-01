@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import _root_.circt.stage.ChiselStage
 import chisel3.util.experimental.decode.{TruthTable, decoder}
-import leesum.Utils.DecoderTree
+import leesum.Utils.DecoderHelper
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import scala.collection.IterableOnce.iterableOnceExtensionMethods
@@ -334,7 +334,23 @@ object CheckAligned {
 }
 
 object GenAxiWdata {
+
   def apply(wdata: UInt, addr: UInt) = {
+    apply2(wdata, addr)
+  }
+
+  def apply1(wdata: UInt, addr: UInt) = {
+    require(
+      addr.getWidth >= 3 && wdata.getWidth == 64,
+      "GenWdata: addr must be at least 3 bits wide, wdata must be 64 bits wide"
+    )
+    val offset = addr(2, 0)
+    val wdata_vec = wdata.asTypeOf(Vec(8, UInt(8.W)))
+    val wdata_aligned = BarrelShifter.rightShift(wdata_vec, offset).asUInt
+    wdata_aligned
+  }
+
+  def apply2(wdata: UInt, addr: UInt) = {
     require(
       addr.getWidth >= 3 && wdata.getWidth == 64,
       "GenWdata: addr must be at least 3 bits wide, wdata must be 64 bits wide"
@@ -372,8 +388,45 @@ object GenAxiWdata {
   }
 }
 
+object gen_GenAxiWdata_verilog extends App {
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val wdata = Input(UInt(64.W))
+      val addr = Input(UInt(64.W))
+      val wdata_aligned = Output(UInt(64.W))
+    })
+    io.wdata_aligned := GenAxiWdata(io.wdata, io.addr)
+  })
+}
+
 object GenAxiWstrb {
+
   def apply(addr: UInt, size: UInt): UInt = {
+    apply1(addr, size)
+  }
+
+  def apply1(addr: UInt, size: UInt): UInt = {
+    require(
+      size.getWidth == 2 && addr.getWidth >= 3,
+      "GenWstrb: size must be 2 bits and addr must be at least 3 bits wide"
+    )
+    val size_mask = DecoderHelper(
+      size,
+      "b0000_0000".U(8.W),
+      List(
+        BitPat("b00") -> "b0000_0001".U(8.W),
+        BitPat("b01") -> "b0000_0011".U(8.W),
+        BitPat("b10") -> "b0000_1111".U(8.W),
+        BitPat("b11") -> "b1111_1111".U(8.W)
+      )
+    )
+    val beMask = (size_mask << addr(2, 0))(7, 0).asUInt
+
+    require(beMask.getWidth == 8)
+    beMask
+  }
+
+  def apply2(addr: UInt, size: UInt): UInt = {
 
     require(
       size.getWidth == 2 && addr.getWidth >= 3,
@@ -461,6 +514,17 @@ object GenAxiWstrb {
 
     beMask
   }
+}
+
+object gen_GenAxiWstrb_verilog extends App {
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val addr = Input(UInt(64.W))
+      val size = Input(UInt(2.W))
+      val wstrb = Output(UInt(8.W))
+    })
+    io.wstrb := GenAxiWstrb(io.addr, io.size)
+  })
 }
 
 /** get rdata from axi r channel, shift it to the right position, and fill the
@@ -571,7 +635,7 @@ object GenSizeByAddr {
       BitPat("b??1") -> 0.U(2.W) // 1 byte
     )
 
-    val size = DecoderTree(addr(2, 0), 0.U(2.W), mapping)
+    val size = DecoderHelper(addr(2, 0), 0.U(2.W), mapping)
     size
   }
 }

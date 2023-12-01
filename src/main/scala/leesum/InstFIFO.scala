@@ -11,12 +11,14 @@ class INSTEntry extends Bundle {
   val rvc = Bool()
   val valid = Bool()
   val exception = new ExceptionEntry()
+  val bp = new BpEntry()
 
   def clear() = {
     pc := 0.U
     inst := 0.U
     inst_c := 0.U
     exception.clear()
+    bp.clear()
     rvc := false.B
     valid := false.B
   }
@@ -32,7 +34,7 @@ class InstsFIFO extends Module {
   val inst_fifo = Module(
     new DummyMultiPortFIFO(
       gen = new INSTEntry,
-      size = 8,
+      size = 16,
       num_push_ports = 4,
       num_pop_ports = 2
     )
