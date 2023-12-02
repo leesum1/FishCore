@@ -244,7 +244,18 @@ class MMU(
     }
   }
 
-  def send_mmu_resp(
+  def rev_fetch_req() = {
+    io.fetch_req.ready := true.B && !io.flush
+    when(io.fetch_req.fire) {
+      // send itlb req at the same cycle
+      fetch_req_buf := io.fetch_req.bits
+      itlb_state := sTLBLookup
+    }.otherwise {
+      itlb_state := sIdle
+    }
+  }
+
+  def fetch_send_mmu_resp(
       mmu_resp_io: DecoupledIO[TLBResp],
       resp_buf: TLBResp,
       state: UInt,
@@ -253,7 +264,26 @@ class MMU(
     mmu_resp_io.valid := true.B
     mmu_resp_io.bits := resp_buf
     when(mmu_resp_io.fire && !flush) {
+      // back to back
+      rev_fetch_req()
+    }.elsewhen(flush) {
+      // cancel resp
+      assert(!mmu_resp_io.fire)
       state := sIdle
+    }
+  }
+
+  def lsu_send_mmu_resp(
+      mmu_resp_io: DecoupledIO[TLBResp],
+      resp_buf: TLBResp,
+      state: UInt,
+      flush: Bool
+  ) = {
+    mmu_resp_io.valid := true.B
+    mmu_resp_io.bits := resp_buf
+    when(mmu_resp_io.fire && !flush) {
+      // back to back
+      rev_lsu_req()
     }.elsewhen(flush) {
       // cancel resp
       assert(!mmu_resp_io.fire)
@@ -267,12 +297,7 @@ class MMU(
 
   switch(itlb_state) {
     is(sIdle) {
-      io.fetch_req.ready := true.B && !io.flush
-      when(io.fetch_req.fire) {
-        // send itlb req at the same cycle
-        fetch_req_buf := io.fetch_req.bits
-        itlb_state := sTLBLookup
-      }
+      rev_fetch_req()
     }
     is(sTLBLookup) {
       // get tlb resp
@@ -296,7 +321,7 @@ class MMU(
       }.otherwise {
         // mmu disable, send mmu resp
         val fetch_no_mmu_resp = gen_no_mmu_resp(fetch_req_buf)
-        send_mmu_resp(
+        fetch_send_mmu_resp(
           mmu_resp_io = io.fetch_resp,
           resp_buf = fetch_no_mmu_resp,
           state = itlb_state,
@@ -342,7 +367,7 @@ class MMU(
       }
     }
     is(sSendResp) {
-      send_mmu_resp(
+      fetch_send_mmu_resp(
         mmu_resp_io = io.fetch_resp,
         resp_buf = fetch_resp_buf,
         state = itlb_state,
@@ -355,14 +380,20 @@ class MMU(
   // DTLB
   // -------------------
 
+  def rev_lsu_req() = {
+    io.lsu_req.ready := true.B && !io.flush
+    when(io.lsu_req.fire) {
+      // send itlb req at the same cycle
+      lsu_req_buf := io.lsu_req.bits
+      dtlb_state := sTLBLookup
+    }.otherwise {
+      dtlb_state := sIdle
+    }
+  }
+
   switch(dtlb_state) {
     is(sIdle) {
-      io.lsu_req.ready := true.B && !io.flush
-      when(io.lsu_req.fire) {
-        // send itlb req at the same cycle
-        lsu_req_buf := io.lsu_req.bits
-        dtlb_state := sTLBLookup
-      }
+      rev_lsu_req()
     }
     is(sTLBLookup) {
       // get tlb resp
@@ -386,7 +417,7 @@ class MMU(
       }.otherwise {
         // mmu disable
         val lsu_no_mmu_resp = gen_no_mmu_resp(lsu_req_buf)
-        send_mmu_resp(
+        lsu_send_mmu_resp(
           mmu_resp_io = io.lsu_resp,
           resp_buf = lsu_no_mmu_resp,
           state = dtlb_state,
@@ -442,7 +473,7 @@ class MMU(
       }
     }
     is(sSendResp) {
-      send_mmu_resp(
+      lsu_send_mmu_resp(
         mmu_resp_io = io.lsu_resp,
         resp_buf = lsu_resp_buf,
         state = dtlb_state,

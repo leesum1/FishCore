@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     // -----------------------
 
     spdlog::init_thread_pool(1024 * 32, 1);
-    auto _console = spdlog::stdout_color_mt("console");
+    auto console = spdlog::stdout_color_mt("console");
     // create a file rotating logger with 5mb size max and 3 rotated files
     auto _trace = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
         "trace", "trace.txt", 1024 * 1024 * 4, 1);
@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
             to_host_check_freq += 1;
             // stop run
             if (no_commit_num > 150) {
-                _console->critical("no commit for 150 cycles, stop run");
+                console->critical("no commit for 150 cycles, stop run");
                 state = sim_abort;
             }
             // memory
@@ -152,8 +152,8 @@ int main(int argc, char** argv) {
                 top->io_mem_port_i_we);
 
             if (!device_sucess) {
-                _console->critical("device error at pc: 0x{:016x}\n",
-                                   sim_base.get_pc());
+                console->critical("device error at pc: 0x{:016x}\n",
+                                  sim_base.get_pc());
                 state = sim_abort;
             }
 
@@ -178,10 +178,10 @@ int main(int argc, char** argv) {
 
                 if (has_interrupt & has_exception || has_exception & has_mmio || has_exception & has_csr_skip ||
                     has_mmio & has_csr_skip || has_interrupt & has_mmio || has_interrupt & has_csr_skip) {
-                    _console->critical("exception and interrupt and mmio at the same time");
-                    _console->critical("has_interrupt: {}, has_exception: {}, has_mmio: {}, "
-                                       "has_csr_skip: {}\n",
-                                       has_interrupt, has_exception, has_mmio, has_csr_skip);
+                    console->critical("exception and interrupt and mmio at the same time");
+                    console->critical("has_interrupt: {}, has_exception: {}, has_mmio: {}, "
+                                      "has_csr_skip: {}\n",
+                                      has_interrupt, has_exception, has_mmio, has_csr_skip);
                     state = sim_abort;
                 }
 
@@ -191,7 +191,7 @@ int main(int argc, char** argv) {
                                  cause, sim_base.get_pc());
                     if (am_en && cause == 3) {
                         // ebreak
-                        _console->info("AM exit");
+                        console->info("AM exit");
                         state = sim_stop;
                     }
                 }
@@ -223,10 +223,10 @@ int main(int argc, char** argv) {
                         const bool mismatch = pc_mismatch | gpr_mismatch | csr_mismatch;
 
                         if (mismatch) {
-                            _console->critical("DiffTest mismatch");
-                            _console->critical("pc mismatch: ref: 0x{:016x}, dut: "
-                                               "0x{:016x}\n\n",
-                                               diff_ref->get_pc(), sim_base.get_pc());
+                            console->critical("DiffTest mismatch");
+                            console->critical("pc mismatch: ref: 0x{:016x}, dut: "
+                                              "0x{:016x}\n\n",
+                                              diff_ref->get_pc(), sim_base.get_pc());
                             state = sim_abort;
                         }
                     }
@@ -243,8 +243,8 @@ int main(int argc, char** argv) {
                 to_host_check_freq = 0;
                 sim_mem.check_to_host([&] {
                     state = sim_stop;
-                    _console->info("Write tohost at pc: 0x{:016x}\n",
-                                   sim_base.get_pc());
+                    console->info("Write tohost at pc: 0x{:016x}\n",
+                                  sim_base.get_pc());
                 });
             }
 
@@ -253,7 +253,7 @@ int main(int argc, char** argv) {
     }
 
     auto time_end = std::chrono::utc_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(time_end - start_time);
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - start_time);
 
 
     if (dump_signature_file.has_value()) {
@@ -261,11 +261,21 @@ int main(int argc, char** argv) {
     }
 
 
+    const auto bp_hit = sim_base.top->io_perf_monitor_bp_hit_counter;
+    const auto bp_num = sim_base.top->io_perf_monitor_bp_num_counter;
+    const auto bp_rate = static_cast<double_t>(bp_hit) / static_cast<double_t>(bp_num + 1);
+    const auto icache_hit = sim_base.top->io_perf_monitor_icache_hit_counter;
+    const auto icache_num = sim_base.top->io_perf_monitor_icache_num_counter;
+    const auto icache_rate = static_cast<double_t>(icache_hit) / static_cast<double_t>(icache_num + 1);
+
+
+    console->info("icache_hit: {}, icache_num: {}, icache_rate: {}", icache_hit, icache_num, icache_rate);
+    console->info("bp_hit: {}, bp_num: {}, bp_rate: {}", bp_hit, bp_num, bp_rate);
     // add one to avoid div zero
-    _console->info("clk_num: {}, commit_num: {}, IPC: {}, SimSpeed: {} insts/seconds \n",
-                   clk_num, commit_num,
-                   static_cast<double_t>(commit_num) / static_cast<double_t>(clk_num + 1),
-                   commit_num / (duration.count() + 1));
+    console->info("clk_num: {}, commit_num: {}, IPC: {}, SimSpeed: {} insts/seconds",
+                  clk_num, commit_num,
+                  static_cast<double_t>(commit_num) / static_cast<double_t>(clk_num + 1),
+                  commit_num * 1000 / (duration.count() + 1));
 
 
     bool success = !am_en || sim_base.get_reg(10) == 0;

@@ -10,7 +10,7 @@ import leesum.axi4.{
   BasicMemoryIO,
   MemoryIO64to32
 }
-import leesum.moniter.{DifftestPort, MonitorTop}
+import leesum.moniter.{DifftestPort, MonitorTop, PerfPort}
 import leesum._
 import leesum.devices.clint
 import leesum.fronten.{IFUTop, PCGenStage}
@@ -31,6 +31,7 @@ class FishCore(
 
   val io = IO(new Bundle {
     val difftest = Output(Valid(new DifftestPort))
+    val perf_monitor = Output(new PerfPort)
     val axi_master = new AXIMasterIO(32, 64)
     val mtime = Input(UInt(64.W))
     val time_int = Input(Bool())
@@ -42,6 +43,7 @@ class FishCore(
   // monitor
   val monitor = Module(new MonitorTop(2))
   io.difftest <> monitor.io.difftest
+  io.perf_monitor <> monitor.io.perf
 
   // pipeline stage
   val pc_gen_stage = Module(new PCGenStage(boot_pc, rvc_en))
@@ -50,7 +52,7 @@ class FishCore(
 
   val decode_stage = Seq.tabulate(2)(i => Module(new InstDecoder))
 
-  val rob = Module(new ReOrderBuffer(8, 2, 2))
+  val rob = Module(new ReOrderBuffer(16, 2, 2))
   val issue_stage_rob = Module(new IssueStageNew(2, 2))
 
   val commit_stage = Module(new CommitStage(2, monitor_en))
@@ -114,6 +116,9 @@ class FishCore(
   mul_div.io.flush := commit_stage.io.flush
   csr.io.flush := commit_stage.io.flush
 
+  // fencei
+  icache_top.io.fencei := commit_stage.io.fencei
+
   // pc_gen_stage <> fetch_stage
   pc_gen_stage.io.pc <> ifu.io.pc_in
   pc_gen_stage.io.f3_redirect_pc <> ifu.io.f3_redirect_pc
@@ -125,6 +130,9 @@ class FishCore(
   // mmu <> icache
   mmmu.io.fetch_req <> icache_top.io.mmu_req
   mmmu.io.fetch_resp <> icache_top.io.mmu_resp
+
+  // monitor <> icache
+  monitor.io.perf_icache := icache_top.io.perf_icache
 
   // mmu <> lsu
   mmmu.io.lsu_req <> lsu.io.tlb_req
@@ -221,6 +229,8 @@ class FishCore(
 
   // commit stage <> monitor
   commit_stage.io.commit_monitor.get <> monitor.io.commit_monitor
+  commit_stage.io.perf_commit <> monitor.io.perf_commit
+  commit_stage.io.perf_bp <> monitor.io.perf_bp
 
   // regfile <> monitor
   reg_file.io.gpr_monitor.get <> monitor.io.gpr_monitor

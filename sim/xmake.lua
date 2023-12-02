@@ -1,24 +1,23 @@
 add_rules("mode.release", "mode.debug")
 
-
 if is_mode("release") then
-    set_optimize("fastest")
---     set_policy("build.optimization.lto", true)
---     set_policy("build.sanitizer.address", true)
+	set_optimize("fastest")
+	--     set_policy("build.optimization.lto", true)
+	--     set_policy("build.sanitizer.address", true)
 end
 
 if is_mode("debug") then
-    set_symbols("debug")
-    set_optimize("none")
-    set_policy("build.sanitizer.address", true)
+	set_symbols("debug")
+	set_optimize("none")
+	set_policy("build.sanitizer.address", true)
 end
 
-add_requires("cli11",{system = false})
-add_requires("assert",{system = true})
-add_requires("elfio",{system = false})
-add_requires("libsdl",{system = false})
-add_requires("readerwriterqueue",{system = false})
-add_requires("spdlog", {system = false})
+add_requires("cli11", { system = false })
+add_requires("assert", { system = true })
+add_requires("elfio", { system = false })
+add_requires("libsdl", { system = false })
+add_requires("readerwriterqueue", { system = false })
+add_requires("spdlog", { system = false })
 
 set_policy("build.warning", true)
 -- set_warnings("all", "extra")
@@ -26,19 +25,18 @@ set_policy("build.warning", true)
 -- 设置 C++20 标准
 set_languages("cxx20")
 
-
-add_rules("plugin.compile_commands.autoupdate", {outputdir = "."})
+add_rules("plugin.compile_commands.autoupdate", { outputdir = "." })
 target("Vtop")
-    add_rules("verilator.binary")
-    set_toolchains("@verilator")
-    add_files("src/*.cpp")
-    add_files("vsrc/*.sv")
-    add_values("verilator.flags","--top","FishSoc")
-    add_values("verilator.flags","--trace-fst")
---     add_values("verilator.flags","--threads","2")
-    add_includedirs("src/include/")
-    add_packages("cli11","assert","elfio","libsdl","readerwriterqueue","spdlog")
-    add_links("rv64emu_cbinding")
+add_rules("verilator.binary")
+set_toolchains("@verilator")
+add_files("src/*.cpp")
+add_files("vsrc/*.sv")
+add_values("verilator.flags", "--top", "FishSoc")
+add_values("verilator.flags", "--trace-fst")
+-- add_values("verilator.flags", "--threads", "8")
+add_includedirs("src/include/")
+add_packages("cli11", "assert", "elfio", "libsdl", "readerwriterqueue", "spdlog")
+add_links("rv64emu_cbinding")
 
 -- for _, file in ipairs(os.files("test/*.cpp")) do
 --     local name = path.basename(file)
@@ -120,4 +118,3 @@ target("Vtop")
 --
 -- @endcode
 --
-

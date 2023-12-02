@@ -1,7 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util._
-import leesum.moniter.CommitMonitorPort
+import leesum.moniter.{CommitMonitorPort, PerfMonitorCounter}
 import spire.math
 
 class RedirectPC extends Bundle {
@@ -15,6 +15,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     val rob_commit_ports =
       Vec(num_commit_port, Flipped(Decoupled(new ScoreBoardEntry)))
     val flush = Output(Bool())
+    val fencei = Output(Bool())
 
     // gpr
     val gpr_commit_ports =
@@ -35,6 +36,10 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     // privilege mode
     val cur_privilege_mode = Output(UInt(2.W))
 
+    // performance monitor
+    val perf_commit = Output(new PerfMonitorCounter)
+    val perf_bp = Output(new PerfMonitorCounter)
+
     val commit_monitor = if (monitor_en) {
       Some(Output(Vec(num_commit_port, Valid(new CommitMonitorPort))))
     } else {
@@ -42,12 +47,21 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     }
   })
 
+  // -----------------------
+  // performance monitor
+  // -----------------------
+  val commit_perf = RegInit(0.U.asTypeOf(new PerfMonitorCounter))
+  val bp_perf = RegInit(0.U.asTypeOf(new PerfMonitorCounter))
+
+  io.perf_commit := commit_perf
+  io.perf_bp := bp_perf
+
   val rob_valid_seq = io.rob_commit_ports.map(_.valid)
-  val rob_exception_seq = io.rob_commit_ports.map(_.bits.exception.valid)
   val rob_data_seq = io.rob_commit_ports.map(_.bits)
   val pop_ack = WireInit(VecInit(Seq.fill(num_commit_port)(false.B)))
 
   val flush_next = RegInit(false.B)
+  val fencei_next = RegInit(false.B)
   val privilege_mode = RegInit(3.U(2.W)) // machine mode
 
   // interrupt
@@ -83,8 +97,12 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   when(flush_next) {
     flush_next := false.B
   }
+  when(fencei_next) {
+    fencei_next := false.B
+  }
 
   io.flush := flush_next
+  io.fencei := fencei_next
 
   assert(
     CheckOrder(pop_ack),
@@ -154,18 +172,19 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     )
     assert(entry.exception.valid === false.B)
     val mis_predict = entry.bp.is_miss_predict
+    val need_write_back = FuOP.is_jalr(entry.fu_op) || FuOP.is_jal(entry.fu_op)
     when(mis_predict) {
       io.branch_commit.valid := true.B
-//      when(io.branch_commit.fire) {
       io.branch_commit.bits.target := entry.bp.predict_pc
       flush_next := true.B
       ack := true.B
-      when(FuOP.is_jal(entry.fu_op) || FuOP.is_jalr(entry.fu_op)) {
+      bp_perf.inc_miss(1.U)
+      when(need_write_back) {
         gpr_commit_port.write(entry.rd_addr, entry.result)
       }
-//      }
     }.otherwise {
-      when(FuOP.is_jal(entry.fu_op) || FuOP.is_jalr(entry.fu_op)) {
+      bp_perf.inc_hit(1.U)
+      when(need_write_back) {
         gpr_commit_port.write(entry.rd_addr, entry.result)
       }
       ack := true.B
@@ -203,7 +222,15 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     }.elsewhen(entry.fu_op === FuOP.Fence) {
 //      printf("Fence at %x\n", entry.pc)
     }.elsewhen(entry.fu_op === FuOP.FenceI) {
-//      printf("FenceI at %x\n", entry.pc)
+      flush_next := true.B
+      fencei_next := true.B
+      io.branch_commit.valid := true.B
+      // same as interrupt to reduce area
+      io.branch_commit.bits.target := entry.pc + Mux(
+        entry.is_rv32,
+        2.U,
+        4.U
+      )
     }.elsewhen(entry.fu_op === FuOP.WFI) {
       printf("WFI at %x\n", entry.pc)
     }
@@ -669,16 +696,26 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   // ---------------------
   // second inst
   // ---------------------
+
+  // TODO: refactor me
   when(
     rob_valid_seq(1) && rob_data_seq(
       1
     ).complete && !flush_next && !has_interrupt && !csr_side_effect
   ) {
 
+    val constraint_fu_type = VecInit(
+      Seq(
+        FuType.Br.asUInt,
+        FuType.Csr.asUInt,
+        FuType.None.asUInt
+      )
+    )
+
     // TODO: more constraint on the second inst?
     when(
       pop_ack.head && !rob_data_seq.head.exception.valid
-        && rob_data_seq.head.fu_type =/= FuType.Br && rob_data_seq.head.fu_type =/= FuType.None
+        && !constraint_fu_type.contains(rob_data_seq.head.fu_type.asUInt)
     ) {
       val retire_fu_type_seq = VecInit(
         Seq(

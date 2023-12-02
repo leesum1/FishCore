@@ -61,7 +61,7 @@ class IssueStageNew(num_push_port: Int, num_pop_port: Int) extends Module {
 
   val issue_fifo = new MultiPortFIFOUseMEM(
     new ScoreBoardEntry(),
-    8,
+    16,
     num_push_port,
     num_pop_port
 //    use_mem = false,

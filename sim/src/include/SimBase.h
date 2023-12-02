@@ -12,9 +12,7 @@
 #include <functional>
 #include <format>
 
-class SimBase
-{
-    std::shared_ptr<Vtop> top;
+class SimBase {
     bool finish_flag = false;
 
 
@@ -25,6 +23,8 @@ class SimBase
 #endif
 
 public:
+    std::shared_ptr<Vtop> top;
+
     SimBase();
 
     void enable_wave_trace(const std::string& file_name, const uint64_t wave_stime);
@@ -42,8 +42,7 @@ public:
     uint64_t get_csr(int idx);
 
 
-    bool finished() const
-    {
+    bool finished() const {
         return finish_flag;
     }
 

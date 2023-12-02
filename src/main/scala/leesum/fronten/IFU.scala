@@ -73,7 +73,7 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
   }
 
   val f2_f3_pipe = Module(new PipeLine(new f2_f3_pipe_entry))
-  f2_f3_pipe.io.flush := io.flush
+  f2_f3_pipe.io.flush := io.flush || f3_flush_next
   f2_f3_pipe.io.in.valid := false.B
   f2_f3_pipe.io.in.bits.clear()
   f2_f3_pipe.io.out.nodeq()
@@ -187,7 +187,7 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
   })
   f2_f3_pipe.io.out.ready := inst_fifo.io.push.ready
 
-  when(f2_f3_pipe.io.out.valid && !io.flush) {
+  when(f2_f3_pipe.io.out.fire && !io.flush && !f3_flush_next) {
     when(f2_f3_pipe.io.out.bits.exception.valid) {
       // if exception happens, put exception to the first entry
       inst_fifo.io.push.bits.foreach(x => {

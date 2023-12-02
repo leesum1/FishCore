@@ -3,7 +3,7 @@ import chisel3._
 import chisel3.util.{Arbiter, Enum, is, log2Ceil, log2Up, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal, stable}
-import leesum.{FormalUtils, GenVerilogHelper, ReqRespArbiter}
+import leesum.{BarrelShifter, FormalUtils, GenVerilogHelper, ReqRespArbiter}
 import org.scalatest.flatspec.AnyFlatSpec
 
 class AxiReadArbiter extends Module {
@@ -25,16 +25,78 @@ class AxiReadArbiter extends Module {
   io.out.w.noenq()
   io.out.b.nodeq()
 
-  val axi_r_arb = Module(
-    new ReqRespArbiter(2, new AXIAddressChannel(32), new AXIReadDataChannel(64))
-  )
+  val numInputs = 2
 
-  axi_r_arb.io.flush := false.B
-  axi_r_arb.io.req_vec <> io.in.map(_.ar)
-  axi_r_arb.io.resp_vec <> io.in.map(_.r)
-  io.out.ar <> axi_r_arb.io.req_arb
-  io.out.r <> axi_r_arb.io.resp_arb
+  val sIdle :: sWaitResp :: Nil = Enum(2)
 
+  val state = RegInit(sIdle)
+
+  val sel_buf_valid = state =/= sIdle
+  val sel_buf = RegInit(0.U(log2Ceil(numInputs).W))
+  val cur_max_priority = RegInit(0.U(log2Ceil(numInputs).W))
+  val next_max_priority =
+    Mux(cur_max_priority === (numInputs - 1).U, 0.U, cur_max_priority + 1.U)
+
+  val sel_idx_valid = io.in.map(_.ar.valid).reduce(_ || _)
+
+  // -------------------
+  // priority
+  // -------------------
+  //  val sel_idx = VecInit(io.req_vec.map(_.valid))
+  //    .indexWhere(_ === true.B)
+
+  // -------------------
+  // round robin
+  // -------------------
+  val new_idx = BarrelShifter
+    .rightRotate(VecInit(io.in.map(_.ar.valid)), sel_buf)
+    .indexWhere(_ === true.B)
+  val idx_map =
+    BarrelShifter.rightRotate(VecInit(Seq.tabulate(numInputs)(_.U)), sel_buf)
+  val sel_idx = idx_map(new_idx)
+
+  val lock_valid = RegInit(false.B)
+  when(io.out.r.valid && !io.out.r.ready) {
+    lock_valid := true.B
+  }.otherwise {
+    lock_valid := false.B
+  }
+
+  def select_input(): Unit = {
+    when(sel_idx_valid) {
+      assert(sel_idx < numInputs.U, "idx must less than %d".format(numInputs))
+      assert(io.in(sel_idx).ar.valid, "in_req(idx) must be valid")
+
+      val idx = Mux(lock_valid, sel_buf, sel_idx)
+
+      io.out.ar <> io.in(idx).ar
+
+      when(!lock_valid) {
+        sel_buf := sel_idx
+      }
+
+      when(io.out.ar.fire) {
+        cur_max_priority := next_max_priority
+        state := sWaitResp
+      }.otherwise {
+        state := sIdle
+      }
+    }.otherwise {
+      state := sIdle
+    }
+  }
+
+  switch(state) {
+    is(sIdle) {
+      select_input()
+    }
+    is(sWaitResp) {
+      io.in(sel_buf).r <> io.out.r
+      when(io.out.r.fire && io.out.r.bits.last) {
+        select_input()
+      }
+    }
+  }
 }
 
 class AxiWriteArbiter extends Module {

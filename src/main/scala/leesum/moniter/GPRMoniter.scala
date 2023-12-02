@@ -33,6 +33,13 @@ class DifftestPort extends Bundle {
   val csr = new CSRDirectReadPorts
   val gpr = Vec(32, UInt(64.W))
 }
+
+class PerfPort extends Bundle {
+  val bp = new PerfMonitorCounter
+  val commit = new PerfMonitorCounter
+  val icache = new PerfMonitorCounter
+}
+
 class MonitorTop(commit_port_num: Int) extends Module {
   val io = IO(new Bundle {
     val commit_monitor =
@@ -40,7 +47,20 @@ class MonitorTop(commit_port_num: Int) extends Module {
     val gpr_monitor = Input(new GERMonitorPort)
     val csr_monitor = Input(new CSRDirectReadPorts)
     val difftest = Output(Valid(new DifftestPort))
+    // perf monitor
+    val perf_bp = Input(new PerfMonitorCounter)
+    val perf_commit = Input(new PerfMonitorCounter)
+    val perf_icache = Input(new PerfMonitorCounter)
+    val perf = Output(new PerfPort)
   })
+
+  // ------------------------
+  // perf monitor
+  // ------------------------
+  io.perf.bp := io.perf_bp
+  io.perf.commit := io.perf_commit
+  io.perf.icache := io.perf_icache
+
   // delay 1 cycle to wait for gpr write back
   val commit_monitor_next = RegNext(io.commit_monitor)
   val commit_monitor_count = PopCount(commit_monitor_next.map(_.valid))

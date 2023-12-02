@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import _root_.circt.stage.ChiselStage
 import chisel3.util.experimental.decode.{TruthTable, decoder}
+import chisel3.util.random.LFSR
 import leesum.Utils.DecoderHelper
 
 import java.io.{File, FileOutputStream, PrintWriter}
@@ -174,6 +175,22 @@ object GenMaskOne {
         Cat(mask_zero, mask_one)
       }
     }
+  }
+}
+
+object LFSRRand {
+  def apply(count: Int): UInt = {
+    require(count > 0)
+    require(isPow2(count), "max must be power of 2")
+    val max_width = log2Ceil(count)
+
+    val rand = if (max_width == 1) {
+      LFSR(2)(0)
+    } else {
+      LFSR(max_width)
+    }
+    assert(rand < count.U, "rand must be less than count")
+    rand
   }
 }
 

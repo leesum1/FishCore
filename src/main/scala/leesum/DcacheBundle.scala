@@ -8,6 +8,12 @@ object DcacheConst {
   val SIZE2 = 1.U(2.W)
   val SIZE4 = 2.U(2.W)
   val SIZE8 = 3.U(2.W)
+
+  val BURST_FIXED = 0.U(2.W)
+  val BURST_INCR = 1.U(2.W)
+  val BURST_WRAP = 2.U(2.W)
+  val BURST_RESERVED = 3.U(2.W)
+
 }
 
 object DcacheSize2AxiSize {

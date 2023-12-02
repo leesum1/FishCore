@@ -11,7 +11,7 @@ import leesum.axi4.{
   MemoryIO64to32
 }
 import leesum.devices.{SifiveUart, clint, plic}
-import leesum.moniter.DifftestPort
+import leesum.moniter.{DifftestPort, PerfPort}
 
 class FishSoc(
     muldiv_en: Boolean = true,
@@ -80,6 +80,7 @@ class FishSoc(
 
   val io = IO(new Bundle {
     val difftest = Output(Valid(new DifftestPort))
+    val perf_monitor = Output(new PerfPort)
     val mem_port = Flipped(new BasicMemoryIO(32, 64))
   })
 
@@ -88,6 +89,7 @@ class FishSoc(
   )
 
   core.io.difftest <> io.difftest
+  core.io.perf_monitor <> io.perf_monitor
 
   val axi_demux = Module(
     new AXIDeMux(4, 32, 64)
