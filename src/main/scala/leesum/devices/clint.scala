@@ -2,6 +2,7 @@ package leesum.devices
 
 import chisel3._
 import chisel3.util.{Cat, Valid}
+import leesum.Utils.HoldRegister
 import leesum.axi4.BasicMemoryIO
 import leesum.{EdgeDetect, GenVerilogHelper, RegMap}
 
@@ -98,10 +99,7 @@ class clint(harts_num: Int = 1, device_base: Int) extends Module {
 
   clint_regs.print_map()
 
-  val last_read = RegInit(0.U(64.W))
-
   when(io.mem.i_rd) {
-    last_read := clint_regs.read(io.mem.i_raddr).bits
     assert(clint_regs.in_range(io.mem.i_raddr), "clint read out of range")
   }
 
@@ -110,7 +108,11 @@ class clint(harts_num: Int = 1, device_base: Int) extends Module {
     assert(clint_regs.in_range(io.mem.i_waddr), "clint write out of range")
   }
 
-  io.mem.o_rdata := last_read
+  io.mem.o_rdata := HoldRegister(
+    io.mem.i_rd,
+    RegNext(clint_regs.read(io.mem.i_raddr).bits),
+    1
+  )
 }
 
 object gen_clint_verilog extends App {

@@ -3,6 +3,7 @@ package leesum.axi4
 import chisel3._
 import chisel3.util.experimental.loadMemoryFromFileInline
 import chisel3.util.{Cat, RegEnable, log2Ceil}
+import leesum.Utils.HoldRegister
 import leesum.{
   CheckAligned,
   DcacheConst,
@@ -165,16 +166,8 @@ class BasicMemorySyncReadMem(
     }
   }
 
-  val prevRdataReg = RegInit(
-    0.U(DATA_WIDTH.W)
-  ) // Register to hold previous output value
-
-  // Register to hold previous output value
-  when(RegNext(io.i_rd)) {
-    prevRdataReg := read_data.asUInt
-  }
-
-  io.o_rdata := Mux(RegNext(io.i_rd), read_data.asUInt, prevRdataReg)
+  // keep the last read data
+  io.o_rdata := HoldRegister(io.i_rd, read_data.asUInt, 1)
 }
 
 /** sync memory with one read port and one write port, with 1 latency of read or
@@ -258,16 +251,8 @@ class BasicMemoryVec(
     }
   }
 
-  val prevRdataReg = RegInit(
-    0.U(DATA_WIDTH.W)
-  ) // Register to hold previous output value
-
-  // Register to hold previous output value
-  when(RegNext(io.i_rd)) {
-    prevRdataReg := read_data.asUInt
-  }
-
-  io.o_rdata := Mux(RegNext(io.i_rd), read_data.asUInt, prevRdataReg)
+  // keep the last read data
+  io.o_rdata := HoldRegister(io.i_rd, read_data.asUInt, 1)
 }
 
 /** Because of Chisel's SyncReadMem does not support initial memory, so we use

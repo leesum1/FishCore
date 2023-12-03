@@ -9,6 +9,7 @@ import chisel3.util.Cat
 import leesum.ZeroExt
 import chisel3.util.MixedVecInit
 import chisel3.util.log2Ceil
+import leesum.Utils.HoldRegister
 
 ///* ref spike plic */
 //const _PLIC_MAX_CONTEXTS: usize = 15872;
@@ -370,19 +371,17 @@ class plic(
   // --------------------------
   // read
   // --------------------------
-  val last_read = RegInit(0.U(32.W))
   when(io.mem.i_rd) {
-    val read_result = Wire(Valid(UInt(32.W)))
-    read_result.valid := true.B
-    read_result.bits := plic_regs.read(io.mem.i_raddr).bits
-    last_read := read_result.bits
-
     when(!plic_regs.in_range(io.mem.i_raddr)) {
       printf("plic read out of range: %x\n", io.mem.i_raddr)
       assert(false.B)
     }
   }
-  io.mem.o_rdata := last_read
+  io.mem.o_rdata := HoldRegister(
+    io.mem.i_rd,
+    RegNext(plic_regs.read(io.mem.i_raddr).bits),
+    1
+  )
   // --------------------------
   // write
   // --------------------------

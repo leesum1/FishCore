@@ -3,6 +3,7 @@ package leesum.Cache
 import chisel3._
 import chisel3.util.SRAM
 import leesum.GenVerilogHelper
+import leesum.Utils.HoldRegister
 
 class ICacheData extends Module {
   val io = IO(new Bundle {
@@ -20,16 +21,8 @@ class ICacheData extends Module {
   sram.io.wdata := io.wdata
 
   // keep the last read data
-  val rdata_reg = RegInit(0.U(128.W))
-  // current operation is read
   val read_op = io.en && !io.wen
-
-  // keep the last read data when current operation is read
-  when(RegNext(read_op)) {
-    rdata_reg := sram.io.rdata
-  }
-
-  io.rdata := Mux(RegNext(read_op), sram.io.rdata, rdata_reg)
+  io.rdata := HoldRegister(read_op, sram.io.rdata, 1)
 }
 
 class SramTemplateMask extends Module {

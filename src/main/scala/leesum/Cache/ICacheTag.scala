@@ -3,6 +3,7 @@ package leesum.Cache
 import chisel3._
 import chisel3.util.SRAM
 import leesum.GenVerilogHelper
+import leesum.Utils.HoldRegister
 
 class ICacheTagBundle extends Bundle {
 
@@ -31,23 +32,10 @@ class ICacheTag extends Module {
   tag.readwritePorts(0).enable := io.en
   io.rdata := tag.readwritePorts(0).readData
 
-  // keep the last read data
-  val last_rdata = RegInit(0.U(24.W))
-  val last_rvalid = RegInit(false.B)
-  // current operation is read
-  val read_op = io.en && !io.wen
-
   // keep the last read data when current operation is read
-  when(RegNext(read_op)) {
-    last_rdata := tag.readwritePorts(0).readData
-  }
-
-  when(read_op) {
-    last_rvalid := valid_reg(io.addr)
-  }
-
-  io.rdata := Mux(RegNext(read_op), tag.readwritePorts(0).readData, last_rdata)
-  io.tag_valid := last_rvalid
+  val read_op = io.en && !io.wen
+  io.rdata := HoldRegister(read_op, tag.readwritePorts(0).readData, 1)
+  io.tag_valid := HoldRegister(read_op, RegNext(valid_reg(io.addr)), 1)
 
   when(io.wen) {
     valid_reg(io.addr) := true.B
