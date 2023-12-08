@@ -32,8 +32,9 @@ object GenVerilogHelper {
       firtoolOpts = Array(
         "--disable-all-randomization",
         "--strip-debug-info",
-        "--lowering-options=disallowLocalVariables,disallowPackedArrays",
+//        "--lowering-options=disallowLocalVariables,disallowPackedArrays",
 //        "--split-verilog",
+        "--lowering-options=disallowLocalVariables",
         "--lower-memories",
         "--ignore-read-enable-mem",
         "-o=" + file_path,
@@ -175,22 +176,6 @@ object GenMaskOne {
         Cat(mask_zero, mask_one)
       }
     }
-  }
-}
-
-object LFSRRand {
-  def apply(count: Int): UInt = {
-    require(count > 0)
-    require(isPow2(count), "max must be power of 2")
-    val max_width = log2Ceil(count)
-
-    val rand = if (max_width == 1) {
-      LFSR(2)(0)
-    } else {
-      LFSR(max_width)
-    }
-    assert(rand < count.U, "rand must be less than count")
-    rand
   }
 }
 

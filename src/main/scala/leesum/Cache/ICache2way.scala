@@ -1,15 +1,15 @@
 package leesum.Cache
 
 import chisel3._
-import chisel3.util.random.LFSR
 import chisel3.util.{Mux1H, PopCount, Valid, ValidIO, isPow2}
-import leesum.{GenVerilogHelper, LFSRRand}
+import leesum.GenVerilogHelper
+import leesum.Utils.LFSRRand
 
 class LookupField(x: UInt) {
   require(x.getWidth == 39) // sv39
-  val tag = x(38, 10)
-  val index = x(9, 4)
-  val offset = x(3, 0)
+  val tag = x(38, 10) // 29
+  val index = x(9, 4) // 6
+  val offset = x(3, 0) // 4
 
   // aligned by 8 bytes
   val aligned_offset = x(3)
@@ -20,7 +20,7 @@ class ICache2way(way_count: Int = 2) extends Module {
     // lookup
     val lookup_en = Input(Bool())
     val addr = Input(UInt(39.W)) // sv39
-    val plookup_tag = Input(UInt(24.W)) // physical address tag
+    val plookup_tag = Input(UInt(29.W)) // physical address tag
     val cache_data = Output(UInt(64.W))
     val cache_data_hit = Output(Bool())
     // refill
@@ -40,7 +40,7 @@ class ICache2way(way_count: Int = 2) extends Module {
     aligned_offset_buf := vlookup_field.aligned_offset
   }
 
-  val tag_ways = Seq.fill(way_count)(Module(new ICacheTag))
+  val tag_ways = Seq.fill(way_count)(Module(new ICacheTag(29)))
   val data_ways = Seq.fill(way_count)(Module(new ICacheData))
   // use lfsr to randomize the way when refill
   val rand_value = LFSRRand(way_count)

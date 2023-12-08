@@ -1,7 +1,8 @@
 package leesum.Core
 import chisel3._
 import chisel3.util.{Valid, log2Ceil}
-import leesum.Cache.ICacheTop
+import leesum.Cache.{DCacheTag, ICacheTop}
+import leesum.ICache.DCacheTop
 import leesum.axi4.{
   AXI4SlaveBridge,
   AXIDeMux,
@@ -66,16 +67,16 @@ class FishCore(
   val mul_div = Module(new FuMulDiv(muldiv_en))
   val csr = Module(new FuCSR)
 
-  val dcache_load_arb = Module(
-    new ReqRespArbiter(2, new LoadDcacheReq, new LoadDcacheResp)
+  val dcache_arb = Module(
+    new ReqRespArbiter(3, new DCacheReq, new DCacheResp)
   )
-  dcache_load_arb.io.flush := false.B
+  dcache_arb.io.flush := false.B
 
-  val dcache = Module(new DummyDCache)
+  val dcache = Module(new DCacheTop)
   val icache_top = Module(new ICacheTop)
 
-  dcache_load_arb.io.req_arb <> dcache.io.load_req
-  dcache_load_arb.io.resp_arb <> dcache.io.load_resp
+  dcache_arb.io.req_arb <> dcache.io.req
+  dcache_arb.io.resp_arb <> dcache.io.resp
 
   val axi_r_arb = Module(new AxiReadArbiter)
 
@@ -95,14 +96,14 @@ class FishCore(
   icache_top.io.mem_master.w.nodeq()
   icache_top.io.mem_master.b.noenq()
 
-  dcache.io.axi_mem.ar <> axi_r_arb.io.in(0).ar
-  dcache.io.axi_mem.r <> axi_r_arb.io.in(0).r
+  dcache.io.mem_master.ar <> axi_r_arb.io.in(0).ar
+  dcache.io.mem_master.r <> axi_r_arb.io.in(0).r
 
   io.axi_master.ar <> axi_r_arb.io.out.ar
   io.axi_master.r <> axi_r_arb.io.out.r
-  io.axi_master.aw <> dcache.io.axi_mem.aw
-  io.axi_master.w <> dcache.io.axi_mem.w
-  io.axi_master.b <> dcache.io.axi_mem.b
+  io.axi_master.aw <> dcache.io.mem_master.aw
+  io.axi_master.w <> dcache.io.mem_master.w
+  io.axi_master.b <> dcache.io.mem_master.b
 
   // flush
   ifu.io.flush := commit_stage.io.flush
@@ -118,6 +119,7 @@ class FishCore(
 
   // fencei
   icache_top.io.fencei := commit_stage.io.fencei
+  dcache.io.fencei := false.B // TODO: unimplemented
 
   // pc_gen_stage <> fetch_stage
   pc_gen_stage.io.pc <> ifu.io.pc_in
@@ -133,6 +135,7 @@ class FishCore(
 
   // monitor <> icache
   monitor.io.perf_icache := icache_top.io.perf_icache
+  monitor.io.perf_dcache := dcache.io.perf_dcache
 
   // mmu <> lsu
   mmmu.io.lsu_req <> lsu.io.tlb_req
@@ -146,8 +149,15 @@ class FishCore(
   mmmu.io.cur_privilege := commit_stage.io.cur_privilege_mode
 
   // mmu <> dcache
-  mmmu.io.dcache_load_req <> dcache_load_arb.io.req_vec(1)
-  mmmu.io.dcache_load_resp <> dcache_load_arb.io.resp_vec(1)
+
+  DCacheConnect.load_req_to_dcache_req(
+    mmmu.io.dcache_load_req,
+    dcache_arb.io.req_vec(0)
+  )
+  DCacheConnect.dcache_resp_to_load_resp(
+    dcache_arb.io.resp_vec(0),
+    mmmu.io.dcache_load_resp
+  )
 
   // ifu <> decode stage
 
@@ -246,9 +256,27 @@ class FishCore(
   csr_regs.io.sext_int := io.sext_int
 
   // lsu <> dcache
-  lsu.io.dcache_load_req <> dcache_load_arb.io.req_vec(0)
-  lsu.io.dcache_store_req <> dcache.io.store_req
-  lsu.io.dcache_load_resp <> dcache_load_arb.io.resp_vec(0)
-  lsu.io.dcache_store_resp <> dcache.io.store_resp
 
+  DCacheConnect.store_req_to_dcache_req(
+    lsu.io.dcache_store_req,
+    dcache_arb.io.req_vec(1)
+  )
+  DCacheConnect.dcache_resp_to_store_resp(
+    dcache_arb.io.resp_vec(1),
+    lsu.io.dcache_store_resp
+  )
+
+  DCacheConnect.load_req_to_dcache_req(
+    lsu.io.dcache_load_req,
+    dcache_arb.io.req_vec(2)
+  )
+  DCacheConnect.dcache_resp_to_load_resp(
+    dcache_arb.io.resp_vec(2),
+    lsu.io.dcache_load_resp
+  )
+
+}
+
+object gen_FishCore_verilog extends App {
+  GenVerilogHelper(new FishCore)
 }

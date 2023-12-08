@@ -38,6 +38,7 @@ class PerfPort extends Bundle {
   val bp = new PerfMonitorCounter
   val commit = new PerfMonitorCounter
   val icache = new PerfMonitorCounter
+  val dcache = new PerfMonitorCounter
 }
 
 class MonitorTop(commit_port_num: Int) extends Module {
@@ -51,6 +52,7 @@ class MonitorTop(commit_port_num: Int) extends Module {
     val perf_bp = Input(new PerfMonitorCounter)
     val perf_commit = Input(new PerfMonitorCounter)
     val perf_icache = Input(new PerfMonitorCounter)
+    val perf_dcache = Input(new PerfMonitorCounter)
     val perf = Output(new PerfPort)
   })
 
@@ -60,6 +62,7 @@ class MonitorTop(commit_port_num: Int) extends Module {
   io.perf.bp := io.perf_bp
   io.perf.commit := io.perf_commit
   io.perf.icache := io.perf_icache
+  io.perf.dcache := io.perf_dcache
 
   // delay 1 cycle to wait for gpr write back
   val commit_monitor_next = RegNext(io.commit_monitor)

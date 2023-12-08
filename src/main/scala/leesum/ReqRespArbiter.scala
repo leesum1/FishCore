@@ -1,16 +1,6 @@
 package leesum
 import chisel3._
-import chisel3.util.{
-  Decoupled,
-  DecoupledIO,
-  Enum,
-  MixedVec,
-  MixedVecInit,
-  Valid,
-  is,
-  log2Ceil,
-  switch
-}
+import chisel3.util.{Decoupled, Enum, Valid, is, log2Ceil, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal, stable}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -84,7 +74,7 @@ class ReqRespArbiter[T <: Data, U <: Data](
   }
 
   io.sel_idx.valid := sel_buf_valid
-  io.sel_idx.bits := sel_idx
+  io.sel_idx.bits := sel_buf
 
   io.req_vec.foreach(_.nodeq())
   io.resp_vec.foreach(_.noenq())

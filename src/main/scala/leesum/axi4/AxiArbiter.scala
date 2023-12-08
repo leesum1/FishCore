@@ -6,10 +6,10 @@ import chiseltest.formal.{BoundedCheck, Formal, stable}
 import leesum.{BarrelShifter, FormalUtils, GenVerilogHelper, ReqRespArbiter}
 import org.scalatest.flatspec.AnyFlatSpec
 
-class AxiReadArbiter extends Module {
+class AxiReadArbiter(numInputs: Int = 2) extends Module {
 
   val io = IO(new Bundle {
-    val in = Vec(2, new AXISlaveIO(32, 64))
+    val in = Vec(numInputs, new AXISlaveIO(32, 64))
     val out = new AXIMasterIO(32, 64)
   })
 
@@ -24,8 +24,6 @@ class AxiReadArbiter extends Module {
   io.out.aw.noenq()
   io.out.w.noenq()
   io.out.b.nodeq()
-
-  val numInputs = 2
 
   val sIdle :: sWaitResp :: Nil = Enum(2)
 
@@ -172,19 +170,21 @@ class AXIMux(
     //  AXI read Mux
     // ------------------
     val axi_ar_r_arb = Module(
-      new ReqRespArbiter(
-        in_nums,
-        new AXIAddressChannel(addr_width),
-        new AXIReadDataChannel(data_width),
-        formal
-      )
+      new AxiReadArbiter(in_nums)
     )
+    for (i <- 0 until in_nums) {
+      axi_ar_r_arb.io.in(i).ar <> io.in(i).ar
+      axi_ar_r_arb.io.in(i).r <> io.in(i).r
 
-    axi_ar_r_arb.io.flush := false.B
-    axi_ar_r_arb.io.req_vec <> io.in.map(_.ar)
-    axi_ar_r_arb.io.resp_vec <> io.in.map(_.r)
-    io.out.ar <> axi_ar_r_arb.io.req_arb
-    io.out.r <> axi_ar_r_arb.io.resp_arb
+      axi_ar_r_arb.io.in(i).aw.noenq()
+      axi_ar_r_arb.io.in(i).w.noenq()
+      axi_ar_r_arb.io.in(i).b.nodeq()
+    }
+    axi_ar_r_arb.io.out.aw.nodeq()
+    axi_ar_r_arb.io.out.w.nodeq()
+    axi_ar_r_arb.io.out.b.noenq()
+    axi_ar_r_arb.io.out.ar <> io.out.ar
+    axi_ar_r_arb.io.out.r <> io.out.r
 
     // ------------------
     //  AXI write Mux
@@ -292,7 +292,7 @@ class AXIDeMux(
     }
     is(sWSend) {
       io.in.w <> io.out(w_sel_buf).w
-      when(io.in.w.fire) {
+      when(io.in.w.fire && io.in.w.bits.last) {
         w_state := sBWait
       }
     }

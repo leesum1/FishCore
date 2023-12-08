@@ -5,26 +5,20 @@ import chisel3.util.SRAM
 import leesum.GenVerilogHelper
 import leesum.Utils.HoldRegister
 
-class ICacheTagBundle extends Bundle {
-
-  val valid = Bool()
-  val tag = UInt(24.W)
-}
-
-class ICacheTag extends Module {
+class ICacheTag(tag_length: Int) extends Module {
   val io = IO(new Bundle {
     val addr = Input(UInt(6.W)) // max 64
-    val rdata = Output(UInt(24.W))
+    val rdata = Output(UInt(tag_length.W))
     val tag_valid = Output(Bool())
     val en = Input(Bool())
     val wen = Input(Bool())
-    val wdata = Input(UInt(24.W))
+    val wdata = Input(UInt(tag_length.W))
     val flush = Input(Bool())
   })
 
   val valid_reg = RegInit(VecInit(Seq.fill(64)(false.B)))
 
-  val tag = SRAM(64, UInt(24.W), 0, 0, 1)
+  val tag = SRAM(64, UInt(tag_length.W), 0, 0, 1)
 
   tag.readwritePorts(0).address := io.addr
   tag.readwritePorts(0).writeData := io.wdata
@@ -47,5 +41,5 @@ class ICacheTag extends Module {
 }
 
 object gen_ICacheTag_verilog extends App {
-  GenVerilogHelper(new ICacheTag)
+  GenVerilogHelper(new ICacheTag(27))
 }
