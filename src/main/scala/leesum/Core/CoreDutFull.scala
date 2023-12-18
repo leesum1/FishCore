@@ -118,8 +118,9 @@ class FishCore(
   csr.io.flush := commit_stage.io.flush
 
   // fencei
-  icache_top.io.fencei := commit_stage.io.fencei
-  dcache.io.fencei := false.B // TODO: unimplemented
+  icache_top.io.fencei := commit_stage.io.icache_fencei
+  dcache.io.fencei := commit_stage.io.dcache_fencei
+  dcache.io.fencei_ack <> commit_stage.io.dcache_fencei_ack
 
   // pc_gen_stage <> fetch_stage
   pc_gen_stage.io.pc <> ifu.io.pc_in

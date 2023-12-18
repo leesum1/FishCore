@@ -274,10 +274,6 @@ class ICacheTop(formal: Boolean = false) extends Module {
     assert(!io.mmu_req.fire)
   }
 
-  when(io.fencei) {
-    assert(io.flush, "flush must be true when fencei is true")
-  }
-
   when(io.mmu_resp.fire) {
     assume(io.mmu_resp.bits.req_type === TLBReqType.Fetch)
   }

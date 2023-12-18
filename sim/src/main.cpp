@@ -137,8 +137,8 @@ int main(int argc, char** argv) {
             clk_num += 1;
             to_host_check_freq += 1;
             // stop run
-            if (no_commit_num > 150) {
-                console->critical("no commit for 150 cycles, stop run");
+            if (no_commit_num > 300 ) {
+                console->critical("no commit for 300 cycles, stop run");
                 state = sim_abort;
             }
             // memory

@@ -15,7 +15,11 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     val rob_commit_ports =
       Vec(num_commit_port, Flipped(Decoupled(new ScoreBoardEntry)))
     val flush = Output(Bool())
-    val fencei = Output(Bool())
+    val icache_fencei =
+      Output(Bool()) // when icache_fencei is true, flush must be true
+
+    val dcache_fencei = Output(Bool())
+    val dcache_fencei_ack = Input(Bool())
 
     // gpr
     val gpr_commit_ports =
@@ -61,7 +65,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   val pop_ack = WireInit(VecInit(Seq.fill(num_commit_port)(false.B)))
 
   val flush_next = RegInit(false.B)
-  val fencei_next = RegInit(false.B)
+  val dfencei_next = RegInit(false.B)
+  val ifencei_next = RegInit(false.B)
   val privilege_mode = RegInit(3.U(2.W)) // machine mode
 
   // interrupt
@@ -97,12 +102,14 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   when(flush_next) {
     flush_next := false.B
   }
-  when(fencei_next) {
-    fencei_next := false.B
+
+  when(ifencei_next) {
+    ifencei_next := false.B
   }
 
   io.flush := flush_next
-  io.fencei := fencei_next
+  io.dcache_fencei := dfencei_next
+  io.icache_fencei := ifencei_next
 
   assert(
     CheckOrder(pop_ack),
@@ -218,24 +225,32 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
         retire_exception(vma_entry, ack)
       }
+      ack := true.B
 
     }.elsewhen(entry.fu_op === FuOP.Fence) {
 //      printf("Fence at %x\n", entry.pc)
+      ack := true.B
     }.elsewhen(entry.fu_op === FuOP.FenceI) {
-      flush_next := true.B
-      fencei_next := true.B
-      io.branch_commit.valid := true.B
-      // same as interrupt to reduce area
-      io.branch_commit.bits.target := entry.pc + Mux(
-        entry.is_rv32,
-        2.U,
-        4.U
-      )
+      dfencei_next := true.B
+      // clear icache after clear dcache
+      when(io.dcache_fencei_ack) {
+        flush_next := true.B
+        ifencei_next := true.B
+        dfencei_next := false.B
+        ack := true.B
+        io.branch_commit.valid := true.B
+        // same as interrupt to reduce area
+        io.branch_commit.bits.target := entry.pc + Mux(
+          entry.is_rv32,
+          2.U,
+          4.U
+        )
+      }
     }.elsewhen(entry.fu_op === FuOP.WFI) {
       printf("WFI at %x\n", entry.pc)
+      ack := true.B
     }
 
-    ack := true.B
   }
 
   // TODO: exception

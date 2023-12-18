@@ -3,6 +3,7 @@ package leesum.ICache
 import chisel3._
 import chisel3.util.{
   Cat,
+  Counter,
   Decoupled,
   Enum,
   PopCount,
@@ -29,6 +30,8 @@ class DCacheTop extends Module {
 
     // fencei
     val fencei = Input(Bool()) // when fencei is true, flush must be true
+    val fencei_ack = Output(Bool())
+
     // perf monitor
     val perf_dcache = Output(new PerfMonitorCounter)
 
@@ -40,6 +43,7 @@ class DCacheTop extends Module {
   io.req <> dcache.io.req
   io.resp <> dcache.io.resp
   io.flush <> dcache.io.flush
+  io.fencei_ack <> dcache.io.fencei_ack
   io.fencei <> dcache.io.fencei
   io.perf_dcache <> dcache.io.perf_dcache
 
@@ -60,6 +64,7 @@ class DCacheTopIn(formal: Boolean = false) extends Module {
 
     // fencei
     val fencei = Input(Bool()) // when fencei is true, flush must be true
+    val fencei_ack = Output(Bool())
     // perf monitor
     val perf_dcache = Output(new PerfMonitorCounter)
 
@@ -77,9 +82,10 @@ class DCacheTopIn(formal: Boolean = false) extends Module {
   io.mmio_master.clear()
   io.req.nodeq()
   io.resp.noenq()
+  io.fencei_ack := false.B
 
-  val sIdle :: sLoadLookup :: sStoreLookup :: sMiss :: sDirtyCheck :: sRefillSendAR :: sRefillWaitR :: sSendDcacheResp :: sMMIOReq :: sMMIOResp :: Nil =
-    Enum(10)
+  val sIdle :: sLoadLookup :: sStoreLookup :: sMiss :: sDirtyCheck :: sRefillSendAR :: sRefillWaitR :: sSendDcacheResp :: sMMIOReq :: sMMIOResp :: sFlushReq :: sFLushing :: sFlushACK :: Nil =
+    Enum(13)
   val state = RegInit(sIdle)
   val dcache_req_buf = RegInit(0.U.asTypeOf(new DCacheReq))
 
@@ -127,6 +133,12 @@ class DCacheTopIn(formal: Boolean = false) extends Module {
   val refill_data_buf = RegInit(0.U.asTypeOf(Vec(2, UInt(64.W))))
   val dcache_resp_buf = RegInit(0.U.asTypeOf(new DCacheResp))
 
+  val fencei_way = Counter(4)
+  val fencei_idx = Counter(64)
+
+  require(fencei_idx.value.getWidth == 6)
+  require(fencei_way.value.getWidth == 2)
+
   def rev_dcache_store_req() = {
     io.req.ready := true.B && io.req.bits.is_store && !io.flush
     when(io.req.fire) {
@@ -142,7 +154,7 @@ class DCacheTopIn(formal: Boolean = false) extends Module {
   }
 
   def rev_dcache_req() = {
-    io.req.ready := true.B && !io.flush
+    io.req.ready := true.B && !io.flush && !io.fencei
     when(io.req.fire) {
       dcache_req_buf := io.req.bits
 
@@ -162,6 +174,10 @@ class DCacheTopIn(formal: Boolean = false) extends Module {
         dcache_n_way.io.req_addr := io.req.bits.paddr
         state := sLoadLookup
       }
+    }.elsewhen(io.fencei) {
+      state := sFlushReq
+      fencei_way.reset()
+      fencei_idx.reset()
     }.otherwise {
       state := sIdle
     }
@@ -396,15 +412,68 @@ class DCacheTopIn(formal: Boolean = false) extends Module {
         rev_dcache_req()
       }
     }
+    is(sFlushReq) {
+      // read cache line
+      assert(io.fencei, "should be fencei")
+      // send dcache read req
+      dcache_n_way.io.req_valid := true.B
+      dcache_n_way.io.req_type := DCacheReqType.read
+      dcache_n_way.io.req_addr := Cat(
+        0.U(29.W), // tag not used
+        fencei_idx.value, // idx
+        0.U(4.W) // offset not used
+      ) // aligned to 16 bytes
+      dcache_n_way.io.req_way := fencei_way.value
+
+      state := sFLushing
+    }
+    is(sFLushing) {
+      assert(io.fencei, "should be fencei")
+
+      val is_dirty =
+        dcache_n_way.io.read_data.dirty && dcache_n_way.io.read_data.valid
+      when(is_dirty) {
+        writeback_fifo_in.valid := true.B
+        writeback_fifo_in.bits.tag := dcache_n_way.io.read_data.tag
+        writeback_fifo_in.bits.idx := fencei_idx.value
+        writeback_fifo_in.bits.cacheline := dcache_n_way.io.read_data.data
+        when(writeback_fifo_in.fire) {
+          fencei_inc()
+        }
+      }.otherwise {
+        fencei_inc()
+      }
+    }
+    is(sFlushACK) {
+      assert(io.fencei, "should be fencei")
+      state := sIdle
+      io.fencei_ack := true.B
+    }
   }
 
-  // --------------------------
-  // writeback FSM
-  // --------------------------
+  private def fencei_inc() = {
+    state := sFlushReq
+    fencei_way.inc()
+
+    when(fencei_way.value === (fencei_way.range.end - 1).U) {
+      fencei_idx.inc()
+    }
+
+    // the last cache line
+    when(
+      fencei_idx.value === (fencei_idx.range.end - 1).U && fencei_way.value === (fencei_way.range.end - 1).U
+    ) {
+      state := sFlushACK
+    }
+  }
 
   // --------------------------
   // formal
   // --------------------------
+
+  when(io.fencei_ack) {
+    assert(io.fencei)
+  }
 
   when(io.mem_master.r.fire) {
     assume(io.mem_master.r.bits.id === 0.U)
