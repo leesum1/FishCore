@@ -6,25 +6,6 @@ import chiseltest.ChiselScalatestTester
 import chiseltest.formal._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class TLBEntry extends Bundle {
-  val pte = UInt(64.W)
-  val va = UInt(64.W)
-  val pg_size = SV39PageSize()
-  val asid = UInt(16.W)
-}
-
-class TLBL1(num: Int) extends Module {
-  val io = IO(new Bundle {
-    val va = Input(Valid(UInt(64.W)))
-    val tlb_hit = Output(Bool())
-    val tlb_entry = Output(new TLBEntry)
-  })
-  // TODO: not implemented
-  io.tlb_hit := false.B
-  io.tlb_entry := DontCare
-  io.tlb_entry.va := io.va.bits
-}
-
 class MMUEffectiveInfo extends Bundle {
   val mmu_privilege = UInt(2.W)
   val mstatus = UInt(64.W)
@@ -173,9 +154,6 @@ class MMU(
   val itlb_hit = Wire(Bool())
   val dtlb_hit = Wire(Bool())
 
-  val itlb_l1 = Module(new TLBL1(4))
-  val dtlb_l1 = Module(new TLBL1(4))
-
   val ptw_arb = Module(new ReqRespArbiter(2, new PTWReq, new PTWResp))
   val ptw = Module(new PTW(formal = formal))
 
@@ -186,12 +164,15 @@ class MMU(
 
   ptw.io.flush := io.flush
 
-  itlb_l1.io.va.valid := itlb_req
-  itlb_l1.io.va.bits := io.fetch_req.bits.vaddr
-  itlb_hit := itlb_l1.io.tlb_hit
-  dtlb_l1.io.va.valid := dtlb_req
-  dtlb_l1.io.va.bits := io.lsu_req.bits.vaddr
-  dtlb_hit := dtlb_l1.io.tlb_hit
+//  itlb_l1.io.va.valid := itlb_req
+//  itlb_l1.io.va.bits := io.fetch_req.bits.vaddr
+//  itlb_hit := itlb_l1.io.tlb_hit
+//  dtlb_l1.io.va.valid := dtlb_req
+//  dtlb_l1.io.va.bits := io.lsu_req.bits.vaddr
+//  dtlb_hit := dtlb_l1.io.tlb_hit
+
+  itlb_hit := false.B
+  dtlb_hit := false.B
 
   val sIdle :: sTLBLookup :: sWaitPTWResp :: sSendResp :: Nil =
     Enum(4)

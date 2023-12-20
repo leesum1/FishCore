@@ -59,6 +59,22 @@ object CheckUnique {
   }
 }
 
+object CheckOverlap {
+  def apply(addr: UInt, range_start: UInt, range_end: UInt): Bool = {
+    assert(range_start < range_end, "range_start must be less than range_end")
+    val overlap = (addr >= range_start) && (addr < range_end)
+    overlap
+  }
+  def apply(addr: UInt, range: Seq[(UInt, UInt)]): Bool = {
+    val overlap = range
+      .map({ case (start, end) =>
+        apply(addr, start, end)
+      })
+      .reduce(_ || _)
+    overlap
+  }
+}
+
 /** only if vec(i-1) is valid, vec(i) can be valid. 0000 -> pass check 0001 ->
   * pass check 0011 -> pass check 0111 -> pass check 1111 -> pass check 1000 ->
   * fail check 1001 -> fail check 1100 -> fail check

@@ -2,7 +2,21 @@ package leesum.Utils
 import chisel3._
 import chisel3.util.{RegEnable, ShiftRegister, ShiftRegisters}
 import leesum.GenVerilogHelper
+
 object HoldRegister {
+
+  /** This method creates a register that holds the input data when the trigger
+    * signal is false. When the trigger signal is true, the register is updated
+    * data_latency parameter.
+    * @param trigger
+    *   The trigger signal for the register.
+    * @param data_in
+    *   The input data for the register.
+    * @param data_latency
+    *   The latency of the The input data.
+    * @return
+    *   The output of the register.
+    */
   def apply[T <: Data](trigger: Bool, data_in: T, data_latency: Int): T = {
     require(data_latency >= 0, "data_latency must be non-negative")
     if (data_latency > 0) {

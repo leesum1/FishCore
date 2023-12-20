@@ -33,13 +33,18 @@ class PTWResp extends Bundle {
 
 class SV39VA(vaddr: UInt) {
   val offset = vaddr(11, 0)
-  val ppn0 = vaddr(12 + 9, 12)
-  val ppn1 = vaddr(12 + 9 * 2, 12 + 9)
-  val ppn2 = vaddr(12 + 9 * 3, 12 + 9 * 2)
+  val ppn0 = vaddr(11 + 9, 12)
+  val ppn1 = vaddr(11 + 9 * 2, 12 + 9)
+  val ppn2 = vaddr(11 + 9 * 3, 12 + 9 * 2)
 
   def get_ppn(idx: UInt) = {
     assert(idx < 3.U)
     val ppn = WireInit(0.U(9.W))
+
+    require(ppn2.getWidth == 9)
+    require(ppn1.getWidth == 9)
+    require(ppn0.getWidth == 9)
+
     ppn := MuxLookup(
       idx,
       0.U
