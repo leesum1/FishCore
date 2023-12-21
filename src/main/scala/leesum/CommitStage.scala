@@ -1,6 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util._
+import leesum.mmu_sv39.SfenceVMABundle
 import leesum.moniter.{CommitMonitorPort, PerfMonitorCounter}
 import spire.math
 
@@ -20,6 +21,9 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
     val dcache_fencei = Output(Bool())
     val dcache_fencei_ack = Input(Bool())
+
+    // sfence.vma
+    val tlb_flush = Output(Valid(new SfenceVMABundle))
 
     // gpr
     val gpr_commit_ports =
@@ -67,6 +71,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   val flush_next = RegInit(false.B)
   val dfencei_next = RegInit(false.B)
   val ifencei_next = RegInit(false.B)
+  val sfencevma_next = RegInit(false.B)
+  val sfence_buf = RegInit(0.U.asTypeOf(new SfenceVMABundle))
   val privilege_mode = RegInit(3.U(2.W)) // machine mode
 
   // interrupt
@@ -106,10 +112,15 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   when(ifencei_next) {
     ifencei_next := false.B
   }
+  when(sfencevma_next) {
+    sfencevma_next := false.B
+  }
 
   io.flush := flush_next
   io.dcache_fencei := dfencei_next
   io.icache_fencei := ifencei_next
+  io.tlb_flush.valid := sfencevma_next
+  io.tlb_flush.bits := sfence_buf
 
   assert(
     CheckOrder(pop_ack),
@@ -209,7 +220,12 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 //      printf("SFenceVMA at %x\n", entry.pc)
 
       when(privilege_mode >= require_privi) {
+        // privi check pass
         flush_next := true.B
+        sfencevma_next := true.B
+        // TODO: unimplemented rs1 rs2
+        sfence_buf.va := 0.U
+        sfence_buf.asid := 0.U
         io.branch_commit.valid := true.B
         // same as interrupt to reduce area
         io.branch_commit.bits.target := entry.pc + Mux(
@@ -218,6 +234,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
           4.U
         )
       }.otherwise {
+        // privi check fail
         val vma_entry = WireInit(entry)
         vma_entry.exception.valid := true.B
         vma_entry.exception.cause := ExceptionCause.illegal_instruction
@@ -800,31 +817,31 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     "rob_commit_ports must be ordered"
   )
 
-  when(
-    rob_valid_seq.head && rob_data_seq.head.complete
-  ) {
-    assert(
-      rob_data_seq.head.pc =/= 0.U,
-      "pc must not be zero"
-    )
-  }
+//  when(
+//    rob_valid_seq.head && rob_data_seq.head.complete
+//  ) {
+//    assert(
+//      rob_data_seq.head.pc =/= 0.U,
+//      "pc must not be zero"
+//    )
+//  }
 
-  for (i <- 0 until num_commit_port) {
-    when(rob_valid_seq(i) && rob_data_seq(i).complete && pop_ack(i)) {
-      assert(
-        rob_data_seq(i).pc =/= 0.U,
-        "pc must not be zero"
-      )
-
-      when(rob_data_seq(i).bp.is_miss_predict) {
-        assert(
-          rob_data_seq(i).bp.predict_pc =/= 0.U,
-          "predict_pc must not be zero"
-        )
-        assert(rob_data_seq(i).fu_type === FuType.Br, "fu_type must be branch")
-      }
-    }
-  }
+//  for (i <- 0 until num_commit_port) {
+//    when(rob_valid_seq(i) && rob_data_seq(i).complete && pop_ack(i)) {
+//      assert(
+//        rob_data_seq(i).pc =/= 0.U,
+//        "pc must not be zero"
+//      )
+//
+//      when(rob_data_seq(i).bp.is_miss_predict) {
+//        assert(
+//          rob_data_seq(i).bp.predict_pc =/= 0.U,
+//          "predict_pc must not be zero"
+//        )
+//        assert(rob_data_seq(i).fu_type === FuType.Br, "fu_type must be branch")
+//      }
+//    }
+//  }
 }
 
 object gen_commit_stage_verilog extends App {

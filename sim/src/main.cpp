@@ -267,13 +267,25 @@ int main(int argc, char** argv) {
     const auto icache_hit = sim_base.top->io_perf_monitor_icache_hit_counter;
     const auto icache_num = sim_base.top->io_perf_monitor_icache_num_counter;
     const auto icache_rate = static_cast<double_t>(icache_hit) / static_cast<double_t>(icache_num + 1);
-        const auto dcache_hit = sim_base.top->io_perf_monitor_dcache_hit_counter;
-        const auto dcache_num = sim_base.top->io_perf_monitor_dcache_num_counter;
-        const auto dcache_rate = static_cast<double_t>(dcache_hit) / static_cast<double_t>(dcache_num + 1);
+    const auto dcache_hit = sim_base.top->io_perf_monitor_dcache_hit_counter;
+    const auto dcache_num = sim_base.top->io_perf_monitor_dcache_num_counter;
+    const auto dcache_rate = static_cast<double_t>(dcache_hit) / static_cast<double_t>(dcache_num + 1);
+
+    const auto itlb_hit = sim_base.top->io_perf_monitor_itlb_hit_counter;
+    const auto itlb_num = sim_base.top->io_perf_monitor_itlb_num_counter;
+    const auto itlb_rate = static_cast<double_t>(itlb_hit) / static_cast<double_t>(itlb_num + 1);
+
+    const auto dtlb_hit = sim_base.top->io_perf_monitor_dtlb_hit_counter;
+    const auto dtlb_num = sim_base.top->io_perf_monitor_dtlb_num_counter;
+    const auto dtlb_rate = static_cast<double_t>(dtlb_hit) / static_cast<double_t>(dtlb_num + 1);
+
+
 
 
     console->info("icache_hit: {}, icache_num: {}, icache_rate: {}", icache_hit, icache_num, icache_rate);
     console->info("dcache_hit: {}, dcache_num: {}, dcache_rate: {}", dcache_hit, dcache_num, dcache_rate);
+    console->info("itlb_hit: {}, itlb_num: {}, itlb_rate: {}", itlb_hit, itlb_num, itlb_rate);
+    console->info("dtlb_hit: {}, dtlb_num: {}, dtlb_rate: {}", dtlb_hit, dtlb_num, dtlb_rate);
     console->info("bp_hit: {}, bp_num: {}, bp_rate: {}", bp_hit, bp_num, bp_rate);
     // add one to avoid div zero
     console->info("clk_num: {}, commit_num: {}, IPC: {}, SimSpeed: {} insts/seconds",

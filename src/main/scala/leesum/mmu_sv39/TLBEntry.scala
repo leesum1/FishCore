@@ -11,7 +11,7 @@ import chisel3.util.{
   log2Ceil
 }
 import leesum.Utils.{HoldRegister, LFSRRand}
-import leesum.{CheckOverlap, GenVerilogHelper, SV39PTE, SV39PageSize, SV39VA}
+import leesum.{CheckOverlap, GenVerilogHelper}
 
 class TLBEntry extends Bundle {
   val valid = Bool()
@@ -25,7 +25,7 @@ class TLBEntry extends Bundle {
   val asid = UInt(16.W)
 }
 
-class TLBFlushBundle extends Bundle {
+class SfenceVMABundle extends Bundle {
   val asid = UInt(16.W)
   val va = UInt(64.W)
 }
@@ -35,6 +35,7 @@ class TLB_L1(num: Int) extends Module {
   require(num > 1 && isPow2(num), "TLB_L1 num should be power of 2")
 
   val io = IO(new Bundle {
+    // tlb lookup
     val va = Input(Valid(UInt(64.W)))
     val asid = Input(UInt(16.W))
     // tlb hit info
@@ -44,7 +45,7 @@ class TLB_L1(num: Int) extends Module {
     // tlb update
     val tlb_update = Input(Valid(new TLBEntry))
     // tlb flush
-    val tlb_flush = Input(Valid(new TLBFlushBundle))
+    val tlb_flush = Input(Valid(new SfenceVMABundle))
 
     // debug port
     val debug_tlb_count = Output(UInt(log2Ceil(num + 1).W))
@@ -205,7 +206,7 @@ class TLB_L1(num: Int) extends Module {
     })
 
     other_range.foreach(r => {
-      when(r._1) {
+      when(r._1 && tlb_content(i).valid) {
         assert(
           !CheckOverlap(
             tlb_content(i).va,
@@ -240,6 +241,6 @@ class TLB_L1(num: Int) extends Module {
 }
 
 object gen_TLB_L1_verilog extends App {
-  GenVerilogHelper(new TLB_L1(8))
+  GenVerilogHelper(new TLB_L1(2))
 
 }

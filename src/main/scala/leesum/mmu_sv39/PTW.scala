@@ -1,14 +1,10 @@
-package leesum
+package leesum.mmu_sv39
+
 import chisel3._
 import chisel3.util.{Cat, Decoupled, Enum, MuxLookup, is, switch}
 import chiseltest.ChiselScalatestTester
-import chiseltest.formal.{
-  BoundedCheck,
-  CVC4EngineAnnotation,
-  Formal,
-  past,
-  stable
-}
+import chiseltest.formal._
+import leesum._
 import org.scalatest.flatspec.AnyFlatSpec
 
 object SV39PageSize extends ChiselEnum {

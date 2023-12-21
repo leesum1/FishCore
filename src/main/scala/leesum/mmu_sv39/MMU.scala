@@ -1,9 +1,20 @@
-package leesum
+package leesum.mmu_sv39
 
 import chisel3._
-import chisel3.util.{Cat, Decoupled, DecoupledIO, Enum, Valid, is, switch}
+import chisel3.util.{
+  Cat,
+  Decoupled,
+  DecoupledIO,
+  Enum,
+  MuxLookup,
+  Valid,
+  is,
+  switch
+}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal._
+import leesum._
+import leesum.moniter.PerfMonitorCounter
 import org.scalatest.flatspec.AnyFlatSpec
 
 class MMUEffectiveInfo extends Bundle {
@@ -27,6 +38,7 @@ class MMU(
     formal: Boolean = false
 ) extends Module {
   val io = IO(new Bundle {
+    // fetch and lsu req
     val fetch_req = Flipped(Decoupled(new TLBReq))
     val fetch_resp = Decoupled(new TLBResp)
     val lsu_req = Flipped(Decoupled(new TLBReq))
@@ -39,7 +51,18 @@ class MMU(
     val satp = Input(UInt(64.W))
     val cur_privilege = Input(UInt(2.W))
     val flush = Input(Bool())
+    // tlb flush
+    val tlb_flush = Input(Valid(new SfenceVMABundle))
+
+    // perf monitor
+    val perf_itlb = Output(new PerfMonitorCounter)
+    val perf_dtlb = Output(new PerfMonitorCounter)
   })
+  val perf_itlb = RegInit(0.U.asTypeOf(new PerfMonitorCounter))
+  val perf_dtlb = RegInit(0.U.asTypeOf(new PerfMonitorCounter))
+
+  io.perf_itlb := perf_itlb
+  io.perf_dtlb := perf_dtlb
 
   val mstatus_field = new MstatusFiled(io.mstatus)
 
@@ -68,6 +91,96 @@ class MMU(
     (!fetch_effective_info_buf.satp_field.mode_is_bare) && !(fetch_effective_info_buf.mmu_privilege === Privilegelevel.M.U)
   val lsu_mmu_en =
     (!lsu_effective_info_buf.satp_field.mode_is_bare) && !(lsu_effective_info_buf.mmu_privilege === Privilegelevel.M.U)
+
+  // When SUM=0, S-mode memory accesses to pages that are
+  // accessible by U-mode (U=1 in Figure 4.18) will fault.
+  // When SUM=1, these accesses are permitted.
+  def is_mstatus_sum_check_pass(
+      pte: SV39PTE,
+      privilege_mode: UInt,
+      sum_bit: Bool
+  ): Bool = {
+    require(privilege_mode.getWidth == 2)
+    val sum_pass = Wire(Bool())
+    when(privilege_mode =/= Privilegelevel.S.U) {
+      sum_pass := true.B
+    }.otherwise {
+      sum_pass := sum_bit || !pte.u
+    }
+    sum_pass
+  }
+  // 7. If pte.a = 0, or if the original memory access is a store and pte.d = 0, either raise a page-fault
+  // exception corresponding to the original access type
+  def is_access_and_dirty_check_pass(
+      pte: SV39PTE,
+      req_type: TLBReqType.Type
+  ): Bool = {
+    val raise_pg =
+      !pte.a || (!pte.d && TLBReqType.need_store(
+        req_type
+      ))
+    !raise_pg
+  }
+
+  // 5. A leaf PTE has been found. Determine if the requested memory access is allowed by the
+  // pte.r, pte.w, pte.x, and pte.u bits, given the current privilege mode and the value of the
+  // SUM and MXR fields of the mstatus register. If not, stop and raise a page-fault exception
+  // corresponding to the original access type.
+  def is_pte_permission_check_pass(
+      pte: SV39PTE,
+      req_type: TLBReqType.Type,
+      privilege_mode: UInt,
+      mxr_bit: Bool,
+      sum_bit: Bool
+  ) = {
+    require(privilege_mode.getWidth == 2)
+
+    val pte_permission_check_pass = WireInit(false.B)
+    val sum_check_pass = is_mstatus_sum_check_pass(pte, privilege_mode, sum_bit)
+    when(req_type === TLBReqType.Fetch) {
+      pte_permission_check_pass := pte.x
+    }.elsewhen(TLBReqType.need_store(req_type)) {
+      // STORE , AMO , sc
+      val store_check_pass = pte.w
+      pte_permission_check_pass := store_check_pass & sum_check_pass
+
+    }.elsewhen(TLBReqType.need_load(req_type)) {
+      // When MXR=0, only loads from pages marked readable (R=1 in Figure 4.18) will succeed.
+      // When MXR=1, loads from pages marked either readable or executable (R=1 or X=1) will succeed.
+      // MXR has no effect when page-based virtual memory is not in effect.
+      val load_check_pass = pte.r || pte.x & mxr_bit
+      pte_permission_check_pass := load_check_pass & sum_check_pass
+    }.otherwise {
+      assert(false.B, "unknown req_type")
+    }
+    pte_permission_check_pass
+  }
+
+  def tlb_permission_check_pass(
+      pte: SV39PTE,
+      req_type: TLBReqType.Type,
+      privilege_mode: UInt,
+      mxr_bit: Bool,
+      sum_bit: Bool
+  ): Bool = {
+    val pte_pass = is_pte_permission_check_pass(
+      pte = pte,
+      req_type = req_type,
+      privilege_mode = privilege_mode,
+      mxr_bit = mxr_bit,
+      sum_bit = sum_bit
+    )
+
+    val a_d_pass = is_access_and_dirty_check_pass(
+      pte = pte,
+      req_type = req_type
+    )
+
+    dontTouch(pte_pass)
+    dontTouch(a_d_pass)
+
+    pte_pass && a_d_pass
+  }
 
   def addr_in_range(addr: UInt): Bool = {
     val in_range = addr_map
@@ -112,6 +225,25 @@ class MMU(
     paddr
   }
 
+  def get_page_start_addr(addr: UInt, pg_size: SV39PageSize.Type): UInt = {
+    val sv39_va = new SV39VA(addr)
+    MuxLookup(
+      pg_size,
+      0.U
+    ) {
+      Seq(
+        SV39PageSize.SIZE1G -> Cat(sv39_va.ppn2, 0.U(30.W)),
+        SV39PageSize.SIZE2M -> Cat(sv39_va.ppn2, sv39_va.ppn1, 0.U(21.W)),
+        SV39PageSize.SIZE4K -> Cat(
+          sv39_va.ppn2,
+          sv39_va.ppn1,
+          sv39_va.ppn0,
+          0.U(12.W)
+        )
+      )
+    }
+  }
+
   def gen_no_mmu_resp(req_buf: TLBReq): TLBResp = {
     val no_mmu_resp = Wire(new TLBResp)
     no_mmu_resp.req_type := req_buf.req_type
@@ -147,12 +279,33 @@ class MMU(
     no_mmu_resp
   }
 
-  val itlb_req = io.fetch_req.valid
-  val dtlb_req = io.lsu_req.valid
+  val asid_val = new SatpFiled(io.satp).asid
 
-  // TODO: hit should keep last result
-  val itlb_hit = Wire(Bool())
-  val dtlb_hit = Wire(Bool())
+  val itlb_req = io.fetch_req.fire
+  val itlb_req_va = io.fetch_req.bits.vaddr
+  val itlb_req_asid = asid_val
+  val dtlb_req = io.lsu_req.fire
+  val dtlb_req_va = io.lsu_req.bits.vaddr
+  val dtlb_req_asid = asid_val
+
+  val itlb_l1 = Module(new TLB_L1(4))
+  val dtlb_l1 = Module(new TLB_L1(4))
+
+//  dontTouch(itlb_l1.io)
+
+  itlb_l1.io.va.valid := itlb_req
+  itlb_l1.io.va.bits := itlb_req_va
+  itlb_l1.io.asid := itlb_req_asid
+  dtlb_l1.io.va.valid := dtlb_req
+  dtlb_l1.io.va.bits := dtlb_req_va
+  dtlb_l1.io.asid := dtlb_req_asid
+
+  itlb_l1.io.tlb_update.valid := false.B
+  itlb_l1.io.tlb_update.bits := DontCare
+  dtlb_l1.io.tlb_update.valid := false.B
+  dtlb_l1.io.tlb_update.bits := DontCare
+  itlb_l1.io.tlb_flush := io.tlb_flush
+  dtlb_l1.io.tlb_flush := io.tlb_flush
 
   val ptw_arb = Module(new ReqRespArbiter(2, new PTWReq, new PTWResp))
   val ptw = Module(new PTW(formal = formal))
@@ -164,16 +317,6 @@ class MMU(
 
   ptw.io.flush := io.flush
 
-//  itlb_l1.io.va.valid := itlb_req
-//  itlb_l1.io.va.bits := io.fetch_req.bits.vaddr
-//  itlb_hit := itlb_l1.io.tlb_hit
-//  dtlb_l1.io.va.valid := dtlb_req
-//  dtlb_l1.io.va.bits := io.lsu_req.bits.vaddr
-//  dtlb_hit := dtlb_l1.io.tlb_hit
-
-  itlb_hit := false.B
-  dtlb_hit := false.B
-
   val sIdle :: sTLBLookup :: sWaitPTWResp :: sSendResp :: Nil =
     Enum(4)
   val itlb_state = RegInit(sIdle)
@@ -183,6 +326,9 @@ class MMU(
   val lsu_req_buf = RegInit(0.U.asTypeOf(new TLBReq))
   val fetch_resp_buf = RegInit(0.U.asTypeOf(new TLBResp))
   val lsu_resp_buf = RegInit(0.U.asTypeOf(new TLBResp))
+  val fetch_ptw_resp_buf = RegInit(0.U.asTypeOf(new PTWResp))
+  val lsu_ptw_resp_buf = RegInit(0.U.asTypeOf(new PTWResp))
+
   val fetch_ptw_req = Wire(Decoupled(new PTWReq))
   val fetch_ptw_resp = Wire(Flipped(Decoupled(new PTWResp)))
   val lsu_ptw_req = Wire(Decoupled(new PTWReq))
@@ -240,17 +386,25 @@ class MMU(
       mmu_resp_io: DecoupledIO[TLBResp],
       resp_buf: TLBResp,
       state: UInt,
-      flush: Bool
+      flush: Bool,
+      rev_new_req: Boolean = true
   ) = {
     mmu_resp_io.valid := true.B
     mmu_resp_io.bits := resp_buf
     when(mmu_resp_io.fire && !flush) {
       // back to back
-      rev_fetch_req()
+      if (rev_new_req) {
+        rev_fetch_req()
+      } else {
+        state := sIdle
+      }
     }.elsewhen(flush) {
       // cancel resp
       assert(!mmu_resp_io.fire)
       state := sIdle
+    }.otherwise {
+      state := sIdle
+      assert(false.B, "unreachable")
     }
   }
 
@@ -258,17 +412,25 @@ class MMU(
       mmu_resp_io: DecoupledIO[TLBResp],
       resp_buf: TLBResp,
       state: UInt,
-      flush: Bool
+      flush: Bool,
+      rev_new_req: Boolean = true
   ) = {
     mmu_resp_io.valid := true.B
     mmu_resp_io.bits := resp_buf
     when(mmu_resp_io.fire && !flush) {
       // back to back
-      rev_lsu_req()
+      if (rev_new_req) {
+        rev_lsu_req()
+      } else {
+        state := sIdle
+      }
     }.elsewhen(flush) {
       // cancel resp
       assert(!mmu_resp_io.fire)
       state := sIdle
+    }.otherwise {
+      state := sIdle
+      assert(false.B, "unreachable")
     }
   }
 
@@ -285,10 +447,56 @@ class MMU(
       when(fetch_mmu_en) {
         assert(fetch_req_buf.req_type === TLBReqType.Fetch)
         // mmu enable
-        when(itlb_hit) {
-          // itlb hit TODO: not implemented
-//          assert(false, "not implemented")
-          itlb_state := sIdle
+        when(itlb_l1.io.tlb_hit) {
+
+          perf_itlb.inc_hit(1.U)
+
+          // check permission
+          val itlb_hit_pte = new SV39PTE(itlb_l1.io.tlb_hit_pte)
+          val itlb_hit_permission_check_pass = tlb_permission_check_pass(
+            pte = itlb_hit_pte,
+            req_type = TLBReqType.Fetch,
+            privilege_mode = fetch_effective_info_buf.mmu_privilege,
+            mxr_bit = fetch_effective_info_buf.mstatus_field.mxr,
+            sum_bit = fetch_effective_info_buf.mstatus_field.sum
+          )
+
+          // itlb hit response
+          val itlb_hit_resp = Wire(new TLBResp)
+          itlb_hit_resp.req_type := TLBReqType.Fetch
+          val itlb_hit_resp_paddr = get_paddr(
+            pte = itlb_l1.io.tlb_hit_pte,
+            va = fetch_req_buf.vaddr,
+            pg_size = itlb_l1.io.tlb_hit_pg_size
+          )
+          itlb_hit_resp.paddr := itlb_hit_resp_paddr
+          itlb_hit_resp.size := fetch_req_buf.size
+          itlb_hit_resp.is_mmio := check_mmio(itlb_hit_resp_paddr)
+
+          // exception
+          when(!itlb_hit_permission_check_pass) {
+            // 1. exception page fault
+            itlb_hit_resp.exception.valid := true.B
+            itlb_hit_resp.exception.tval := fetch_req_buf.vaddr
+            itlb_hit_resp.exception.cause := ExceptionCause.fetch_page_fault
+          }.elsewhen(!addr_in_range(itlb_hit_resp_paddr)) {
+            // 2. out of range, TODO: not PMA
+            itlb_hit_resp.exception.valid := true.B
+            itlb_hit_resp.exception.tval := fetch_req_buf.vaddr
+            itlb_hit_resp.exception.cause := ExceptionCause.fetch_access
+          }.otherwise {
+            // 3. no exception
+            itlb_hit_resp.exception.valid := false.B
+            itlb_hit_resp.exception.tval := 0.U
+            itlb_hit_resp.exception.cause := ExceptionCause.unknown
+          }
+
+          fetch_send_mmu_resp(
+            mmu_resp_io = io.fetch_resp,
+            resp_buf = itlb_hit_resp,
+            state = itlb_state,
+            flush = io.flush
+          )
         }.otherwise {
           // itlb miss, send ptw req
           send_ptw_req(
@@ -298,6 +506,9 @@ class MMU(
             state = itlb_state,
             flush = io.flush
           )
+          when(fetch_ptw_req.fire) {
+            perf_itlb.inc_miss(1.U)
+          }
         }
       }.otherwise {
         // mmu disable, send mmu resp
@@ -315,6 +526,12 @@ class MMU(
       when(fetch_ptw_resp.fire && !io.flush) {
         // PTW resp
         val tlb_tmp = fetch_ptw_resp.bits
+        fetch_ptw_resp_buf := fetch_ptw_resp.bits
+        fetch_ptw_resp_buf.va := get_page_start_addr(
+          fetch_ptw_resp.bits.va,
+          fetch_ptw_resp.bits.pg_size
+        )
+
         val paddr = get_paddr(
           pte = tlb_tmp.pte,
           va = tlb_tmp.va,
@@ -348,11 +565,20 @@ class MMU(
       }
     }
     is(sSendResp) {
+      // update dtlb
+      itlb_l1.io.tlb_update.valid := !fetch_ptw_resp_buf.exception.valid
+      itlb_l1.io.tlb_update.bits.valid := true.B
+      itlb_l1.io.tlb_update.bits.va := fetch_ptw_resp_buf.va
+      itlb_l1.io.tlb_update.bits.pte := fetch_ptw_resp_buf.pte
+      itlb_l1.io.tlb_update.bits.pg_size := fetch_ptw_resp_buf.pg_size
+      itlb_l1.io.tlb_update.bits.asid := fetch_ptw_resp_buf.asid
+
       fetch_send_mmu_resp(
         mmu_resp_io = io.fetch_resp,
         resp_buf = fetch_resp_buf,
         state = itlb_state,
-        flush = io.flush
+        flush = io.flush,
+        rev_new_req = false
       )
     }
   }
@@ -381,10 +607,68 @@ class MMU(
       when(lsu_mmu_en) {
         assert(lsu_req_buf.req_type =/= TLBReqType.Fetch)
         // mmu enable
-        when(dtlb_hit) {
+        when(dtlb_l1.io.tlb_hit) {
           // dtlb hit TODO: not implemented
-          //          assert(false, "not implemented")
-          dtlb_state := sIdle
+          perf_dtlb.inc_hit(1.U)
+          // check permission
+          val dtlb_hit_pte = new SV39PTE(dtlb_l1.io.tlb_hit_pte)
+          val dtlb_hit_permission_check_pass = tlb_permission_check_pass(
+            pte = dtlb_hit_pte,
+            req_type = lsu_req_buf.req_type,
+            privilege_mode = lsu_effective_info_buf.mmu_privilege,
+            mxr_bit = lsu_effective_info_buf.mstatus_field.mxr,
+            sum_bit = lsu_effective_info_buf.mstatus_field.sum
+          )
+
+          val dtlb_hit_resp = Wire(new TLBResp)
+          dtlb_hit_resp.req_type := lsu_req_buf.req_type
+          val dtlb_hit_resp_paddr = get_paddr(
+            pte = dtlb_l1.io.tlb_hit_pte,
+            va = lsu_req_buf.vaddr,
+            pg_size = dtlb_l1.io.tlb_hit_pg_size
+          )
+          dtlb_hit_resp.paddr := dtlb_hit_resp_paddr
+          dtlb_hit_resp.size := lsu_req_buf.size
+          dtlb_hit_resp.is_mmio := check_mmio(dtlb_hit_resp_paddr)
+
+          // exception
+          when(!dtlb_hit_permission_check_pass) {
+            // 1. exception page fault
+            dtlb_hit_resp.exception.valid := true.B
+            dtlb_hit_resp.exception.tval := lsu_req_buf.vaddr
+            dtlb_hit_resp.exception.cause := ExceptionCause
+              .get_page_fault_cause(
+                lsu_req_buf.req_type
+              )
+          }.elsewhen(!addr_in_range(dtlb_hit_resp_paddr)) {
+            // 2. out of range, TODO: not PMA
+            dtlb_hit_resp.exception.valid := true.B
+            dtlb_hit_resp.exception.tval := lsu_req_buf.vaddr
+            dtlb_hit_resp.exception.cause := ExceptionCause.get_access_cause(
+              lsu_req_buf.req_type
+            )
+          }.elsewhen(!CheckAligned(dtlb_hit_resp_paddr, lsu_req_buf.size)) {
+            // 3. not aligned
+            dtlb_hit_resp.exception.valid := true.B
+            dtlb_hit_resp.exception.tval := lsu_req_buf.vaddr
+            dtlb_hit_resp.exception.cause := ExceptionCause
+              .get_misaligned_cause(
+                lsu_req_buf.req_type
+              )
+          }.otherwise {
+            // 4. no exception
+            dtlb_hit_resp.exception.valid := false.B
+            dtlb_hit_resp.exception.tval := 0.U
+            dtlb_hit_resp.exception.cause := ExceptionCause.unknown
+          }
+
+          // send resp
+          lsu_send_mmu_resp(
+            mmu_resp_io = io.lsu_resp,
+            resp_buf = dtlb_hit_resp,
+            state = dtlb_state,
+            flush = io.flush
+          )
         }.otherwise {
           // dtlb miss
           send_ptw_req(
@@ -394,6 +678,9 @@ class MMU(
             state = dtlb_state,
             flush = io.flush
           )
+          when(lsu_ptw_req.fire) {
+            perf_dtlb.inc_miss(1.U)
+          }
         }
       }.otherwise {
         // mmu disable
@@ -411,6 +698,11 @@ class MMU(
       when(lsu_ptw_resp.fire && !io.flush) {
         // PTW resp
         val tlb_tmp = lsu_ptw_resp.bits
+        lsu_ptw_resp_buf := lsu_ptw_resp.bits
+        lsu_ptw_resp_buf.va := get_page_start_addr(
+          lsu_ptw_resp.bits.va,
+          lsu_ptw_resp.bits.pg_size
+        )
 
         val paddr = get_paddr(
           pte = tlb_tmp.pte,
@@ -454,11 +746,21 @@ class MMU(
       }
     }
     is(sSendResp) {
+      // update dtlb
+      dtlb_l1.io.tlb_update.valid := !lsu_ptw_resp_buf.exception.valid
+      dtlb_l1.io.tlb_update.bits.valid := true.B
+      dtlb_l1.io.tlb_update.bits.va := lsu_ptw_resp_buf.va
+      dtlb_l1.io.tlb_update.bits.pte := lsu_ptw_resp_buf.pte
+      dtlb_l1.io.tlb_update.bits.pg_size := lsu_ptw_resp_buf.pg_size
+      dtlb_l1.io.tlb_update.bits.asid := lsu_ptw_resp_buf.asid
+
+      // send resp
       lsu_send_mmu_resp(
         mmu_resp_io = io.lsu_resp,
         resp_buf = lsu_resp_buf,
         state = dtlb_state,
-        flush = io.flush
+        flush = io.flush,
+        rev_new_req = false
       )
     }
   }
@@ -466,6 +768,10 @@ class MMU(
   // -------------------
   // formal
   // -------------------
+
+  when(io.tlb_flush.valid) {
+    assert(io.flush)
+  }
 
   when(RegNext(io.flush)) {
     assert(itlb_state === sIdle)

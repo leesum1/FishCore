@@ -15,6 +15,7 @@ import leesum.moniter.{DifftestPort, MonitorTop, PerfPort}
 import leesum._
 import leesum.devices.clint
 import leesum.fronten.{IFUTop, PCGenStage}
+import leesum.mmu_sv39.MMU
 
 class FishCore(
     muldiv_en: Boolean = true,
@@ -121,6 +122,7 @@ class FishCore(
   icache_top.io.fencei := commit_stage.io.icache_fencei
   dcache.io.fencei := commit_stage.io.dcache_fencei
   dcache.io.fencei_ack <> commit_stage.io.dcache_fencei_ack
+  mmmu.io.tlb_flush := commit_stage.io.tlb_flush
 
   // pc_gen_stage <> fetch_stage
   pc_gen_stage.io.pc <> ifu.io.pc_in
@@ -159,6 +161,10 @@ class FishCore(
     dcache_arb.io.resp_vec(0),
     mmmu.io.dcache_load_resp
   )
+
+  // mmu <> monitor
+  monitor.io.perf_dtlb := mmmu.io.perf_dtlb
+  monitor.io.perf_itlb := mmmu.io.perf_itlb
 
   // ifu <> decode stage
 
