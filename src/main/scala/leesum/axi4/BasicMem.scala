@@ -3,10 +3,10 @@ package leesum.axi4
 import chisel3._
 import chisel3.util.experimental.loadMemoryFromFileInline
 import chisel3.util.{Cat, RegEnable, log2Ceil}
+import leesum.Cache.DcacheConst
 import leesum.Utils.HoldRegister
 import leesum.{
   CheckAligned,
-  DcacheConst,
   GenVerilogHelper,
   writeByteArrayToStringsToFile
 }

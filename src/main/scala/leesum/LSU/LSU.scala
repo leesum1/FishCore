@@ -1,6 +1,9 @@
-package leesum
+package leesum.LSU
+
 import chisel3._
 import chisel3.util.Decoupled
+import leesum.Cache.{LoadDcacheReq, LoadDcacheResp, StoreDcacheReq, StoreDcacheResp}
+import leesum._
 
 class LSUReq extends AGUReq {}
 class LSUResp extends Bundle {

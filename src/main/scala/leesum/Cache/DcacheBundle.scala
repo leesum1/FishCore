@@ -1,9 +1,9 @@
-package leesum
-import chisel3._
-import chisel3.util.{Decoupled, DecoupledIO, MuxLookup}
-import leesum.axi4.AXIDef
+package leesum.Cache
 
-import scala.math.Equiv
+import chisel3._
+import chisel3.util.{DecoupledIO, MuxLookup}
+import leesum.axi4.AXIDef
+import leesum._
 
 object DcacheConst {
   val SIZE1 = 0.U(2.W)

@@ -2,6 +2,7 @@ package leesum
 
 import chisel3._
 import chisel3.util._
+import leesum.LSU.{AGUWriteBack, LSUResp}
 
 class OperandByPassReq extends Bundle {
   val rs_addr = UInt(5.W)

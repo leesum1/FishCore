@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util.{Decoupled, DecoupledIO, Enum, Valid, is, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal._
+import leesum.Cache.{LoadDcacheReq, LoadDcacheResp}
 import leesum._
 import leesum.moniter.PerfMonitorCounter
 import org.scalatest.flatspec.AnyFlatSpec
@@ -112,37 +113,56 @@ class MMU(
     is_mmio
   }
 
+  def gen_access_misaligned_exception(
+      paddr: UInt,
+      vaddr: UInt,
+      req_size: UInt,
+      req_type: TLBReqType.Type,
+      enable_misaligned_check: Boolean
+  ): ExceptionEntry = {
+    val exception = Wire(new ExceptionEntry)
+
+    when(!addr_in_range(paddr)) {
+      // 2. out of range, TODO: not PMA
+      exception.valid := true.B
+      exception.tval := vaddr
+      exception.cause := ExceptionCause.get_access_cause(
+        req_type
+      )
+    }.elsewhen(
+      !CheckAligned(
+        paddr,
+        req_size
+      ) && req_type =/= TLBReqType.Fetch && enable_misaligned_check.B
+    ) {
+      // 3. not aligned
+      exception.valid := true.B
+      exception.tval := vaddr
+      exception.cause := ExceptionCause.get_misaligned_cause(
+        req_type
+      )
+    }.otherwise {
+      exception.valid := false.B
+      exception.tval := 0.U
+      exception.cause := ExceptionCause.unknown
+    }
+
+    exception
+  }
+
   def gen_no_mmu_resp(req_buf: TLBReq): TLBResp = {
     val no_mmu_resp = Wire(new TLBResp)
     no_mmu_resp.req_type := req_buf.req_type
     no_mmu_resp.paddr := req_buf.vaddr
     no_mmu_resp.size := req_buf.size
     no_mmu_resp.is_mmio := check_mmio(req_buf.vaddr)
-
-    when(!addr_in_range(req_buf.vaddr)) {
-      // 2. out of range, TODO: not PMA
-      no_mmu_resp.exception.valid := true.B
-      no_mmu_resp.exception.tval := req_buf.vaddr
-      no_mmu_resp.exception.cause := ExceptionCause.get_access_cause(
-        req_buf.req_type
-      )
-    }.elsewhen(
-      !CheckAligned(
-        req_buf.vaddr,
-        req_buf.size
-      ) && req_buf.req_type =/= TLBReqType.Fetch
-    ) {
-      // 3. not aligned
-      no_mmu_resp.exception.valid := true.B
-      no_mmu_resp.exception.tval := req_buf.vaddr
-      no_mmu_resp.exception.cause := ExceptionCause.get_misaligned_cause(
-        req_buf.req_type
-      )
-    }.otherwise {
-      no_mmu_resp.exception.valid := false.B
-      no_mmu_resp.exception.tval := 0.U
-      no_mmu_resp.exception.cause := ExceptionCause.unknown
-    }
+    no_mmu_resp.exception := gen_access_misaligned_exception(
+      paddr = req_buf.vaddr, // vaddr = paddr
+      vaddr = req_buf.vaddr,
+      req_size = req_buf.size,
+      req_type = req_buf.req_type,
+      enable_misaligned_check = true
+    )
 
     no_mmu_resp
   }
@@ -158,8 +178,6 @@ class MMU(
 
   val itlb_l1 = Module(new TLB_L1(4))
   val dtlb_l1 = Module(new TLB_L1(4))
-
-//  dontTouch(itlb_l1.io)
 
   itlb_l1.io.va.valid := itlb_req
   itlb_l1.io.va.bits := itlb_req_va
@@ -342,23 +360,22 @@ class MMU(
           itlb_hit_resp.size := fetch_req_buf.size
           itlb_hit_resp.is_mmio := check_mmio(itlb_hit_resp_paddr)
 
-          // exception
-          when(!itlb_hit_permission_check_pass) {
-            // 1. exception page fault
-            itlb_hit_resp.exception.valid := true.B
-            itlb_hit_resp.exception.tval := fetch_req_buf.vaddr
-            itlb_hit_resp.exception.cause := ExceptionCause.fetch_page_fault
-          }.elsewhen(!addr_in_range(itlb_hit_resp_paddr)) {
-            // 2. out of range, TODO: not PMA
-            itlb_hit_resp.exception.valid := true.B
-            itlb_hit_resp.exception.tval := fetch_req_buf.vaddr
-            itlb_hit_resp.exception.cause := ExceptionCause.fetch_access
-          }.otherwise {
-            // 3. no exception
-            itlb_hit_resp.exception.valid := false.B
-            itlb_hit_resp.exception.tval := 0.U
-            itlb_hit_resp.exception.cause := ExceptionCause.unknown
-          }
+          // exception priority: page fault > access fault
+          itlb_hit_resp.exception := Mux(
+            itlb_hit_permission_check_pass,
+            gen_access_misaligned_exception(
+              paddr = itlb_hit_resp_paddr,
+              vaddr = fetch_req_buf.vaddr,
+              req_size = fetch_req_buf.size,
+              req_type = TLBReqType.Fetch,
+              enable_misaligned_check = false
+            ),
+            ExceptionEntry(
+              true.B,
+              fetch_req_buf.vaddr,
+              ExceptionCause.fetch_access
+            )
+          )
 
           fetch_send_mmu_resp(
             mmu_resp_io = io.fetch_resp,
@@ -401,30 +418,28 @@ class MMU(
           fetch_ptw_resp.bits.pg_size
         )
 
-        val paddr = SV39PKG.trans_va2pa(
+        val itb_ptw_resp_paddr = SV39PKG.trans_va2pa(
           pte = tlb_tmp.pte,
           va = tlb_tmp.va,
           pg_size = tlb_tmp.pg_size
         )
-        fetch_resp_buf.paddr := paddr
+        fetch_resp_buf.paddr := itb_ptw_resp_paddr
         fetch_resp_buf.req_type := fetch_req_buf.req_type
         fetch_resp_buf.size := fetch_req_buf.size
-        fetch_resp_buf.is_mmio := check_mmio(paddr)
+        fetch_resp_buf.is_mmio := check_mmio(itb_ptw_resp_paddr)
 
-        // exception
-        when(fetch_ptw_resp.bits.exception.valid) {
-          // 1. exception from ptw
-          fetch_resp_buf.exception := fetch_ptw_resp.bits.exception
-        }.elsewhen(!addr_in_range(paddr)) {
-          // 2. out of range, TODO: not PMA
-          fetch_resp_buf.exception.valid := true.B
-          fetch_resp_buf.exception.tval := fetch_req_buf.vaddr
-          fetch_resp_buf.exception.cause := ExceptionCause.fetch_access
-        }.otherwise {
-          fetch_resp_buf.exception.valid := false.B
-          fetch_resp_buf.exception.tval := 0.U
-          fetch_resp_buf.exception.cause := ExceptionCause.unknown
-        }
+        // exception priority: page fault > access fault
+        fetch_resp_buf.exception := Mux(
+          fetch_ptw_resp.bits.exception.valid,
+          fetch_ptw_resp.bits.exception,
+          gen_access_misaligned_exception(
+            paddr = itb_ptw_resp_paddr, // use paddr
+            vaddr = fetch_req_buf.vaddr,
+            req_size = fetch_req_buf.size,
+            req_type = TLBReqType.Fetch,
+            enable_misaligned_check = false
+          )
+        )
 
         itlb_state := sSendResp
       }.elsewhen(io.flush) {
@@ -501,36 +516,24 @@ class MMU(
           dtlb_hit_resp.size := lsu_req_buf.size
           dtlb_hit_resp.is_mmio := check_mmio(dtlb_hit_resp_paddr)
 
-          // exception
-          when(!dtlb_hit_permission_check_pass) {
-            // 1. exception page fault
-            dtlb_hit_resp.exception.valid := true.B
-            dtlb_hit_resp.exception.tval := lsu_req_buf.vaddr
-            dtlb_hit_resp.exception.cause := ExceptionCause
-              .get_page_fault_cause(
+          // exception priority: page fault > access fault > misaligned fault
+          dtlb_hit_resp.exception := Mux(
+            dtlb_hit_permission_check_pass,
+            gen_access_misaligned_exception(
+              paddr = dtlb_hit_resp_paddr, // use paddr
+              vaddr = lsu_req_buf.vaddr,
+              req_size = lsu_req_buf.size,
+              req_type = lsu_req_buf.req_type,
+              enable_misaligned_check = true
+            ),
+            ExceptionEntry(
+              true.B,
+              lsu_req_buf.vaddr,
+              ExceptionCause.get_page_fault_cause(
                 lsu_req_buf.req_type
               )
-          }.elsewhen(!addr_in_range(dtlb_hit_resp_paddr)) {
-            // 2. out of range, TODO: not PMA
-            dtlb_hit_resp.exception.valid := true.B
-            dtlb_hit_resp.exception.tval := lsu_req_buf.vaddr
-            dtlb_hit_resp.exception.cause := ExceptionCause.get_access_cause(
-              lsu_req_buf.req_type
             )
-          }.elsewhen(!CheckAligned(dtlb_hit_resp_paddr, lsu_req_buf.size)) {
-            // 3. not aligned
-            dtlb_hit_resp.exception.valid := true.B
-            dtlb_hit_resp.exception.tval := lsu_req_buf.vaddr
-            dtlb_hit_resp.exception.cause := ExceptionCause
-              .get_misaligned_cause(
-                lsu_req_buf.req_type
-              )
-          }.otherwise {
-            // 4. no exception
-            dtlb_hit_resp.exception.valid := false.B
-            dtlb_hit_resp.exception.tval := 0.U
-            dtlb_hit_resp.exception.cause := ExceptionCause.unknown
-          }
+          )
 
           // send resp
           lsu_send_mmu_resp(
@@ -574,39 +577,29 @@ class MMU(
           lsu_ptw_resp.bits.pg_size
         )
 
-        val paddr = SV39PKG.trans_va2pa(
+        val dtlb_ptw_resp_paddr = SV39PKG.trans_va2pa(
           pte = tlb_tmp.pte,
           va = tlb_tmp.va,
           pg_size = tlb_tmp.pg_size
         )
-        lsu_resp_buf.paddr := paddr
+        lsu_resp_buf.paddr := dtlb_ptw_resp_paddr
 
         lsu_resp_buf.req_type := lsu_req_buf.req_type
         lsu_resp_buf.size := lsu_req_buf.size
-        lsu_resp_buf.is_mmio := check_mmio(paddr)
+        lsu_resp_buf.is_mmio := check_mmio(dtlb_ptw_resp_paddr)
 
-        when(lsu_ptw_resp.bits.exception.valid) {
-          // 1. exception from ptw
-          lsu_resp_buf.exception := lsu_ptw_resp.bits.exception
-        }.elsewhen(!addr_in_range(paddr)) {
-          // 2. out of range, TODO: not PMA or page check
-          lsu_resp_buf.exception.valid := true.B
-          lsu_resp_buf.exception.tval := lsu_req_buf.vaddr
-          lsu_resp_buf.exception.cause := ExceptionCause.get_access_cause(
-            lsu_req_buf.req_type
+        // exception priority: page fault > access fault > misaligned fault
+        lsu_resp_buf.exception := Mux(
+          lsu_ptw_resp.bits.exception.valid,
+          lsu_ptw_resp.bits.exception,
+          gen_access_misaligned_exception(
+            paddr = dtlb_ptw_resp_paddr, // use paddr
+            vaddr = lsu_req_buf.vaddr,
+            req_size = lsu_req_buf.size,
+            req_type = lsu_req_buf.req_type,
+            enable_misaligned_check = true
           )
-        }.elsewhen(!CheckAligned(paddr, lsu_req_buf.size)) {
-          // 3. not aligned
-          lsu_resp_buf.exception.valid := true.B
-          lsu_resp_buf.exception.tval := lsu_req_buf.vaddr
-          lsu_resp_buf.exception.cause := ExceptionCause.get_misaligned_cause(
-            lsu_req_buf.req_type
-          )
-        }.otherwise {
-          lsu_resp_buf.exception.valid := false.B
-          lsu_resp_buf.exception.tval := 0.U
-          lsu_resp_buf.exception.cause := ExceptionCause.unknown
-        }
+        )
 
         dtlb_state := sSendResp
       }.elsewhen(io.flush) {

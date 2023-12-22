@@ -1,6 +1,8 @@
-package leesum
+package leesum.Cache
+
 import chisel3._
 import chisel3.util.Decoupled
+import leesum._
 import leesum.axi4.{AXIDef, AXIMasterIO, StreamFork}
 
 class DummyICache extends Module {

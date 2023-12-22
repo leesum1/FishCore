@@ -1,6 +1,9 @@
-package leesum
+package leesum.LSU
+
 import chisel3._
 import chisel3.util.{Decoupled, Enum, Queue, is, switch}
+import leesum.Cache.{LoadDcacheReq, LoadDcacheResp}
+import leesum.{FlowLine, GenVerilogHelper, GetAxiRdata}
 class LoadQueueIn extends Bundle {
   val paddr = UInt(64.W)
   // 0: 1 byte, 1: 2 bytes, 2: 4 bytes, 3: 8 bytes

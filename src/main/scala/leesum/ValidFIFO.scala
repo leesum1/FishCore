@@ -1,20 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.experimental.requireIsChiselType
-import chisel3.util.{
-  Decoupled,
-  DecoupledIO,
-  MuxLookup,
-  PopCount,
-  Valid,
-  isPow2,
-  log2Ceil,
-  log2Up
-}
-import chiseltest.ChiselScalatestTester
-import chiseltest.formal.{BoundedCheck, CVC4EngineAnnotation, Formal}
-import org.scalatest.flatspec.AnyFlatSpec
+import chisel3.util.{Decoupled, Valid, isPow2, log2Ceil}
 
 class IndexableMem[T <: Data](
     entries: Int,

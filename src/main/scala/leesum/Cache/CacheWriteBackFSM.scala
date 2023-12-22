@@ -2,7 +2,7 @@ package leesum.Cache
 
 import chisel3._
 import chisel3.util.{Cat, DecoupledIO, Enum, Mux1H, is, switch}
-import leesum.{DcacheConst, GenVerilogHelper}
+import leesum.GenVerilogHelper
 import leesum.axi4.AXIMasterIO
 
 class CacheWBbundle extends Bundle {

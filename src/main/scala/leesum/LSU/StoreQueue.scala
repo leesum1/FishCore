@@ -1,16 +1,9 @@
-package leesum
+package leesum.LSU
 
 import chisel3._
-import chisel3.util.{
-  Decoupled,
-  Enum,
-  Mux1H,
-  PopCount,
-  Valid,
-  is,
-  isPow2,
-  switch
-}
+import chisel3.util.{Decoupled, Enum, Mux1H, PopCount, Valid, is, isPow2, switch}
+import leesum.Cache.{StoreDcacheReq, StoreDcacheResp}
+import leesum.{GenVerilogHelper, MultiPortFIFOBase}
 class StoreQueueIn extends Bundle {
   val wdata = UInt(64.W)
   val wstrb = UInt(8.W)

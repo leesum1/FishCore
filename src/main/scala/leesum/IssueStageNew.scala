@@ -2,6 +2,8 @@ package leesum
 
 import chisel3._
 import chisel3.util._
+import leesum.Cache.DcacheConst
+import leesum.LSU.{AtomicOP, LSUReq}
 
 class FuReq extends Bundle {
 

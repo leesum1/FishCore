@@ -3,7 +3,6 @@ import chisel3._
 import chisel3.util._
 import leesum.mmu_sv39.SfenceVMABundle
 import leesum.moniter.{CommitMonitorPort, PerfMonitorCounter}
-import spire.math
 
 class RedirectPC extends Bundle {
   val target = UInt(64.W)

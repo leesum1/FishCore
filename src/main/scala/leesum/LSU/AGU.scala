@@ -1,16 +1,9 @@
-package leesum
+package leesum.LSU
+
 import chisel3._
-import chisel3.util.{
-  Decoupled,
-  Enum,
-  MuxCase,
-  MuxLookup,
-  PopCount,
-  PriorityMux,
-  Queue,
-  is,
-  switch
-}
+import chisel3.util.{Decoupled, Enum, MuxCase, PopCount, Queue, is, switch}
+import leesum.Cache.DcacheConst
+import leesum._
 import leesum.axi4.StreamFork2
 
 class AGUReq extends Bundle {

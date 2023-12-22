@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util.{Cat, Decoupled, Enum, MuxLookup, is, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal._
+import leesum.Cache.{DcacheConst, LoadDcacheReq, LoadDcacheResp}
 import leesum._
 import org.scalatest.flatspec.AnyFlatSpec
 

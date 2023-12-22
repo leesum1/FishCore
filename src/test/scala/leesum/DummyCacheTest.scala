@@ -3,6 +3,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
+import leesum.Cache.{DummyDCache, LoadDcacheReq, LoadDcacheResp, StoreDcacheReq, StoreDcacheResp}
 import leesum.axi4.AXI4Memory
 import org.scalatest.freespec.AnyFreeSpec
 

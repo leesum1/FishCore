@@ -1,10 +1,10 @@
-package leesum
+package leesum.fronten
 
 import chisel3._
-import chisel3.util.{Cat, Decoupled, ListLookup, MuxLookup}
+import chisel3.util.{Cat, Decoupled, MuxLookup}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, CVC4EngineAnnotation, Formal}
-import leesum.fronten.IFUTop
+import leesum._
 import org.scalatest.flatspec.AnyFlatSpec
 
 // TODO: exception

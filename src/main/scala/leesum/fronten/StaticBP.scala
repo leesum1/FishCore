@@ -1,10 +1,9 @@
 package leesum.fronten
 
 import chisel3._
-import chisel3.util.experimental.decode.{TruthTable, decoder}
-import chisel3.util.{BitPat, Enum, Mux1H, MuxCase, PopCount}
+import chisel3.util.{Enum, Mux1H, MuxCase, PopCount}
 import leesum.Utils.DecoderHelper
-import leesum.{BpEntry, BpType, GenVerilogHelper, InstBase, Instructions}
+import leesum._
 
 class StaticBP extends Module {
   val io = IO(new Bundle {

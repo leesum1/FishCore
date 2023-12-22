@@ -1,30 +1,10 @@
 package leesum.fronten
 
 import chisel3._
-import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
-import chisel3.util.experimental.decode.{TruthTable, decoder}
-import chisel3.util.{
-  BitPat,
-  Cat,
-  Decoupled,
-  Enum,
-  Mux1H,
-  MuxLookup,
-  PriorityMux,
-  UIntToOH,
-  ValidIO,
-  is,
-  switch
-}
+import chisel3.util.{BitPat, Decoupled, Enum, PriorityMux, ValidIO, is, switch}
 import chiseltest.ChiselScalatestTester
-import chiseltest.formal.{
-  BoundedCheck,
-  CVC4EngineAnnotation,
-  Formal,
-  past,
-  stable
-}
-import leesum.Cache.{ICacheReq, ICacheResp, ICacheTop}
+import chiseltest.formal._
+import leesum.Cache.{ICacheReq, ICacheResp}
 import leesum.Utils.DecoderHelper
 import leesum._
 import org.scalatest.flatspec.AnyFlatSpec

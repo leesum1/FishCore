@@ -1,16 +1,10 @@
 package leesum.Core
 import chisel3._
 import chisel3.util.{Valid, log2Ceil}
-import leesum.Cache.{DCacheTag, ICacheTop}
+import leesum.Cache.{DCacheConnect, DCacheReq, DCacheResp, DCacheTag, ICacheTop}
 import leesum.ICache.DCacheTop
-import leesum.axi4.{
-  AXI4SlaveBridge,
-  AXIDeMux,
-  AXIMasterIO,
-  AxiReadArbiter,
-  BasicMemoryIO,
-  MemoryIO64to32
-}
+import leesum.LSU.LSU
+import leesum.axi4.{AXI4SlaveBridge, AXIDeMux, AXIMasterIO, AxiReadArbiter, BasicMemoryIO, MemoryIO64to32}
 import leesum.moniter.{DifftestPort, MonitorTop, PerfPort}
 import leesum._
 import leesum.devices.clint

@@ -1,7 +1,9 @@
-package leesum
+package leesum.LSU
 
 import chisel3._
 import chisel3.util.{Decoupled, Enum, MuxLookup, Queue, is, switch}
+import leesum.Cache.{LoadDcacheReq, LoadDcacheResp, StoreDcacheReq, StoreDcacheResp}
+import leesum._
 object AtomicOP extends ChiselEnum {
   val None = Value(0.U)
   val ADD = Value(1.U)

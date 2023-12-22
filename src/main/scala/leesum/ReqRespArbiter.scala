@@ -3,6 +3,7 @@ import chisel3._
 import chisel3.util.{Decoupled, Enum, Valid, is, log2Ceil, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal, stable}
+import leesum.Cache.{LoadDcacheReq, LoadDcacheResp}
 import org.scalatest.flatspec.AnyFlatSpec
 
 /** This Module is a generic arbiter for request and response signals.The lowest

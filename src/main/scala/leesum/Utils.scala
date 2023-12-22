@@ -1,14 +1,11 @@
 package leesum
 
+import _root_.circt.stage.ChiselStage
 import chisel3._
 import chisel3.util._
-import _root_.circt.stage.ChiselStage
-import chisel3.util.experimental.decode.{TruthTable, decoder}
-import chisel3.util.random.LFSR
 import leesum.Utils.DecoderHelper
 
 import java.io.{File, FileOutputStream, PrintWriter}
-import scala.collection.IterableOnce.iterableOnceExtensionMethods
 import scala.sys.process._
 
 object GenVerilogHelper {

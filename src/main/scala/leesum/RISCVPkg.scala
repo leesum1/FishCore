@@ -2,6 +2,7 @@ package leesum
 
 import chisel3.util.{BitPat, Cat, Fill, MuxLookup, log2Ceil}
 import chisel3.{ChiselEnum, _}
+import leesum.Cache.DcacheConst
 
 object RISCVPkg {
 
@@ -2579,6 +2580,20 @@ class ExceptionEntry(has_valid: Boolean = true) extends Bundle {
     valid := false.B
     tval := 0.U
     cause := ExceptionCause.unknown
+  }
+}
+
+object ExceptionEntry {
+  def apply(
+      valid: Bool,
+      tval: UInt,
+      cause: ExceptionCause.Type
+  ): ExceptionEntry = {
+    val entry = Wire(new ExceptionEntry())
+    entry.valid := valid
+    entry.tval := tval
+    entry.cause := cause
+    entry
   }
 }
 

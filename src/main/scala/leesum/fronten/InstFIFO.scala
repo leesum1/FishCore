@@ -1,7 +1,8 @@
-package leesum
+package leesum.fronten
 
 import chisel3._
 import chisel3.util._
+import leesum.{BpEntry, DummyMultiPortFIFO, ExceptionEntry, GenVerilogHelper}
 
 // TODO: exception
 class INSTEntry extends Bundle {
