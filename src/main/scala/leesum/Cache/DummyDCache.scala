@@ -1,7 +1,7 @@
 package leesum
 import chisel3._
-import chisel3.util.{Decoupled, Queue}
-import axi4.{AXI4Memory, AXIDef, AXIMasterIO, StreamFork2, StreamFork}
+import chisel3.util.Decoupled
+import leesum.axi4.{AXIDef, AXIMasterIO, StreamFork}
 
 class DummyICache extends Module {
   val axi_addr_width = 32
