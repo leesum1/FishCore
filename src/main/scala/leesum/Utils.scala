@@ -34,7 +34,7 @@ object GenVerilogHelper {
         "--strip-debug-info",
 //        "--lowering-options=disallowLocalVariables,disallowPackedArrays",
 //        "--split-verilog",
-        "--lowering-options=disallowLocalVariables",
+//        "--lowering-options=disallowLocalVariables",
         "--lower-memories",
         "--ignore-read-enable-mem",
         "-o=" + file_path,

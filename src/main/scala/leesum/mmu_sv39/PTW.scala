@@ -7,12 +7,6 @@ import chiseltest.formal._
 import leesum._
 import org.scalatest.flatspec.AnyFlatSpec
 
-object SV39PageSize extends ChiselEnum {
-  val SIZE4K = Value(0.U)
-  val SIZE2M = Value(1.U)
-  val SIZE1G = Value(2.U)
-}
-
 class PTWReq extends Bundle {
   val vaddr = UInt(64.W)
   val req_type = TLBReqType()
@@ -27,56 +21,6 @@ class PTWResp extends Bundle {
   val asid = UInt(16.W)
 }
 
-class SV39VA(vaddr: UInt) {
-  val offset = vaddr(11, 0)
-  val ppn0 = vaddr(11 + 9, 12)
-  val ppn1 = vaddr(11 + 9 * 2, 12 + 9)
-  val ppn2 = vaddr(11 + 9 * 3, 12 + 9 * 2)
-
-  def get_ppn(idx: UInt) = {
-    assert(idx < 3.U)
-    val ppn = WireInit(0.U(9.W))
-
-    require(ppn2.getWidth == 9)
-    require(ppn1.getWidth == 9)
-    require(ppn0.getWidth == 9)
-
-    ppn := MuxLookup(
-      idx,
-      0.U
-    ) {
-      Seq(
-        0.U -> ppn0,
-        1.U -> ppn1,
-        2.U -> ppn2
-      )
-    }
-    ppn
-  }
-}
-
-class SV39PTE(pte: UInt) {
-  val v = pte(0)
-  val r = pte(1)
-  val w = pte(2)
-  val x = pte(3)
-  val u = pte(4)
-  val g = pte(5)
-  val a = pte(6)
-  val d = pte(7)
-  val rsw = pte(9, 8)
-  val ppn0 = pte(18, 10)
-  val ppn1 = pte(27, 19)
-  val ppn2 = pte(53, 28)
-  val reserved = pte(60, 54)
-  val pbmt = pte(62, 61)
-  val n = pte(63)
-
-  def ppn_all = Cat(ppn2, ppn1, ppn0)
-
-  def raw = pte
-}
-
 class PTW(formal: Boolean = false) extends Module {
   val io = IO(new Bundle {
     val flush = Input(Bool())
@@ -85,48 +29,6 @@ class PTW(formal: Boolean = false) extends Module {
     val dcache_load_req = Decoupled(new LoadDcacheReq)
     val dcache_load_resp = Flipped(Decoupled(new LoadDcacheResp))
   })
-
-  // When SUM=0, S-mode memory accesses to pages that are
-  // accessible by U-mode (U=1 in Figure 4.18) will fault.
-  // When SUM=1, these accesses are permitted.
-  def is_mstatus_sum_check_pass(
-      pte: SV39PTE,
-      ptw_req: PTWReq
-  ): Bool = {
-    val sum_pass = Wire(Bool())
-    when(ptw_req.info.mmu_privilege =/= Privilegelevel.S.U) {
-      sum_pass := true.B
-    }.otherwise {
-      sum_pass := ptw_req.info.mstatus_field.sum || !pte.u
-    }
-    sum_pass
-  }
-
-  // 5. A leaf PTE has been found. Determine if the requested memory access is allowed by the
-  // pte.r, pte.w, pte.x, and pte.u bits, given the current privilege mode and the value of the
-  // SUM and MXR fields of the mstatus register. If not, stop and raise a page-fault exception
-  // corresponding to the original access type.
-  def is_pte_permission_check_pass(pte: SV39PTE, ptw_req: PTWReq) = {
-    val pte_permission_check_pass = WireInit(false.B)
-    val sum_check_pass = is_mstatus_sum_check_pass(pte, ptw_req)
-    when(ptw_req.req_type === TLBReqType.Fetch) {
-      pte_permission_check_pass := pte.x
-    }.elsewhen(TLBReqType.need_store(ptw_req.req_type)) {
-      // STORE , AMO , sc
-      val store_check_pass = pte.w
-      pte_permission_check_pass := store_check_pass & sum_check_pass
-
-    }.elsewhen(TLBReqType.need_load(ptw_req.req_type)) {
-      // When MXR=0, only loads from pages marked readable (R=1 in Figure 4.18) will succeed.
-      // When MXR=1, loads from pages marked either readable or executable (R=1 or X=1) will succeed.
-      // MXR has no effect when page-based virtual memory is not in effect.
-      val load_check_pass = pte.r || pte.x & ptw_req.info.mstatus_field.mxr
-      pte_permission_check_pass := load_check_pass & sum_check_pass
-    }.otherwise {
-      assert(false.B, "unknown req_type")
-    }
-    pte_permission_check_pass
-  }
 
   val sIdle :: sSendDcacheReq :: sWaitDcacheResp :: sSendPTWResp :: sFlushWaitDcacheRespHs :: Nil =
     Enum(
@@ -157,21 +59,6 @@ class PTW(formal: Boolean = false) extends Module {
         ptw_req.req_type
       )
     ptw_resp_buf.exception.tval := ptw_req.vaddr
-  }
-
-  // 6. If i > 0 and pte.ppn[i − 1 : 0] ̸= 0, this is a misaligned superpage; stop and raise a page-fault
-  // exception corresponding to the original access type.
-  private def is_misaligned_superpage(i: UInt, pte: SV39PTE): Bool = {
-    val is_misaligned = MuxLookup(
-      i,
-      false.B
-    ) {
-      Seq(
-        1.U -> (pte.ppn0 =/= 0.U),
-        2.U -> (Cat(pte.ppn1, pte.ppn0) =/= 0.U)
-      )
-    }
-    is_misaligned
   }
 
   private def get_page_size(i: UInt): SV39PageSize.Type = {
@@ -248,36 +135,38 @@ class PTW(formal: Boolean = false) extends Module {
             // pte.r, pte.w, pte.x, and pte.u bits, given the current privilege mode and the value of the
             // SUM and MXR fields of the mstatus register. If not, stop and raise a page-fault exception
             // corresponding to the original access type.
-            val pte_permission_pass =
-              is_pte_permission_check_pass(pte, ptw_req_buf)
-            when(!pte_permission_pass) {
+
+            // 7. If pte.a = 0, or if the original memory access is a store and pte.d = 0, either raise a page-fault
+            // exception corresponding to the original access type
+
+            val leaf_pte_permission_pass =
+              SV39PKG.leaf_pte_permission_check_all(
+                pte,
+                ptw_req_buf.req_type,
+                ptw_req_buf.info.mmu_privilege,
+                ptw_req_buf.info.mstatus_field.mxr,
+                ptw_req_buf.info.mstatus_field.sum
+              )
+
+            // 6. If i > 0 and pte.ppn[i − 1 : 0] ̸= 0, this is a misaligned superpage; stop and raise a page-fault
+            // exception corresponding to the original access type.
+            val superpage_check_pass =
+              SV39PKG.misaligned_superpage_check(ptw_info_i, pte)
+
+            when(!(leaf_pte_permission_pass && superpage_check_pass)) {
               send_page_fault(ptw_req_buf)
             }.otherwise {
-              // 6. If i > 0 and pte.ppn[i − 1 : 0] ̸= 0, this is a misaligned superpage; stop and raise a page-fault
-              // exception corresponding to the original access type.
-              val superpage_misaligned =
-                is_misaligned_superpage(ptw_info_i, pte)
-              // 7. If pte.a = 0, or if the original memory access is a store and pte.d = 0, either raise a page-fault
-              // exception corresponding to the original access type
-              val pte_page_fault_cond7 =
-                !pte.a || (!pte.d && TLBReqType.need_store(
-                  ptw_req_buf.req_type
-                ))
 
-              when(superpage_misaligned | pte_page_fault_cond7) {
-                send_page_fault(ptw_req_buf)
-              }.otherwise {
-                // 8. The translation is successful. The translated physical address is given as follows:
-                //      + pa.pgoff = va.pgoff.
-                //      + If i > 0, then this is a superpage translation and pa.ppn[i − 1 : 0] = va.vpn[i − 1 : 0].
-                //      + pa.ppn[LEVELS − 1 : i] = pte.ppn[LEVELS − 1 : i].
-                ptw_resp_buf.va := ptw_req_buf.vaddr
-                ptw_resp_buf.asid := ptw_info_asid
-                ptw_resp_buf.pg_size := get_page_size(ptw_info_i)
-                ptw_resp_buf.pte := pte.raw
-                ptw_resp_buf.exception.valid := false.B
-                state := sSendPTWResp
-              }
+              // 8. The translation is successful. The translated physical address is given as follows:
+              //      + pa.pgoff = va.pgoff.
+              //      + If i > 0, then this is a superpage translation and pa.ppn[i − 1 : 0] = va.vpn[i − 1 : 0].
+              //      + pa.ppn[LEVELS − 1 : i] = pte.ppn[LEVELS − 1 : i].
+              ptw_resp_buf.va := ptw_req_buf.vaddr
+              ptw_resp_buf.asid := ptw_info_asid
+              ptw_resp_buf.pg_size := get_page_size(ptw_info_i)
+              ptw_resp_buf.pte := pte.raw
+              ptw_resp_buf.exception.valid := false.B
+              state := sSendPTWResp
             }
           }.elsewhen(pte_page_fault_cond2) {
             send_page_fault(ptw_req_buf)
