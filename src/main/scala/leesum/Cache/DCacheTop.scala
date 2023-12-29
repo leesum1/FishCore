@@ -15,7 +15,7 @@ import chisel3.util.{
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, CVC4EngineAnnotation, Formal, stable}
 import leesum.Cache._
-import leesum.Utils.{LFSRRand, OverrideWithMask}
+import leesum.Utils.{LFSRRand, OverrideWithMask, PLRU}
 import leesum._
 import leesum.axi4.{AXIDef, AXIMasterIO, AXIMux}
 import leesum.moniter.PerfMonitorCounter
@@ -111,6 +111,8 @@ class DCacheTopIn(formal: Boolean = false) extends Module {
   val dcache_hit_rdata = dcache_n_way.io.lookup_hit_data
 
   val random_way = LFSRRand(dcache_way)
+
+  val replace_way = random_way
 
   val writeback_fifo_in = Wire(Decoupled(new CacheWBbundle))
   val writeback_fifo_out = Queue(writeback_fifo_in, 1)
@@ -269,14 +271,14 @@ class DCacheTopIn(formal: Boolean = false) extends Module {
     }
     is(sMiss) {
       when(writeback_fifo_in.ready) {
-        select_refill_way := random_way
+        select_refill_way := replace_way
 
         // choose the random way to refill
         // 1. first write back the dirty data
         dcache_n_way.io.req_valid := true.B
         dcache_n_way.io.req_type := DCacheReqType.read
         dcache_n_way.io.req_addr := dcache_req_buf.paddr
-        dcache_n_way.io.req_way := random_way
+        dcache_n_way.io.req_way := replace_way
 
         state := sDirtyCheck
       }

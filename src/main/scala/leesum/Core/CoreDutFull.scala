@@ -3,7 +3,7 @@ import chisel3._
 import chisel3.util.{Valid, log2Ceil}
 import leesum.Cache.{DCacheConnect, DCacheReq, DCacheResp, DCacheTag, ICacheTop}
 import leesum.ICache.DCacheTop
-import leesum.LSU.LSU
+import leesum.lsu.LSUTop
 import leesum.axi4.{AXI4SlaveBridge, AXIDeMux, AXIMasterIO, AxiReadArbiter, BasicMemoryIO, MemoryIO64to32}
 import leesum.moniter.{DifftestPort, MonitorTop, PerfPort}
 import leesum._
@@ -57,7 +57,7 @@ class FishCore(
 
   // fu
   val alu_seq = Seq.fill(2)(Module(new FuAlu))
-  val lsu = Module(new LSU())
+  val lsu = Module(new LSUTop())
   val bru = Module(new FuBranch(rvc_en))
   val mul_div = Module(new FuMulDiv(muldiv_en))
   val csr = Module(new FuCSR)

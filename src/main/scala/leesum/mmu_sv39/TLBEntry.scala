@@ -4,13 +4,14 @@ import chisel3.util.{
   Cat,
   Mux1H,
   MuxLookup,
+  OHToUInt,
   PopCount,
   PriorityEncoder,
   Valid,
   isPow2,
   log2Ceil
 }
-import leesum.Utils.{HoldRegister, LFSRRand}
+import leesum.Utils.{HoldRegister, LFSRRand, PLRU}
 import leesum.{CheckOverlap, GenVerilogHelper}
 
 class TLBEntry extends Bundle {
@@ -104,6 +105,7 @@ class TLB_L1(num: Int) extends Module {
   val tlb_hit = tlb_match_hits.reduce(_ || _) && io.va.valid
   val tlb_hit_pte = Mux1H(tlb_match_hits, tlb_match_ptes)
   val tlb_hit_pg_size = Mux1H(tlb_match_hits, tlb_match_pg_sizes)
+  val tlb_hit_idx = OHToUInt(tlb_match_hits)
 
   io.tlb_hit := HoldRegister(io.va.valid, RegNext(tlb_hit), 1)
   io.tlb_hit_pte := HoldRegister(io.va.valid, RegNext(tlb_hit_pte), 1)
@@ -113,15 +115,25 @@ class TLB_L1(num: Int) extends Module {
   // tlb update
   // --------------------
 
-  // replace algorithm TODO: Pseudo-LRU
-  val tlb_rand_update_idx = LFSRRand(num)
   val tlb_has_empty = tlb_content.map(!_.valid).reduce(_ || _)
   val tlb_first_empty_idx = PriorityEncoder(tlb_content.map(!_.valid))
+
+  // Pseudo-LRU
+  val tlb_plru = Module(new PLRU(num))
+  tlb_plru.io.update_valid := io.tlb_update.valid || tlb_hit
+  tlb_plru.io.update_data := Mux(
+    tlb_hit,
+    tlb_hit_idx,
+    Mux(tlb_has_empty, tlb_first_empty_idx, tlb_plru.io.out)
+  )
+
+//  // replace algorithm TODO: Pseudo-LRU
+//  val tlb_rand_update_idx = LFSRRand(num)
 
   val tlb_update_idx = Mux(
     tlb_has_empty,
     tlb_first_empty_idx,
-    tlb_rand_update_idx
+    tlb_plru.io.out
   )
 
   // update
@@ -241,6 +253,6 @@ class TLB_L1(num: Int) extends Module {
 }
 
 object gen_TLB_L1_verilog extends App {
-  GenVerilogHelper(new TLB_L1(2))
+  GenVerilogHelper(new TLB_L1(8))
 
 }

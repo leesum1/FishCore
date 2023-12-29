@@ -3,7 +3,8 @@ package leesum
 import chisel3._
 import chisel3.util._
 import leesum.Cache.DcacheConst
-import leesum.LSU.{AtomicOP, LSUReq}
+import leesum.lsu.{AtomicOP, LSUReq}
+import leesum.Utils.MultiPortFIFOUseMEM
 
 class FuReq extends Bundle {
 

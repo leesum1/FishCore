@@ -1,9 +1,10 @@
-package leesum
+package leesum.Utils
 
 import chisel3._
-import chisel3.util.{Mux1H, MuxCase, MuxLookup, PopCount, PriorityMux, Valid}
+import chisel3.util._
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal}
+import leesum.{CheckOrder, Gather, GenVerilogHelper}
 import org.scalatest.flatspec.AnyFlatSpec
 
 /** This module is used to convert a InstsItem to a stream of INSTEntry

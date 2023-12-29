@@ -1,4 +1,4 @@
-package leesum.LSU
+package leesum.lsu
 
 import chisel3._
 import chisel3.util.{Decoupled, Enum, Queue, is, switch}

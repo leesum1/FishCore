@@ -1,4 +1,4 @@
-package leesum.LSU
+package leesum.lsu
 
 import chisel3._
 import chisel3.util.Decoupled
@@ -13,7 +13,7 @@ class LSUResp extends Bundle {
   def wb_data_valid = true.B
 }
 
-class LSU() extends Module {
+class LSUTop() extends Module {
   val io = IO(new Bundle {
     val lsu_req = Flipped(Decoupled(new LSUReq))
     val flush = Input(Bool())
@@ -121,5 +121,5 @@ class LSU() extends Module {
 }
 
 object gen_lsu_verilog extends App {
-  GenVerilogHelper(new LSU)
+  GenVerilogHelper(new LSUTop)
 }

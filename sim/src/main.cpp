@@ -275,6 +275,7 @@ int main(int argc, char** argv) {
 
 
     auto perf_monitor = PerfMonitor();
+    perf_monitor.add_perf_counter({"bp", bp_hit, bp_num});
     perf_monitor.add_perf_counter({"icache", icache_hit, icache_num});
     perf_monitor.add_perf_counter({"dcache", dcache_hit, dcache_num});
     perf_monitor.add_perf_counter({"itlb", itlb_hit, itlb_num});

@@ -1,6 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util._
+import leesum.Utils.MultiPortFIFOUseMEM
 class IssueFIFO extends Module {
   val io = IO(new Bundle {
     val push = Flipped(Decoupled(Vec(2, new ScoreBoardEntry)))

@@ -1,7 +1,7 @@
 package leesum.Cache
 
 import chisel3._
-import chisel3.util.{Mux1H, PopCount, ValidIO, isPow2, log2Ceil}
+import chisel3.util._
 import leesum.GenVerilogHelper
 
 object DCacheReqType extends ChiselEnum {

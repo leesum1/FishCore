@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
 import chiseltest.simulator.WriteFstAnnotation
-import leesum.TestUtils.{int2UInt64, long2UInt64, long2Ulong}
+import TestUtils.{int2UInt64, long2UInt64, long2Ulong}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -132,7 +132,7 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
   def alu_calculate_ref(
       op_a: UInt,
       op_b: UInt,
-      op_type: AluOP.Type,
+      op_type: UInt,
       is_rv32: Bool
   ): Long = {
     require((op_a.getWidth == 64) && (op_b.getWidth == 64), "width error")
@@ -195,7 +195,7 @@ class AluTest extends AnyFreeSpec with ChiselScalatestTester {
 
       val ref_seq = input_seq
         .map({ case (op_a, op_b, op_type, op_width) =>
-          val res = alu_calculate_ref(op_a, op_b, op_type, op_width)
+          val res = alu_calculate_ref(op_a, op_b, op_type.asUInt, op_width)
           long2UInt64(res)
         })
         .map({ case (res) =>

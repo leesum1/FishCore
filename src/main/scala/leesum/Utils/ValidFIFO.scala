@@ -1,7 +1,8 @@
-package leesum
+package leesum.Utils
 
 import chisel3._
 import chisel3.util.{Decoupled, Valid, isPow2, log2Ceil}
+import leesum.{BarrelShifter, CheckOrder, GenVerilogHelper, PopCountOrder}
 
 class IndexableMem[T <: Data](
     entries: Int,

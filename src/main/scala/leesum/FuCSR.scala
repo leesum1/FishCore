@@ -1,6 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util.{Decoupled, Enum, MuxLookup, is, switch}
+import leesum.Utils.MultiPortFIFOBase
 
 class FuCsrReq extends Bundle {
   val csr_addr = UInt(12.W)

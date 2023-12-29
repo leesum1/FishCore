@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util.{Cat, Decoupled, MuxLookup}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, CVC4EngineAnnotation, Formal}
+import leesum.Utils.VecCompressorNew
 import leesum._
 import org.scalatest.flatspec.AnyFlatSpec
 

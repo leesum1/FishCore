@@ -2,6 +2,7 @@ package leesum
 import chiseltest._
 import chisel3._
 import leesum.TestUtils.gen_rand_uint
+import leesum.Utils.DummyMultiPortFIFO
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
