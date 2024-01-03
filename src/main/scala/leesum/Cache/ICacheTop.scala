@@ -103,9 +103,8 @@ class ICacheTop(formal: Boolean = false) extends Module {
     when(io.req.fire) {
       icache_req_buf := io.req.bits
       state := sWaitTLBResp
-      // TODO: send read req of icache tag and data, resp at the next cycle
-//      icache_data := 1122334.U // set a random value
-//      icache_tag := 5566778.U // set a random value
+      // send read req of icache tag and data, resp at the next cycle
+
     }.otherwise {
       state := sIdle
     }

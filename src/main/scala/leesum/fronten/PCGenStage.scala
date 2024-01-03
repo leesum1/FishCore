@@ -1,7 +1,7 @@
 package leesum.fronten
 
 import chisel3._
-import chisel3.util.{Cat, Decoupled, ValidIO}
+import chisel3.util.{Cat, Decoupled, RegEnable, ValidIO}
 import leesum.{CheckAligned, GenVerilogHelper, RedirectPC}
 
 class PCGenStage(boot_pc: Long, rvc_en: Boolean = false) extends Module {
@@ -13,26 +13,35 @@ class PCGenStage(boot_pc: Long, rvc_en: Boolean = false) extends Module {
   val io = IO(new Bundle {
     val commit_redirect_pc = Input(new RedirectPC)
     val pc = Decoupled(UInt(64.W))
-    val f3_redirect_pc = Input(ValidIO(UInt(64.W)))
+    val npc = Output(UInt(64.W))
+    val f3_redirect_pc = Input(new RedirectPC)
   })
-  val pc_reg = RegInit((boot_pc).U(64.W))
+  val pc_reg = RegInit((boot_pc - fetch_size).U(64.W))
 
   val npc = Wire(UInt(64.W))
+  val npc_buf = RegInit(0.U(64.W))
+  val npc_buf_valid = RegInit(false.B)
 
   when(io.commit_redirect_pc.valid) {
     npc := io.commit_redirect_pc.target
+    npc_buf := io.commit_redirect_pc.target
+    npc_buf_valid := true.B
   }.elsewhen(io.f3_redirect_pc.valid) {
-    npc := io.f3_redirect_pc.bits
+    npc := io.f3_redirect_pc.target
+    npc_buf := io.f3_redirect_pc.target
+    npc_buf_valid := true.B
   }.otherwise {
     npc := Cat(pc_reg(63, 3), "b000".U(3.W)) + fetch_size.U
   }
 
-  when(io.pc.fire || io.commit_redirect_pc.valid || io.f3_redirect_pc.valid) {
-    pc_reg := npc
+  when(io.pc.fire) {
+    npc_buf_valid := false.B
+    pc_reg := Mux(npc_buf_valid, npc_buf, npc)
   }
 
   io.pc.valid := !reset.asBool
   io.pc.bits := pc_reg
+  io.npc := Mux(npc_buf_valid, npc_buf, npc)
 
   // ---------------------
   // assert

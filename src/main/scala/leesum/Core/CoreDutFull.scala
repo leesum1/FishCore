@@ -49,8 +49,7 @@ class FishCore(
   io.perf_monitor <> monitor.io.perf
 
   // pipeline stage
-  val pc_gen_stage = Module(new PCGenStage(boot_pc, rvc_en))
-  val ifu = Module(new IFUTop(rvc_en))
+  val ifu = Module(new IFUTop(boot_pc, rvc_en))
   val mmmu = Module(new MMU(addr_map))
 
   val decode_stage = Seq.tabulate(2)(i => Module(new InstDecoder))
@@ -124,10 +123,6 @@ class FishCore(
   dcache.io.fencei := commit_stage.io.dcache_fencei
   dcache.io.fencei_ack <> commit_stage.io.dcache_fencei_ack
   mmmu.io.tlb_flush := commit_stage.io.tlb_flush
-
-  // pc_gen_stage <> fetch_stage
-  pc_gen_stage.io.pc <> ifu.io.pc_in
-  pc_gen_stage.io.f3_redirect_pc <> ifu.io.f3_redirect_pc
 
   // ifu <> icache
   ifu.io.icache_req <> icache_top.io.req
@@ -243,7 +238,7 @@ class FishCore(
   commit_stage.io.csr_commit <> csr.io.csr_commit
 
   // commit stage <> pc gen
-  pc_gen_stage.io.commit_redirect_pc <> commit_stage.io.commit_redirect_pc
+  ifu.io.commit_redirect_pc <> commit_stage.io.commit_redirect_pc
 
   // commit stage <> monitor
   commit_stage.io.commit_monitor.get <> monitor.io.commit_monitor

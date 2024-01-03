@@ -176,8 +176,8 @@ class MMU(
   val dtlb_req_va = io.lsu_req.bits.vaddr
   val dtlb_req_asid = asid_val
 
-  val itlb_l1 = Module(new TLB_L1(4))
-  val dtlb_l1 = Module(new TLB_L1(4))
+  val itlb_l1 = Module(new TLB_L1(8))
+  val dtlb_l1 = Module(new TLB_L1(8))
 
   itlb_l1.io.va.valid := itlb_req
   itlb_l1.io.va.bits := itlb_req_va

@@ -6,7 +6,7 @@ import chiseltest.ChiselScalatestTester
 import chiseltest.formal._
 import leesum.Cache.{ICacheReq, ICacheResp}
 import leesum.Utils.DecoderHelper
-import leesum._
+import leesum.{RedirectPC, _}
 import org.scalatest.flatspec.AnyFlatSpec
 
 class f2_f3_pipe_entry extends Bundle {
@@ -21,20 +21,25 @@ class f2_f3_pipe_entry extends Bundle {
   }
 }
 
-class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
+class IFUTop(
+    boot_pc: Long = 0x80000000L,
+    rvc_en: Boolean = false,
+    formal: Boolean = false
+) extends Module {
   val io = IO(new Bundle {
-    val pc_in = Flipped(Decoupled(UInt(64.W)))
     val icache_req = Decoupled(new ICacheReq)
     val icache_resp = Flipped(Decoupled(new ICacheResp))
     val inst_fifo_pop = Vec(2, Decoupled(new INSTEntry))
     val flush = Input(Bool())
-    val f3_flush = Output(Bool())
-    val f3_redirect_pc = Output(ValidIO(UInt(64.W)))
+//    val f3_redirect_pc = Output(new RedirectPC())
+    val commit_redirect_pc = Input(new RedirectPC())
   })
 
   val sIdle :: sWaitResp :: sWaitPipe :: sFlushResp :: Nil = Enum(4)
 
   val state = RegInit(sIdle)
+
+  val pc_gen_stage = Module(new PCGenStage(boot_pc, rvc_en))
 
   val pc_f1_f2_buf = RegInit(0.U(64.W))
 
@@ -44,9 +49,15 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
   when(f3_flush_next || io.flush) {
     f3_flush_next := false.B
   }
-  io.f3_flush := f3_flush_next
+  val f3_redirect_next = RegInit(0.U.asTypeOf(new RedirectPC()))
 
-//  val ifu_flush = io.flush || f3_flush_next
+  when(f3_redirect_next.valid) {
+    f3_redirect_next.valid := false.B
+  }
+
+  pc_gen_stage.io.commit_redirect_pc := io.commit_redirect_pc
+  pc_gen_stage.io.f3_redirect_pc := f3_redirect_next
+  pc_gen_stage.io.pc.nodeq()
 
   when(reset.asBool) {
     f2_f3_buf.clear()
@@ -65,22 +76,21 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
 
   io.icache_req.noenq()
   io.icache_resp.nodeq()
-  io.pc_in.nodeq()
-  io.f3_redirect_pc.valid := false.B
-  io.f3_redirect_pc.bits := 0.U
+//  io.f3_redirect_pc.valid := false.B
+//  io.f3_redirect_pc.bits := 0.U
 
   def send_icache_req() = {
     // TODO: check it about flush
-    io.icache_req.valid := io.pc_in.valid && !io.flush && !f3_flush_next
+    io.icache_req.valid := pc_gen_stage.io.pc.valid && !io.flush && !f3_flush_next
 
     // 1. flush from commit
     // 2. flush from f3 branch prediction
-    io.pc_in.ready := io.icache_req.ready && !io.flush && !f3_flush_next
-    io.icache_req.bits.va := io.pc_in.bits
-
+    pc_gen_stage.io.pc.ready := io.icache_req.ready && !io.flush && !f3_flush_next
+//    io.icache_req.bits.va := pc_gen_stage.io.pc.bits
+    io.icache_req.bits.va := pc_gen_stage.io.npc
     when(io.icache_req.fire) {
       assert(!io.flush && !f3_flush_next)
-      pc_f1_f2_buf := io.pc_in.bits
+      pc_f1_f2_buf := pc_gen_stage.io.npc
       state := sWaitResp
     }.otherwise {
       state := sIdle
@@ -192,20 +202,24 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
       val bp_res = VecInit(static_bp.map(_.io.bp))
 
       val taken_valid = bp_res.map(_.is_taken).reduce(_ || _)
+      val taken_seq = VecInit(bp_res.map(_.is_taken)).asUInt
 
       when(taken_valid) {
         f3_flush_next := true.B
+        f3_redirect_next.valid := true.B
+        f3_redirect_next.target := PriorityMux(
+          taken_seq,
+          bp_res.map(_.predict_pc)
+        )
       }
 
-      val taken_seq = VecInit(bp_res.map(_.is_taken)).asUInt
-
-      io.f3_redirect_pc.valid := taken_valid
-
-      // select the first taken branch
-      io.f3_redirect_pc.bits := PriorityMux(
-        taken_seq,
-        bp_res.map(_.predict_pc)
-      )
+//      io.f3_redirect_pc.valid := taken_valid
+//
+//      // select the first taken branch
+//      io.f3_redirect_pc.bits := PriorityMux(
+//        taken_seq,
+//        bp_res.map(_.predict_pc)
+//      )
 
       val bp_mask = VecInit(
         DecoderHelper(
@@ -243,7 +257,7 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
 
   when(io.flush || f3_flush_next) {
     assume(io.icache_req.fire === false.B)
-    assert(!io.pc_in.ready)
+    assert(!pc_gen_stage.io.pc.ready)
   }
 
   when(io.inst_fifo_pop.map(_.fire).reduce(_ || _)) {

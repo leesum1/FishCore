@@ -45,9 +45,6 @@ class ReqRespArbiter[T <: Data, U <: Data](
 
   val sel_buf_valid = state =/= sIdle
   val sel_buf = RegInit(0.U(log2Ceil(numInputs).W))
-  val cur_max_priority = RegInit(0.U(log2Ceil(numInputs).W))
-  val next_max_priority =
-    Mux(cur_max_priority === (numInputs - 1).U, 0.U, cur_max_priority + 1.U)
 
   val sel_idx_valid = io.req_vec.map(_.valid).reduce(_ || _)
 
@@ -60,6 +57,10 @@ class ReqRespArbiter[T <: Data, U <: Data](
   // -------------------
   // round robin
   // -------------------
+  val cur_max_priority = RegInit(0.U(log2Ceil(numInputs).W))
+  val next_max_priority =
+    Mux(cur_max_priority === (numInputs - 1).U, 0.U, cur_max_priority + 1.U)
+
   val new_idx = BarrelShifter
     .rightRotate(VecInit(io.req_vec.map(_.valid)), sel_buf)
     .indexWhere(_ === true.B)
@@ -89,7 +90,9 @@ class ReqRespArbiter[T <: Data, U <: Data](
 
       val idx = Mux(lock_valid, sel_buf, sel_idx)
 
-      io.req_arb <> io.req_vec(idx)
+      val req_sel = io.req_vec(idx)
+
+      io.req_arb <> req_sel
 
       when(!lock_valid) {
         sel_buf := sel_idx
@@ -168,5 +171,7 @@ class ReqRespArbFormal
 }
 
 object gen_DcacheArb_verilog extends App {
-  GenVerilogHelper(new ReqRespArbiter(4, new LoadDcacheReq, new LoadDcacheResp))
+  GenVerilogHelper(
+    new ReqRespArbiter(10, new LoadDcacheReq, new LoadDcacheResp)
+  )
 }
