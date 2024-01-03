@@ -71,7 +71,7 @@ class IFUTop(rvc_en: Boolean = false, formal: Boolean = false) extends Module {
 
   def send_icache_req() = {
     // TODO: check it about flush
-    io.icache_req.valid := io.pc_in.valid && !f3_flush_next
+    io.icache_req.valid := io.pc_in.valid && !io.flush && !f3_flush_next
 
     // 1. flush from commit
     // 2. flush from f3 branch prediction

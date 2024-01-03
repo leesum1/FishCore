@@ -11,7 +11,7 @@ class PCGenStage(boot_pc: Long, rvc_en: Boolean = false) extends Module {
   val fetch_size = 8
 
   val io = IO(new Bundle {
-    val redirect_pc = Flipped(Decoupled(new RedirectPC))
+    val commit_redirect_pc = Input(new RedirectPC)
     val pc = Decoupled(UInt(64.W))
     val f3_redirect_pc = Input(ValidIO(UInt(64.W)))
   })
@@ -19,20 +19,17 @@ class PCGenStage(boot_pc: Long, rvc_en: Boolean = false) extends Module {
 
   val npc = Wire(UInt(64.W))
 
-  when(io.redirect_pc.valid) {
-    npc := io.redirect_pc.bits.target
+  when(io.commit_redirect_pc.valid) {
+    npc := io.commit_redirect_pc.target
   }.elsewhen(io.f3_redirect_pc.valid) {
     npc := io.f3_redirect_pc.bits
   }.otherwise {
     npc := Cat(pc_reg(63, 3), "b000".U(3.W)) + fetch_size.U
   }
 
-  when(io.pc.fire || io.redirect_pc.valid || io.f3_redirect_pc.valid) {
+  when(io.pc.fire || io.commit_redirect_pc.valid || io.f3_redirect_pc.valid) {
     pc_reg := npc
   }
-
-  // TODO: maybe unused?
-  io.redirect_pc.ready := io.pc.fire
 
   io.pc.valid := !reset.asBool
   io.pc.bits := pc_reg

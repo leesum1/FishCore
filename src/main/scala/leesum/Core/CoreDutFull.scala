@@ -4,7 +4,14 @@ import chisel3.util.{Valid, log2Ceil}
 import leesum.Cache.{DCacheConnect, DCacheReq, DCacheResp, DCacheTag, ICacheTop}
 import leesum.ICache.DCacheTop
 import leesum.lsu.LSUTop
-import leesum.axi4.{AXI4SlaveBridge, AXIDeMux, AXIMasterIO, AxiReadArbiter, BasicMemoryIO, MemoryIO64to32}
+import leesum.axi4.{
+  AXI4SlaveBridge,
+  AXIDeMux,
+  AXIMasterIO,
+  AxiReadArbiter,
+  BasicMemoryIO,
+  MemoryIO64to32
+}
 import leesum.moniter.{DifftestPort, MonitorTop, PerfPort}
 import leesum._
 import leesum.devices.clint
@@ -236,7 +243,7 @@ class FishCore(
   commit_stage.io.csr_commit <> csr.io.csr_commit
 
   // commit stage <> pc gen
-  pc_gen_stage.io.redirect_pc <> commit_stage.io.branch_commit
+  pc_gen_stage.io.commit_redirect_pc <> commit_stage.io.commit_redirect_pc
 
   // commit stage <> monitor
   commit_stage.io.commit_monitor.get <> monitor.io.commit_monitor

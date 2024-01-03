@@ -95,7 +95,7 @@ object CompleteBinaryTree extends App {
   paths.foreach(println)
 }
 
-class PLRU(nums: Int) extends Module {
+class PLRU(nums: Int, use_decoder: Boolean = false) extends Module {
   require(nums > 1, "nums must be greater than 1")
   require(isPow2(nums), "nums must be power of 2")
 
@@ -105,20 +105,22 @@ class PLRU(nums: Int) extends Module {
     val out = Output(UInt(log2Ceil(nums).W))
   })
 
-//  val age_tree = RegInit(VecInit(Seq.fill(nums - 1)(false.B)))
+  // tree-based pseudo-LRU
+  // age_tree(0) is the root                 0
+  // age_tree(1) is the first level        1   2
+  // age_tree(2) is the second level      3 4 5 6
+  // ....
   val age_tree = Seq.tabulate(log2Ceil(nums)) { i =>
     val lvl_nums = math.pow(2, i).toInt
     RegInit(VecInit(Seq.fill(lvl_nums)(false.B)))
   }
 
-  val help_tree = new CompleteBinaryTree
+  val helper_tree = new CompleteBinaryTree
   for (i <- 0 until 2 * nums - 1) {
-    help_tree.add(i)
+    helper_tree.add(i)
   }
 
-  help_tree.printTree()
-
-  val paths = help_tree.find_paths()
+  val paths_to_leaf = helper_tree.find_paths()
 
   def find_direction(path: List[Int]) = {
     path
@@ -161,11 +163,9 @@ class PLRU(nums: Int) extends Module {
     )
   }
 
-  paths.foreach(println)
-  val directions = paths.map(find_direction)
-  directions.foreach(println)
+  val directions = paths_to_leaf.map(find_direction)
 
-  val bit_parts = paths
+  val bit_parts = paths_to_leaf
     .zip(directions)
     .map { case (path, direction) =>
       gen_bit_part(path, direction)
@@ -174,20 +174,20 @@ class PLRU(nums: Int) extends Module {
   bit_parts.foreach(println)
 
 //  // use decoder
-//  val out1 = DecoderHelper(
+//  val decoder_out = DecoderHelper(
 //    VecInit(age_tree.flatten).asUInt,
 //    0.U(log2Ceil(nums).W),
 //    bit_parts
 //  )
 
   // use lookup
-  val out2 = Lookup(
+  val lookup_out = Lookup(
     VecInit(age_tree.flatten).asUInt,
     0.U(log2Ceil(nums).W),
     bit_parts
   )
 
-  io.out := out2
+  io.out := lookup_out
 
   // --------------------------------
   // update
@@ -195,19 +195,18 @@ class PLRU(nums: Int) extends Module {
 
   for (lvl <- 0 until log2Ceil(nums)) {
 
-    val data_msb = io.update_data.getWidth - 1
+    // from hi to lo in io.update_data, each bit represents a node in the tree
+    val new_age_node_val = !VecInit(io.update_data.asBools).reverse(lvl)
 
-    // from high to low
-    val lvl_age_val = io.update_data(data_msb - lvl)
-
-    val age_idx = if (lvl == 0) {
+    // find the offset of age node in each level
+    val age_offset = if (lvl == 0) {
       0.U(log2Ceil(nums).W)
     } else {
       VecInit(io.update_data.asBools.takeRight(lvl)).asUInt
     }
-
+    // update the age node in each level
     when(io.update_valid) {
-      age_tree(lvl)(age_idx) := !lvl_age_val
+      age_tree(lvl)(age_offset) := new_age_node_val
     }
   }
 

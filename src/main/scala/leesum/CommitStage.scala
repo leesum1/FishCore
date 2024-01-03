@@ -5,6 +5,7 @@ import leesum.mmu_sv39.SfenceVMABundle
 import leesum.moniter.{CommitMonitorPort, PerfMonitorCounter}
 
 class RedirectPC extends Bundle {
+  val valid = Bool()
   val target = UInt(64.W)
 }
 
@@ -34,7 +35,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     // csr
     val csr_commit = Decoupled(Bool())
     // branch
-    val branch_commit = Decoupled(new RedirectPC())
+    val commit_redirect_pc = Output(new RedirectPC())
 
     // csr regfile direct access
     val direct_read_ports = Input(new CSRDirectReadPorts)
@@ -72,6 +73,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   val ifencei_next = RegInit(false.B)
   val sfencevma_next = RegInit(false.B)
   val sfence_buf = RegInit(0.U.asTypeOf(new SfenceVMABundle))
+  val redirect_next = RegInit(0.U.asTypeOf(new RedirectPC))
   val privilege_mode = RegInit(3.U(2.W)) // machine mode
 
   // interrupt
@@ -115,11 +117,16 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     sfencevma_next := false.B
   }
 
+  when(redirect_next.valid) {
+    redirect_next.valid := false.B
+  }
+
   io.flush := flush_next
   io.dcache_fencei := dfencei_next
   io.icache_fencei := ifencei_next
   io.tlb_flush.valid := sfencevma_next
   io.tlb_flush.bits := sfence_buf
+  io.commit_redirect_pc := redirect_next
 
   assert(
     CheckOrder(pop_ack),
@@ -191,8 +198,12 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     val mis_predict = entry.bp.is_miss_predict
     val need_write_back = FuOP.is_jalr(entry.fu_op) || FuOP.is_jal(entry.fu_op)
     when(mis_predict) {
-      io.branch_commit.valid := true.B
-      io.branch_commit.bits.target := entry.bp.predict_pc
+//      io.branch_commit.valid := true.B
+//      io.branch_commit.bits.target := entry.bp.predict_pc
+
+      redirect_next.valid := true.B
+      redirect_next.target := entry.bp.predict_pc
+
       flush_next := true.B
       ack := true.B
       bp_perf.inc_miss(1.U)
@@ -211,6 +222,12 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   def retire_none(entry: ScoreBoardEntry, ack: Bool): Unit = {
     assert(entry.exception.valid === false.B)
 
+    val next_inst_pc = entry.pc + Mux(
+      entry.is_rvc,
+      2.U,
+      4.U
+    )
+
     // TODO: unimplemented
     when(entry.fu_op === FuOP.SFenceVMA) {
       val mstatus = new MstatusFiled(io.direct_read_ports.mstatus)
@@ -225,13 +242,10 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
         // TODO: unimplemented rs1 rs2
         sfence_buf.va := 0.U
         sfence_buf.asid := 0.U
-        io.branch_commit.valid := true.B
-        // same as interrupt to reduce area
-        io.branch_commit.bits.target := entry.pc + Mux(
-          entry.is_rv32,
-          2.U,
-          4.U
-        )
+
+        redirect_next.valid := true.B
+        redirect_next.target := next_inst_pc
+
       }.otherwise {
         // privi check fail
         val vma_entry = WireInit(entry)
@@ -254,13 +268,10 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
         ifencei_next := true.B
         dfencei_next := false.B
         ack := true.B
-        io.branch_commit.valid := true.B
-        // same as interrupt to reduce area
-        io.branch_commit.bits.target := entry.pc + Mux(
-          entry.is_rv32,
-          2.U,
-          4.U
-        )
+
+        redirect_next.valid := true.B
+        redirect_next.target := next_inst_pc
+
       }
     }.elsewhen(entry.fu_op === FuOP.WFI) {
       printf("WFI at %x\n", entry.pc)
@@ -286,7 +297,10 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     ) && privilege_mode <= Privilegelevel.S.U
 
     has_exception := true.B
-    io.branch_commit.valid := true.B
+//    io.branch_commit.valid := true.B
+
+    redirect_next.valid := true.B
+
     ack := true.B
     flush_next := true.B
     privilege_mode := Mux(
@@ -298,7 +312,7 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     when(trap_to_smode) {
       // s mode
       val stvec = new MtvecFiled(io.direct_read_ports.stvec)
-      io.branch_commit.bits.target := stvec.get_exception_pc
+      redirect_next.target := stvec.get_exception_pc
 
       io.direct_write_ports.mstatus.valid := true.B
       io.direct_write_ports.mstatus.bits := mstatus
@@ -315,8 +329,11 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     }.otherwise {
       // m mode
       val mtvec = new MtvecFiled(io.direct_read_ports.mtvec)
-      io.branch_commit.valid := true.B
-      io.branch_commit.bits.target := mtvec.get_exception_pc
+//      io.branch_commit.valid := true.B
+//      io.branch_commit.bits.target := mtvec.get_exception_pc
+
+      redirect_next.valid := true.B
+      redirect_next.target := mtvec.get_exception_pc
 
       io.direct_write_ports.mepc.valid := true.B
       io.direct_write_ports.mepc.bits := entry.pc
@@ -358,14 +375,16 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     // reference to  https://github.com/riscv/riscv-isa-manual/pull/929
     val new_mstatus = mstatus.get_mret_mstatus(y =/= Privilegelevel.M.U(2.W))
 
-    io.branch_commit.valid := true.B
-//    when(io.branch_commit.fire) {
-    io.branch_commit.bits.target := mepc
+//    io.branch_commit.valid := true.B
+//    io.branch_commit.bits.target := mepc
+
+    redirect_next.valid := true.B
+    redirect_next.target := mepc
+
     io.direct_write_ports.mstatus.valid := true.B
     io.direct_write_ports.mstatus.bits := new_mstatus
     flush_next := true.B
     ack := true.B
-//    }
   }
 
   def retire_sret(entry: ScoreBoardEntry, ack: Bool): Unit = {
@@ -393,8 +412,11 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       // reference to  https://github.com/riscv/riscv-isa-manual/pull/929
       val new_mstatus = sstatus.get_sret_mstatus(y =/= Privilegelevel.M.U(2.W))
 
-      io.branch_commit.valid := true.B
-      io.branch_commit.bits.target := sepc
+//      io.branch_commit.valid := true.B
+//      io.branch_commit.bits.target := sepc
+
+      redirect_next.valid := true.B
+      redirect_next.target := sepc
 
       io.direct_write_ports.mstatus.valid := true.B
       io.direct_write_ports.mstatus.bits := new_mstatus
@@ -495,7 +517,6 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     gpr.wdata := 0.U
     gpr.wen := false.B
   })
-  io.branch_commit.noenq()
   io.rob_commit_ports.foreach(_.nodeq())
 
   io.rob_commit_ports.zip(pop_ack).foreach { case (port, ack) =>
@@ -519,8 +540,11 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     // and rerun the current inst
     csr_side_effect := false.B
     flush_next := true.B
-    io.branch_commit.valid := true.B
-    io.branch_commit.bits.target := rob_data_seq.head.pc
+//    io.branch_commit.valid := true.B
+//    io.branch_commit.bits.target := rob_data_seq.head.pc
+
+    redirect_next.valid := true.B
+    redirect_next.target := rob_data_seq.head.pc
   }
 
   // first inst
@@ -675,8 +699,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       val mtvec = new MtvecFiled(io.direct_read_ports.mtvec)
       privilege_mode := Privilegelevel.M.U
 
-      io.branch_commit.valid := true.B
-      io.branch_commit.bits.target := mtvec.get_interrupt_pc(
+      redirect_next.valid := true.B
+      redirect_next.target := mtvec.get_interrupt_pc(
         cause.asUInt(3, 0) //  0-11
       )
 
@@ -705,8 +729,8 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       flush_next := true.B
       privilege_mode := Privilegelevel.S.U
 
-      io.branch_commit.valid := true.B
-      io.branch_commit.bits.target := stvec.get_interrupt_pc(
+      redirect_next.valid := true.B
+      redirect_next.target := stvec.get_interrupt_pc(
         cause.asUInt(3, 0) //  0-11
       )
 
