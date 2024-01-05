@@ -6,6 +6,7 @@ import chiseltest.ChiselScalatestTester
 import chiseltest.formal._
 import leesum.Cache.{ICacheReq, ICacheResp}
 import leesum.Utils.DecoderHelper
+import leesum.bpu.StaticBP
 import leesum.{RedirectPC, _}
 import org.scalatest.flatspec.AnyFlatSpec
 

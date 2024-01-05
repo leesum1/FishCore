@@ -1,4 +1,4 @@
-package leesum.fronten
+package leesum.bpu
 
 import chisel3._
 import chisel3.util.{Enum, Mux1H, MuxCase, PopCount}

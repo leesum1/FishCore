@@ -24,7 +24,6 @@ class ICacheTag(tag_length: Int) extends Module {
   tag.readwritePorts(0).writeData := io.wdata
   tag.readwritePorts(0).isWrite := io.wen
   tag.readwritePorts(0).enable := io.en
-  io.rdata := tag.readwritePorts(0).readData
 
   // keep the last read data when current operation is read
   val read_op = io.en && !io.wen
