@@ -1,14 +1,15 @@
 package leesum.bpu
 
 import chisel3._
-import chisel3.util.{Mux1H, PopCount, isPow2, log2Ceil}
+import chisel3.util.{Mux1H, OHToUInt, PopCount, isPow2, log2Ceil}
+import leesum.Utils.SinglePortSRAM
 import leesum.{BpType, GenVerilogHelper}
-import leesum.Utils.{LFSRRand, SinglePortSRAM}
 
 class BTBEntry extends Bundle {
   val target_pc = UInt(39.W)
   val offset = UInt(3.W) // the first jump instruction offset
   val bp_type = BpType()
+  val is_rvc = Bool()
 }
 
 class BTBPCField(pc: UInt, nums: Int) {
@@ -28,9 +29,16 @@ class BTBNway(way_count: Int = 2, nums: Int) extends Module {
     // lookup
     val lookup_en = Input(Bool())
     val lookup_pc = Input(UInt(39.W)) // sv39
+
+    // lookup result
     val target_pc = Output(UInt(39.W))
     val target_pc_hit = Output(Bool())
-    // refill
+    val hit_way = Output(UInt(log2Ceil(way_count).W))
+    val branch_offset = Output(UInt(3.W))
+    val branch_type = Output(BpType())
+    val branch_is_rvc = Output(Bool())
+
+    // update
     val refill_en = Input(Bool())
     val refill_pc = Input(UInt(39.W))
     val refill_data = Input(new BTBEntry())
@@ -65,7 +73,7 @@ class BTBNway(way_count: Int = 2, nums: Int) extends Module {
     tag_array.io.wen := io.refill_en && (i.U === io.refill_way_sel)
     tag_array.io.wdata := refill_pc_field.tag
 
-    val tag_valid = btb_valids(i)(lookup_pc_field.index)
+    val tag_valid = btb_valids(i)(RegNext(lookup_pc_field.index))
 
     when(io.refill_en && (i.U === io.refill_way_sel)) {
       btb_valids(i)(refill_pc_field.index) := true.B
@@ -91,15 +99,6 @@ class BTBNway(way_count: Int = 2, nums: Int) extends Module {
     data_array.io.rdata
   }
 
-  // hit info from N ways
-//  val tag_and_offset_hits_ = VecInit(
-//    tag_rdatas
-//      .map { case (valid, tag) =>
-//        // one cycle delay
-//        valid && io.lookup_en && (tag === RegNext(lookup_pc_field.tag))
-//      }
-//  )
-
   val tag_and_offset_hits = VecInit(
     tag_rdatas
       .zip(data_rdatas)
@@ -107,15 +106,21 @@ class BTBNway(way_count: Int = 2, nums: Int) extends Module {
         // use lookup pc one cycle delay
         val tag_hit = tag === RegNext(lookup_pc_field.tag)
         val offset_hit = data.offset >= RegNext(lookup_pc_field.offset)
-        valid && io.lookup_en && tag_hit && offset_hit
+        val bp_type_hit = data.bp_type =/= BpType.None
+        Seq(valid, RegNext(io.lookup_en), tag_hit, offset_hit, bp_type_hit)
+          .reduce(_ && _)
       }
   )
 
   // choose  hit data
   val btb_rdata = Mux1H(tag_and_offset_hits, data_rdatas)
+  io.target_pc_hit := tag_and_offset_hits.reduce(_ || _)
+  io.hit_way := OHToUInt(tag_and_offset_hits)
 
   io.target_pc := btb_rdata.target_pc
-  io.target_pc_hit := tag_and_offset_hits.reduce(_ || _)
+  io.branch_offset := btb_rdata.offset
+  io.branch_type := btb_rdata.bp_type
+  io.branch_is_rvc := btb_rdata.is_rvc
 
   // ------------------------
   // assert

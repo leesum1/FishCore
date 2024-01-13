@@ -1,6 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util._
+import leesum.bpu.BTBEntry
 import leesum.mmu_sv39.SfenceVMABundle
 import leesum.moniter.{CommitMonitorPort, PerfMonitorCounter}
 
@@ -9,8 +10,11 @@ class RedirectPC extends Bundle {
   val target = UInt(64.W)
 }
 
-class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
-    extends Module {
+class CommitStage(
+    num_commit_port: Int,
+    btb_way_count: Int = 2,
+    monitor_en: Boolean = false
+) extends Module {
   val io = IO(new Bundle {
 
     val rob_commit_ports =
@@ -36,6 +40,14 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     val csr_commit = Decoupled(Bool())
     // branch
     val commit_redirect_pc = Output(new RedirectPC())
+    // bpu commit update port
+    val cmt_update_pc = Output(UInt(39.W))
+    val cmt_update_btb_en =
+      Output(Bool()) // btb only update when branch predict fail
+    val cmt_update_bim_en = Output(Bool()) // bim update for all branch
+    val cmt_update_btb_data = Output(new BTBEntry())
+    val cmt_update_bim_data = Output(UInt(2.W))
+    val cmt_update_btb_way_sel = Output(UInt(log2Ceil(btb_way_count).W))
 
     // csr regfile direct access
     val direct_read_ports = Input(new CSRDirectReadPorts)
@@ -74,6 +86,13 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   val sfencevma_next = RegInit(false.B)
   val sfence_buf = RegInit(0.U.asTypeOf(new SfenceVMABundle))
   val redirect_next = RegInit(0.U.asTypeOf(new RedirectPC))
+  val cmt_update_btb_en_next = RegInit(false.B)
+  val cmt_update_bim_en_next = RegInit(false.B)
+  val cmt_update_pc_next = RegInit(0.U(39.W))
+  val cmt_update_btb_data_next = RegInit(0.U.asTypeOf(new BTBEntry()))
+  val cmt_update_bim_data_next = RegInit(0.U(2.W))
+  val cmt_update_btb_way_sel_next = RegInit(0.U(log2Ceil(btb_way_count).W))
+
   val privilege_mode = RegInit(3.U(2.W)) // machine mode
 
   // interrupt
@@ -106,6 +125,14 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
 
   io.cur_privilege_mode := privilege_mode
 
+  when(cmt_update_bim_en_next) {
+    cmt_update_bim_en_next := false.B
+  }
+
+  when(cmt_update_btb_en_next) {
+    cmt_update_btb_en_next := false.B
+  }
+
   when(flush_next) {
     flush_next := false.B
   }
@@ -127,6 +154,13 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
   io.tlb_flush.valid := sfencevma_next
   io.tlb_flush.bits := sfence_buf
   io.commit_redirect_pc := redirect_next
+
+  io.cmt_update_pc := cmt_update_pc_next
+  io.cmt_update_btb_en := cmt_update_btb_en_next
+  io.cmt_update_bim_en := cmt_update_bim_en_next
+  io.cmt_update_btb_data := cmt_update_btb_data_next
+  io.cmt_update_bim_data := cmt_update_bim_data_next
+  io.cmt_update_btb_way_sel := cmt_update_btb_way_sel_next
 
   assert(
     CheckOrder(pop_ack),
@@ -197,6 +231,39 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
     assert(entry.exception.valid === false.B)
     val mis_predict = entry.bp.is_miss_predict
     val need_write_back = FuOP.is_jalr(entry.fu_op) || FuOP.is_jal(entry.fu_op)
+
+    ack := true.B
+    when(need_write_back) {
+      gpr_commit_port.write(entry.rd_addr, entry.result)
+    }
+
+    val crossline_jump_inst = entry.pc(2, 0) === 6.U && !entry.is_rvc
+
+    dontTouch(crossline_jump_inst)
+
+    // if crossline_jump_inst is true, we use pc + 2 as the next pc
+    val cmt_update_pc = Mux(
+      crossline_jump_inst,
+      entry.pc + 2.U,
+      entry.pc
+    )
+
+    cmt_update_pc_next := cmt_update_pc
+
+    // only update btb when branch predict fail
+    cmt_update_btb_en_next := mis_predict
+    cmt_update_btb_way_sel_next := entry.bp.sel_way
+
+    // new btb data
+    cmt_update_btb_data_next.target_pc := entry.bp.predict_pc
+    cmt_update_btb_data_next.is_rvc := entry.is_rvc
+    cmt_update_btb_data_next.bp_type := entry.bp.bp_type
+    cmt_update_btb_data_next.offset := cmt_update_pc(2, 0)
+
+    // always update bim
+    cmt_update_bim_en_next := true.B
+    cmt_update_bim_data_next := entry.bp.next_bim_value
+
     when(mis_predict) {
 //      io.branch_commit.valid := true.B
 //      io.branch_commit.bits.target := entry.bp.predict_pc
@@ -205,18 +272,11 @@ class CommitStage(num_commit_port: Int, monitor_en: Boolean = false)
       redirect_next.target := entry.bp.predict_pc
 
       flush_next := true.B
-      ack := true.B
       bp_perf.inc_miss(1.U)
-      when(need_write_back) {
-        gpr_commit_port.write(entry.rd_addr, entry.result)
-      }
     }.otherwise {
       bp_perf.inc_hit(1.U)
-      when(need_write_back) {
-        gpr_commit_port.write(entry.rd_addr, entry.result)
-      }
-      ack := true.B
     }
+
   }
 
   def retire_none(entry: ScoreBoardEntry, ack: Bool): Unit = {

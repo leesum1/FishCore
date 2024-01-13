@@ -66,6 +66,7 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
   io.last_half_pc := last_half_pc
 
   def inst_mask(pc: UInt): Vec[Bool] = {
+    // TODO: use decode table
     val ret = MuxLookup(
       pc(2, 0),
       VecInit(Seq.fill(4)(false.B))
@@ -194,15 +195,14 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
     when(!inst_mask_vec(i)) {
       realign_insts(i).valid := false.B
     }
+    // TODO: branch predict info?
   }
 
   val vec_compress = Module(new VecCompressorNew(new INSTEntry, 4))
 
-  vec_compress.io.in.zipWithIndex.foreach {
-    case (x, i) => {
-      x.bits := realign_insts(i)
-      x.valid := realign_insts(i).valid && io.input.valid
-    }
+  vec_compress.io.in.zipWithIndex.foreach { case (x, i) =>
+    x.bits := realign_insts(i)
+    x.valid := realign_insts(i).valid && io.input.valid
   }
 
   // TODO: improve this

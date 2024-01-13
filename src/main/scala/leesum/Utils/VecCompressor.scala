@@ -123,6 +123,18 @@ class VecCompressorNew[T <: Data](gen: T, num: Int, formal: Boolean = false)
   assert(CheckOrder(VecInit(io.out.map(_.valid))))
 }
 
+object VecCompress {
+  def apply[T <: Data](in: Vec[Valid[T]]) = {
+    val num = in.length
+    val gen = in.head.bits.cloneType
+    val out = Wire(Vec(num, Valid(gen)))
+    val compressor = Module(new VecCompressor(gen, num))
+    compressor.io.in := in
+    out := compressor.io.out
+    out
+  }
+}
+
 class VecCompressFormal
     extends AnyFlatSpec
     with ChiselScalatestTester
@@ -136,5 +148,12 @@ class VecCompressFormal
 }
 
 object gen_VecCompressor_verilog extends App {
-  GenVerilogHelper(new VecCompressorNew(UInt(32.W), 4))
+//  GenVerilogHelper(new VecCompressorNew(UInt(32.W), 4))
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val in = Input(Vec(4, Valid(UInt(32.W))))
+      val out = Output(Vec(4, Valid(UInt(32.W))))
+    })
+    io.out := VecCompress(io.in)
+  })
 }

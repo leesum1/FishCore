@@ -72,6 +72,22 @@ object CheckOverlap {
   }
 }
 
+object InRange {
+  def apply(addr: UInt, range_start: UInt, range_end: UInt): Bool = {
+    assert(range_start < range_end, "range_start must be less than range_end")
+    val in_range = (addr >= range_start) && (addr < range_end)
+    in_range
+  }
+  def apply(addr: UInt, range: Seq[(UInt, UInt)]): Bool = {
+    val in_range = range
+      .map({ case (start, end) =>
+        apply(addr, start, end)
+      })
+      .reduce(_ || _)
+    in_range
+  }
+}
+
 /** only if vec(i-1) is valid, vec(i) can be valid. 0000 -> pass check 0001 ->
   * pass check 0011 -> pass check 0111 -> pass check 1111 -> pass check 1000 ->
   * fail check 1001 -> fail check 1100 -> fail check

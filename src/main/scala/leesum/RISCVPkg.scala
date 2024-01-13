@@ -1,8 +1,9 @@
 package leesum
 
-import chisel3.util.{BitPat, Cat, Fill, MuxLookup, log2Ceil}
+import chisel3.util.{BitPat, Cat, Fill, Mux1H, MuxLookup, log2Ceil}
 import chisel3.{ChiselEnum, _}
 import leesum.Cache.DcacheConst
+import leesum.Utils.DecoderHelper
 
 object RISCVPkg {
 
@@ -2600,14 +2601,41 @@ object ExceptionEntry {
 class BpEntry extends Bundle {
   val bp_type = BpType()
   val predict_pc = UInt(64.W) // use to store predict pc and target pc
-  val is_taken: Bool = Bool()
+
+  val bim_value = UInt(2.W)
+  val sel_way = UInt(2.W)
+
+  def is_taken = bim_value(1)
+
   val is_miss_predict = Bool()
+
+  def next_bim_value: UInt = {
+    val bim_inc =
+      (is_taken && !is_miss_predict) || (!is_taken && is_miss_predict)
+
+    val bim_mapping = Array(
+      // {bim_inc, bim_value} -> next_bim_value
+      BitPat("b1_00") -> 1.U(2.W),
+      BitPat("b1_01") -> 2.U(2.W),
+      BitPat("b1_10") -> 3.U(2.W),
+      BitPat("b1_11") -> 3.U(2.W),
+      BitPat("b0_00") -> 0.U(2.W),
+      BitPat("b0_01") -> 0.U(2.W),
+      BitPat("b0_10") -> 1.U(2.W),
+      BitPat("b0_11") -> 2.U(2.W)
+    )
+    val next_value =
+      DecoderHelper(Cat(bim_inc, bim_value), 0.U(2.W), bim_mapping)
+
+    next_value(1, 0)
+  }
 
   def clear(): Unit = {
     bp_type := BpType.None
     predict_pc := 0.U
-    is_taken := false.B
+    bim_value := 0.U
     is_miss_predict := false.B
+    sel_way := 0.U
   }
 }
 

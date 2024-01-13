@@ -21,6 +21,7 @@ class FuBranchResp extends Bundle {
   val is_miss_predict = Bool()
   val redirect_pc = UInt(64.W)
   val exception = new ExceptionEntry()
+  val branch_type = BpType()
   def wb_valid = !is_miss_predict && !exception.valid
 }
 
@@ -35,7 +36,7 @@ class FuBranch(rvc_en: Boolean = false) extends Module {
   val rs1_imm = io.in.bits.rs1 + io.in.bits.imm
   val pc_inc = io.in.bits.pc + Mux(io.in.bits.is_rvc, 2.U, 4.U)
 
-  val taraget_pc = MuxLookup(
+  val target_pc = MuxLookup(
     io.in.bits.fu_op.asUInt,
     0.U
   )(
@@ -50,7 +51,7 @@ class FuBranch(rvc_en: Boolean = false) extends Module {
       FuOP.BrBgeu.asUInt -> pc_imm
     )
   )
-  dontTouch(taraget_pc)
+  dontTouch(target_pc)
 
   val branch_taken = MuxLookup(
     io.in.bits.fu_op.asUInt,
@@ -71,12 +72,25 @@ class FuBranch(rvc_en: Boolean = false) extends Module {
   dontTouch(branch_taken)
 
   val is_miss_predict = (io.in.bits.bp.is_taken =/= branch_taken) ||
-    (io.in.bits.bp.is_taken && io.in.bits.bp.predict_pc =/= taraget_pc)
+    (io.in.bits.bp.is_taken && io.in.bits.bp.predict_pc =/= target_pc)
+
+  val redirect_pc = Wire(UInt(64.W))
+
+  dontTouch(redirect_pc)
+  when(io.in.bits.bp.is_taken =/= branch_taken) {
+    redirect_pc := Mux(branch_taken, target_pc, pc_inc)
+  }.elsewhen(branch_taken && io.in.bits.bp.predict_pc =/= target_pc) {
+    redirect_pc := target_pc
+  }.otherwise {
+    redirect_pc := target_pc
+  }
+
+  dontTouch(is_miss_predict)
 
   val exception_valid = if (rvc_en) {
     false.B
   } else {
-    taraget_pc(1)
+    target_pc(1)
   }
 
   val br_resp = Wire(Decoupled(new FuBranchResp))
@@ -86,16 +100,17 @@ class FuBranch(rvc_en: Boolean = false) extends Module {
   br_resp.bits.is_miss_predict := is_miss_predict
 
   // used in commit stage
-  br_resp.bits.redirect_pc := Mux(
-    io.in.bits.bp.is_taken,
-    pc_inc,
-    taraget_pc
-  )
+  br_resp.bits.redirect_pc := redirect_pc
   br_resp.bits.wb_data := pc_inc
   br_resp.bits.trans_id := io.in.bits.trans_id
   br_resp.bits.exception.valid := exception_valid
   br_resp.bits.exception.cause := ExceptionCause.misaligned_fetch
-  br_resp.bits.exception.tval := taraget_pc
+  br_resp.bits.exception.tval := target_pc
+  br_resp.bits.branch_type := io.in.bits.bp.bp_type
+
+  when(io.in.valid) {
+    assert(io.in.bits.bp.bp_type =/= BpType.None)
+  }
 
   SkidBufferWithFLush(
     br_resp,

@@ -14,6 +14,7 @@ class PCGenStage(boot_pc: Long, rvc_en: Boolean = false) extends Module {
     val commit_redirect_pc = Input(new RedirectPC)
     val pc = Decoupled(UInt(64.W))
     val npc = Output(UInt(64.W))
+    val f1_redirect_pc = Input(new RedirectPC)
     val f3_redirect_pc = Input(new RedirectPC)
   })
   val pc_reg = RegInit((boot_pc - fetch_size).U(64.W))
@@ -30,6 +31,8 @@ class PCGenStage(boot_pc: Long, rvc_en: Boolean = false) extends Module {
     npc := io.f3_redirect_pc.target
     npc_buf := io.f3_redirect_pc.target
     npc_buf_valid := true.B
+  }.elsewhen(io.f1_redirect_pc.valid) {
+    npc := io.f1_redirect_pc.target
   }.otherwise {
     npc := Cat(pc_reg(63, 3), "b000".U(3.W)) + fetch_size.U
   }
@@ -46,6 +49,10 @@ class PCGenStage(boot_pc: Long, rvc_en: Boolean = false) extends Module {
   // ---------------------
   // assert
   // ---------------------
+
+//  when(io.f1_redirect_pc.valid) {
+//    assert(io.pc.fire, "pc must be valid when f1_redirect_pc is valid")
+//  }
 
   assert(
     CheckAligned(pc_reg, if (rvc_en) 1.U(2.W) else 2.U(2.W)),

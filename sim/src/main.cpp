@@ -1,4 +1,5 @@
 #include <PerfMonitor.h>
+#include <cstdio>
 #include <ranges>
 #include "AMKBDDev.h"
 #include "AMRTCDev.h"
@@ -120,7 +121,7 @@ int main(int argc, char** argv) {
 
     uint64_t clk_num = 0;
     uint64_t commit_num = 0;
-    uint8_t no_commit_num = 0;
+    uint64_t no_commit_num = 0;
     uint64_t to_host_check_freq = 0;
     enum SimState_t {
         sim_run,

@@ -57,7 +57,7 @@ class FishCore(
   val rob = Module(new ReOrderBuffer(16, 2, 2))
   val issue_stage_rob = Module(new IssueStageNew(2, 2))
 
-  val commit_stage = Module(new CommitStage(2, monitor_en))
+  val commit_stage = Module(new CommitStage(2, 2, monitor_en))
   val reg_file = Module(new GPRs(2, 2, monitor_en))
   val csr_regs = Module(new CSRRegs)
 
@@ -237,8 +237,15 @@ class FishCore(
   commit_stage.io.amo_commit <> lsu.io.amo_commit
   commit_stage.io.csr_commit <> csr.io.csr_commit
 
-  // commit stage <> pc gen
+  // commit stage <> ifu
   ifu.io.commit_redirect_pc <> commit_stage.io.commit_redirect_pc
+
+  ifu.io.cmt_update_pc := commit_stage.io.cmt_update_pc
+  ifu.io.cmt_update_bim_en := commit_stage.io.cmt_update_bim_en
+  ifu.io.cmt_update_btb_en := commit_stage.io.cmt_update_btb_en
+  ifu.io.cmt_update_bim_data := commit_stage.io.cmt_update_bim_data
+  ifu.io.cmt_update_btb_data := commit_stage.io.cmt_update_btb_data
+  ifu.io.cmt_update_btb_way_sel := commit_stage.io.cmt_update_btb_way_sel
 
   // commit stage <> monitor
   commit_stage.io.commit_monitor.get <> monitor.io.commit_monitor

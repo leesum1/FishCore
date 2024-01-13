@@ -43,7 +43,7 @@ print("Build Success!")
 
 def execute_riscv_test(bin_name):
     # 构建命令字符串
-    command = f"xmake r Vtop -d --clk=10000000 -f  {bin_name}"
+    command = f"xmake r Vtop -d --clk=300000 -f  {bin_name}"
 
     # 执行命令
     am_test_ret = utilts.execute_command(command, enable_print=False)

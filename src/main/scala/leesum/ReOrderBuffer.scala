@@ -183,6 +183,7 @@ class ReOrderBuffer(
         .bp
         .is_miss_predict := branch_resp.is_miss_predict
       rob.content(rob_idx).bp.predict_pc := branch_resp.redirect_pc
+      rob.content(rob_idx).bp.bp_type := branch_resp.branch_type
       rob.content(rob_idx).exception := branch_resp.exception
 
       assert(
