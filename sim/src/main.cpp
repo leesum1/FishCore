@@ -122,6 +122,8 @@ int main(int argc, char** argv) {
     uint64_t clk_num = 0;
     uint64_t commit_num = 0;
     uint64_t no_commit_num = 0;
+    uint64_t dead_lock_detect_freq = 4096;
+
     uint64_t to_host_check_freq = 0;
     enum SimState_t {
         sim_run,
@@ -139,8 +141,9 @@ int main(int argc, char** argv) {
             clk_num += 1;
             to_host_check_freq += 1;
             // stop run
-            if (no_commit_num > 300) {
-                console->critical("no commit for 300 cycles, stop run");
+            if (no_commit_num > dead_lock_detect_freq) {
+                console->critical("no commit for {} cycles, dead lock at pc: 0x{:016x}\n",
+                                  dead_lock_detect_freq,sim_base.get_pc());
                 state = sim_abort;
             }
             // memory

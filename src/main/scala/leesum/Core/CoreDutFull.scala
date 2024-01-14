@@ -50,7 +50,7 @@ class FishCore(
 
   // pipeline stage
   val ifu = Module(new IFUTop(boot_pc, rvc_en))
-  val mmmu = Module(new MMU(addr_map))
+  val mmu = Module(new MMU(addr_map))
 
   val decode_stage = Seq.tabulate(2)(i => Module(new InstDecoder))
 
@@ -111,7 +111,7 @@ class FishCore(
   issue_stage_rob.io.flush := commit_stage.io.flush
   rob.io.flush := commit_stage.io.flush
   lsu.io.flush := commit_stage.io.flush
-  mmmu.io.flush := commit_stage.io.flush
+  mmu.io.flush := commit_stage.io.flush
   dcache.io.flush := commit_stage.io.flush
   icache_top.io.flush := commit_stage.io.flush
   bru.io.flush := commit_stage.io.flush
@@ -122,45 +122,45 @@ class FishCore(
   icache_top.io.fencei := commit_stage.io.icache_fencei
   dcache.io.fencei := commit_stage.io.dcache_fencei
   dcache.io.fencei_ack <> commit_stage.io.dcache_fencei_ack
-  mmmu.io.tlb_flush := commit_stage.io.tlb_flush
+  mmu.io.tlb_flush := commit_stage.io.tlb_flush
 
   // ifu <> icache
   ifu.io.icache_req <> icache_top.io.req
   ifu.io.icache_resp <> icache_top.io.resp
 
   // mmu <> icache
-  mmmu.io.fetch_req <> icache_top.io.mmu_req
-  mmmu.io.fetch_resp <> icache_top.io.mmu_resp
+  mmu.io.fetch_req <> icache_top.io.mmu_req
+  mmu.io.fetch_resp <> icache_top.io.mmu_resp
 
   // monitor <> icache
   monitor.io.perf_icache := icache_top.io.perf_icache
   monitor.io.perf_dcache := dcache.io.perf_dcache
 
   // mmu <> lsu
-  mmmu.io.lsu_req <> lsu.io.tlb_req
-  mmmu.io.lsu_resp <> lsu.io.tlb_resp
+  mmu.io.lsu_req <> lsu.io.tlb_req
+  mmu.io.lsu_resp <> lsu.io.tlb_resp
 
   // mmu <> csr
-  mmmu.io.satp := csr_regs.io.direct_read_ports.satp
-  mmmu.io.mstatus := csr_regs.io.direct_read_ports.mstatus
+  mmu.io.satp := csr_regs.io.direct_read_ports.satp
+  mmu.io.mstatus := csr_regs.io.direct_read_ports.mstatus
 
   // mmu <> commit stage
-  mmmu.io.cur_privilege := commit_stage.io.cur_privilege_mode
+  mmu.io.cur_privilege := commit_stage.io.cur_privilege_mode
 
   // mmu <> dcache
 
   DCacheConnect.load_req_to_dcache_req(
-    mmmu.io.dcache_load_req,
+    mmu.io.dcache_load_req,
     dcache_arb.io.req_vec(0)
   )
   DCacheConnect.dcache_resp_to_load_resp(
     dcache_arb.io.resp_vec(0),
-    mmmu.io.dcache_load_resp
+    mmu.io.dcache_load_resp
   )
 
   // mmu <> monitor
-  monitor.io.perf_dtlb := mmmu.io.perf_dtlb
-  monitor.io.perf_itlb := mmmu.io.perf_itlb
+  monitor.io.perf_dtlb := mmu.io.perf_dtlb
+  monitor.io.perf_itlb := mmu.io.perf_itlb
 
   // ifu <> decode stage
 
@@ -235,6 +235,8 @@ class FishCore(
   commit_stage.io.store_commit <> lsu.io.store_commit
   commit_stage.io.mmio_commit <> lsu.io.mmio_commit
   commit_stage.io.amo_commit <> lsu.io.amo_commit
+  commit_stage.io.store_queue_empty := lsu.io.store_queue_empty
+
   commit_stage.io.csr_commit <> csr.io.csr_commit
 
   // commit stage <> ifu

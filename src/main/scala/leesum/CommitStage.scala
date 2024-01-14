@@ -36,6 +36,7 @@ class CommitStage(
     val mmio_commit = Decoupled(Bool())
     val store_commit = Decoupled(Bool())
     val amo_commit = Decoupled(Bool())
+    val store_queue_empty = Input(Bool())
     // csr
     val csr_commit = Decoupled(Bool())
     // branch
@@ -321,9 +322,14 @@ class CommitStage(
 //      printf("Fence at %x\n", entry.pc)
       ack := true.B
     }.elsewhen(entry.fu_op === FuOP.FenceI) {
-      dfencei_next := true.B
+      dfencei_next := io.store_queue_empty
+
+      when(dfencei_next) {
+        assert(io.store_queue_empty, "store queue must be empty when fencei")
+      }
+
       // clear icache after clear dcache
-      when(io.dcache_fencei_ack) {
+      when(io.dcache_fencei_ack && io.dcache_fencei) {
         flush_next := true.B
         ifencei_next := true.B
         dfencei_next := false.B

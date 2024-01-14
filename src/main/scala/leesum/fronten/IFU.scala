@@ -259,6 +259,7 @@ class IFUTop(
       inst_fifo.io.push.bits(0).valid := true.B
       inst_fifo.io.push.bits(0).pc := f2_f3_pipe.io.out.bits.exception_pc
       inst_fifo.io.push.bits(0).exception := f2_f3_pipe.io.out.bits.exception
+      inst_fifo.io.push.valid := true.B
     }.otherwise {
 
       val f3_bp_info = f2_f3_pipe.io.out.bits.bp_info

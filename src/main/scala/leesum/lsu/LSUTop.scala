@@ -2,7 +2,12 @@ package leesum.lsu
 
 import chisel3._
 import chisel3.util.Decoupled
-import leesum.Cache.{LoadDcacheReq, LoadDcacheResp, StoreDcacheReq, StoreDcacheResp}
+import leesum.Cache.{
+  LoadDcacheReq,
+  LoadDcacheResp,
+  StoreDcacheReq,
+  StoreDcacheResp
+}
 import leesum._
 
 class LSUReq extends AGUReq {}
@@ -32,6 +37,7 @@ class LSUTop() extends Module {
     val mmio_commit = Flipped(Decoupled(Bool()))
     val store_commit = Flipped(Decoupled(Bool()))
     val amo_commit = Flipped(Decoupled(Bool()))
+    val store_queue_empty = Output(Bool())
 
     // write-back interface TODO: Add a arbiter
     val lsu_resp = Decoupled(new LSUResp)
@@ -51,6 +57,8 @@ class LSUTop() extends Module {
   val store_arb = Module(
     new ReqRespArbiter(2, new StoreDcacheReq, new StoreDcacheResp)
   )
+
+  io.store_queue_empty := store_queue.io.st_queue_empty
 
   load_arb.io.flush := false.B
   store_arb.io.flush := false.B
