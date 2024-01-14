@@ -1,13 +1,13 @@
 package leesum.fronten
 
 import chisel3._
-import chisel3.util.{BitPat, Decoupled, Enum, MuxLookup, is, log2Ceil, switch}
+import chisel3.util.{BitPat, Decoupled, Enum, is, log2Ceil, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal._
 import leesum.Cache.{ICacheReq, ICacheResp}
 import leesum.Utils.DecoderHelper
-import leesum.bpu.{BPInfo, BPUTop, BTBEntry, PreDocode}
 import leesum._
+import leesum.bpu.{BPInfo, BPUTop, BTBEntry, PreDocode}
 import org.scalatest.flatspec.AnyFlatSpec
 
 class f2_f3_pipe_entry extends Bundle {
@@ -55,7 +55,6 @@ class IFUTop(
 
   val f3_bpu_update_valid_next = RegInit(false.B)
   val f3_bpu_update_pc_next = RegInit(0.U(39.W))
-  val f3_bpu_update_real_type_next = RegInit(BpType.None)
   val f3_bpu_update_sel_way_next = RegInit(0.U(log2Ceil(btb_way_count).W))
 
   when(f3_bpu_update_valid_next) {
@@ -77,12 +76,12 @@ class IFUTop(
   nextline_bp.io.f3_update_btb_en := f3_bpu_update_valid_next
   nextline_bp.io.f3_update_btb_pc := f3_bpu_update_pc_next
   nextline_bp.io.f3_update_btb_way_sel := f3_bpu_update_sel_way_next
-  nextline_bp.io.f3_update_btb_data.bp_type := f3_bpu_update_real_type_next
 
-  // not used signal
+  // TODO: f3 btb update should refine!!!
   nextline_bp.io.f3_update_btb_data.offset := 0.U
   nextline_bp.io.f3_update_btb_data.is_rvc := false.B
-  nextline_bp.io.f3_update_btb_data.target_pc := 0x2233.U
+  nextline_bp.io.f3_update_btb_data.target_pc := "x80000000".asUInt
+  nextline_bp.io.f3_update_btb_data.bp_type := BpType.None
 
   nextline_bp.io.clear_en := false.B // TODO: fence.i
 
@@ -494,7 +493,6 @@ class IFUTop(
           bpu_alias_pc + 2.U,
           bpu_alias_pc
         )
-        f3_bpu_update_real_type_next := bpu_alias_real_type
         f3_bpu_update_sel_way_next := bpu_alias_sel_way
       }
 
