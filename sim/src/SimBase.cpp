@@ -4,7 +4,7 @@
 #include <memory>
 #include <iostream>
 #include <spdlog/logger.h>
-#include <execution>
+// #include <execution>
 #include "Utils.h"
 
 SimBase::SimBase() {
@@ -53,6 +53,7 @@ void SimBase::reset() {
     for (int i = 0; i < 10; i++) {
         top->clock ^= 1;
         top->eval();
+        dump_wave();
     }
     top->reset = 0;
 }
@@ -66,7 +67,7 @@ SimBase::SimState_t SimBase::get_state() const {
 }
 
 uint64_t SimBase::get_pc() const {
-    return top->io_difftest_bits_pc;
+    return top->io_difftest_bits_last_pc;
 }
 
 uint64_t SimBase::get_reg(const int idx) {
@@ -194,41 +195,44 @@ bool SimBase::finished() const {
     return sim_state != sim_run;
 }
 
-void SimBase::add_after_step_task(const SimTask_t& task) {
-    after_step_tasks.emplace_back(task);
+void SimBase::add_after_clk_rise_task(const SimTask_t& task) {
+    after_clk_rise_tasks.emplace_back(task);
 }
 
-void SimBase::add_before_step_task(const SimTask_t& task) {
-    before_step_tasks.emplace_back(task);
+void SimBase::add_before_clk_rise_task(const SimTask_t& task) {
+    before_clk_rise_tasks.emplace_back(task);
 }
 
-void SimBase::step(const std::function<void()>& func) {
+void SimBase::step() {
     top->clock ^= 1;
     top->eval();
     // always sample on posedge
-    if (top->clock == 1 && top->reset == 0) {
-        // execute before step tasks
+    if (top->clock == 1) {
+        cycle_num++;
+        not_commit_num++;
+        if (top->io_difftest_valid) {
+            commit_num += top->io_difftest_bits_commited_num;
+            not_commit_num = 0;
+        }
 
-        std::for_each(std::execution::par_unseq, before_step_tasks.begin(), before_step_tasks.end(),
-                      [](SimTask_t& task) {
-                          task.counter++;
-                          if (task.counter >= task.period_cycle) {
-                              task.counter = 0;
-                              task.task_func();
-                          }
-                      });
-
-
-        func();
-
-        // // execute after step tasks
-        std::for_each(std::execution::unseq, after_step_tasks.begin(), after_step_tasks.end(), [](SimTask_t& task) {
+        // execute after step tasks
+        for (auto& task : after_clk_rise_tasks) {
             task.counter++;
             if (task.counter >= task.period_cycle) {
                 task.counter = 0;
                 task.task_func();
             }
-        });
+        }
+    }
+    else {
+        // execute before step tasks
+        for (auto& task : before_clk_rise_tasks) {
+            task.counter++;
+            if (task.counter >= task.period_cycle) {
+                task.counter = 0;
+                task.task_func();
+            }
+        }
     }
 
     dump_wave();

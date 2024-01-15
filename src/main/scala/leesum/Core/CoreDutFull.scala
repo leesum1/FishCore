@@ -33,7 +33,7 @@ class FishCore(
 ) extends Module {
 
   val io = IO(new Bundle {
-    val difftest = Output(Valid(new DifftestPort))
+    val difftest = Output(Valid(new DifftestPort(2)))
     val perf_monitor = Output(new PerfPort)
     val axi_master = new AXIMasterIO(32, 64)
     val mtime = Input(UInt(64.W))

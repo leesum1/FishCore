@@ -79,7 +79,7 @@ class FishSoc(
   }
 
   val io = IO(new Bundle {
-    val difftest = Output(Valid(new DifftestPort))
+    val difftest = Output(Valid(new DifftestPort(2)))
     val perf_monitor = Output(new PerfPort)
     val mem_port = Flipped(new BasicMemoryIO(32, 64))
   })

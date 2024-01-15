@@ -34,12 +34,15 @@ private:
     bool wave_trace_flag = false;
     uint64_t wave_stime = 0;
 #endif
-    std::vector<SimTask_t> after_step_tasks;
-    std::vector<SimTask_t> before_step_tasks;
+    std::vector<SimTask_t> after_clk_rise_tasks;
+    std::vector<SimTask_t> before_clk_rise_tasks;
     SimState_t sim_state = sim_stop;
 
 public:
     std::shared_ptr<Vtop> top;
+    uint64_t commit_num = 0;
+    uint64_t not_commit_num = 0;
+    uint64_t cycle_num = 0;
 
     SimBase();
 
@@ -47,7 +50,7 @@ public:
 
     void dump_wave() const;
 
-    void step(const std::function<void()>& func);
+    void step();
 
     void reset();
 
@@ -64,8 +67,8 @@ public:
 
     bool finished() const;
 
-    void add_after_step_task(const SimTask_t& task);
-    void add_before_step_task(const SimTask_t& task);
+    void add_after_clk_rise_task(const SimTask_t& task);
+    void add_before_clk_rise_task(const SimTask_t& task);
 
     ~SimBase();
 };

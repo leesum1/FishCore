@@ -1,5 +1,5 @@
 package leesum.moniter
-import chisel3._
+import chisel3.{util, _}
 import chisel3.util.{Decoupled, Enum, PopCount, PriorityMux, Valid, is, switch}
 import leesum.{CSRDirectReadPorts, ExceptionEntry, FuOP, FuType}
 
@@ -20,10 +20,19 @@ class CommitMonitorPort extends Bundle {
 
 class DifftestCsr extends Bundle {}
 
-class DifftestPort extends Bundle {
+class InstPort extends Bundle {
   val pc = UInt(64.W)
   val inst = UInt(32.W)
   val is_rvc = Bool()
+}
+
+class DifftestPort(commit_port_num: Int) extends Bundle {
+  // inst info
+  val inst_info = Vec(commit_port_num, new InstPort)
+
+  // difftest info
+  val last_pc = UInt(64.W)
+  val last_is_rvc = Bool()
   val exception = new ExceptionEntry()
   val commited_num = UInt(8.W)
   val contain_mmio = Bool()
@@ -31,6 +40,7 @@ class DifftestPort extends Bundle {
   val csr_skip = Bool()
   // csr port
   val csr = new CSRDirectReadPorts
+  // gpr port
   val gpr = Vec(32, UInt(64.W))
 }
 
@@ -49,7 +59,7 @@ class MonitorTop(commit_port_num: Int) extends Module {
       Vec(commit_port_num, Flipped(Valid(new CommitMonitorPort)))
     val gpr_monitor = Input(new GERMonitorPort)
     val csr_monitor = Input(new CSRDirectReadPorts)
-    val difftest = Output(Valid(new DifftestPort))
+    val difftest = Output(Valid(new DifftestPort(commit_port_num)))
     // perf monitor
     val perf_bp = Input(new PerfMonitorCounter)
     val perf_commit = Input(new PerfMonitorCounter)
@@ -96,11 +106,44 @@ class MonitorTop(commit_port_num: Int) extends Module {
   io.difftest.bits.gpr := io.gpr_monitor.gpr
   io.difftest.bits.csr := io.csr_monitor
   io.difftest.bits.commited_num := commit_monitor_count
-  io.difftest.bits.pc := last_commit_inst.pc
-  io.difftest.bits.is_rvc := last_commit_inst.is_rvc
-  io.difftest.bits.inst := last_commit_inst.inst
+
+  io.difftest.bits.last_pc := last_commit_inst.pc
+  io.difftest.bits.last_is_rvc := last_commit_inst.is_rvc
+
   io.difftest.bits.exception := last_exception
   io.difftest.bits.contain_mmio := contain_mmio & !last_exception.valid
   io.difftest.bits.has_interrupt := has_interrupt & !last_exception.valid
   io.difftest.bits.csr_skip := csr_skip & !last_exception.valid
+
+  for (i <- 0 until commit_port_num) {
+    io.difftest.bits.inst_info(i).pc := commit_monitor_next(i).bits.pc
+    io.difftest.bits.inst_info(i).inst := commit_monitor_next(i).bits.inst
+    io.difftest.bits.inst_info(i).is_rvc := commit_monitor_next(i).bits.is_rvc
+  }
+
+  // ------------------------
+  // Assert
+  // ------------------------
+
+  when(commit_monitor_count > 0.U) {
+
+    when(last_exception.valid || has_interrupt) {
+      assert(
+        commit_monitor_count === 1.U,
+        "commit_monitor_count must be 1 when exception or interrupt"
+      )
+    }
+
+    assert(
+      PopCount(
+        Seq(contain_mmio, has_interrupt, last_exception.valid)
+      ) <= 1.U
+    )
+    assert(
+      PopCount(
+        Seq(csr_skip, has_interrupt, last_exception.valid)
+      ) <= 1.U
+    )
+  }
+
 }
