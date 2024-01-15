@@ -135,12 +135,18 @@ public:
     ~DiffTest();
 };
 
-inline DiffTest::DiffTest(const uint64_t boot_pc, const uintptr_t memory_size,
-                          const uintptr_t memory_base) {
+inline DiffTest::DiffTest(
+    const uint64_t boot_pc, const uintptr_t memory_size,
+    const uintptr_t memory_base) {
     logger = spdlog::get("console");
     trace = spdlog::get("trace");
     rv64emu_ref = create_rv64emu("rv64imac", "sv39", boot_pc, memory_size,
                                  memory_base, 0, true, true, false);
+    logger->info("Create rv64emu_ref with isa {}, mmu {}, smode {} umode {} boot_pc 0x{:x}, "
+                 "memory_size 0x{:x}, memory_base 0x{:x}",
+                 "rv64imac", "sv39", true, true, boot_pc, memory_size, memory_base);
+
+    logger->info("DiffTest init finished");
 }
 
 inline DiffTest::~DiffTest() { destroy_rv64emu(rv64emu_ref); }

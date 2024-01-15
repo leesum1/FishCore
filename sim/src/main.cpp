@@ -10,6 +10,7 @@
 #include "difftest.hpp"
 #include "SimBase.h"
 #include "include/SramMemoryDev.h"
+#include "include/Itrace.h"
 #include "spdlog/async.h"
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/rotating_file_sink.h"
@@ -63,14 +64,18 @@ int main(int argc, char** argv) {
     // create a file rotating logger with 5mb size max and 3 rotated files
     auto _trace = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
         "trace", "trace.txt", 1024 * 1024 * 4, 1);
-    auto _ipc = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
-        "ipc", "ipc.txt", 1024 * 1024 * 4, 1);
+    auto perf_trace = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
+        "perf_trace", "perf_trace.txt", 1024 * 1024 * 4, 1);
+    auto itrace_log = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
+        "itrace", "itrace.txt", 1024 * 1024 * 4, 1);
 
     _trace->set_level(spdlog::level::info);
-
+    perf_trace->set_level(spdlog::level::info);
+    itrace_log->set_level(spdlog::level::info);
     if (!log_en) {
         _trace->set_level(spdlog::level::off);
-        _ipc->set_level(spdlog::level::off);
+        perf_trace->set_level(spdlog::level::off);
+        itrace_log->set_level(spdlog::level::off);
     }
 
 
@@ -97,8 +102,12 @@ int main(int argc, char** argv) {
         device_manager.add_device(&sim_am_kbd.value());
         device_manager.add_device(&sim_am_vga.value());
     }
-
     device_manager.print_device_info();
+
+    // -----------------------
+    // difftest
+    // -----------------------
+
 
     auto createDiffTest = [&]() -> std::optional<DiffTest> {
         return difftest_en
@@ -115,55 +124,130 @@ int main(int argc, char** argv) {
 
     if (wave_en) {
         sim_base.enable_wave_trace("test.fst", wave_stime);
+        console->info("Wave init finished");
     }
 
-    sim_base.reset();
+    // -----------------------
+    // itrace
+    // -----------------------
+
+    auto itrace = Itrace();
+
+
+    // Test
+    itrace.riscv_disasm(0xaaa80413, 0x80000000);
+    // -----------------------
+    // perf monitor
+    // -----------------------
+
+    auto perf_monitor = PerfMonitor();
+    perf_monitor.add_perf_counter({
+        "bp", &sim_base.top->io_perf_monitor_bp_hit_counter, &sim_base.top->io_perf_monitor_bp_num_counter
+    });
+    perf_monitor.add_perf_counter({
+        "icache", &sim_base.top->io_perf_monitor_icache_hit_counter,
+        &sim_base.top->io_perf_monitor_icache_num_counter
+    });
+    perf_monitor.add_perf_counter({
+        "dcache", &sim_base.top->io_perf_monitor_dcache_hit_counter,
+        &sim_base.top->io_perf_monitor_dcache_num_counter
+    });
+    perf_monitor.add_perf_counter({
+        "itlb", &sim_base.top->io_perf_monitor_itlb_hit_counter,
+        &sim_base.top->io_perf_monitor_itlb_num_counter
+    });
+    perf_monitor.add_perf_counter({
+        "dtlb", &sim_base.top->io_perf_monitor_dtlb_hit_counter,
+        &sim_base.top->io_perf_monitor_dtlb_num_counter
+    });
+
+
+    // // for riscof and riscv-tests, use to_host to communicate with simulation
+    // // environment
+
 
     uint64_t clk_num = 0;
     uint64_t commit_num = 0;
     uint64_t no_commit_num = 0;
-    uint64_t dead_lock_detect_freq = 4096;
-
-    uint64_t to_host_check_freq = 0;
-    enum SimState_t {
-        sim_run,
-        sim_stop,
-        sim_abort,
-        sim_finish
-    };
-    SimState_t state = sim_run;
 
 
-    auto start_time = std::chrono::utc_clock::now();
-    while (!sim_base.finished() && clk_num < max_cycles && state == sim_run) {
-        sim_base.step([&](auto top) -> bool {
-            no_commit_num += 1;
-            clk_num += 1;
-            to_host_check_freq += 1;
-            // stop run
-            if (no_commit_num > dead_lock_detect_freq) {
+    sim_base.add_after_step_task({
+        [&] {
+            sim_mem.check_to_host([&] {
+                sim_base.set_state(SimBase::sim_stop);
+                console->info("Write tohost at pc: 0x{:016x}\n",
+                              sim_base.get_pc());
+            });
+        },
+        "to_host_check",
+        1024
+    });
+    sim_base.add_after_step_task({
+        [&] {
+            perf_monitor.print_perf_counter(false);
+        },
+        "perf_monitor",
+        8192
+    });
+
+    sim_base.add_after_step_task({
+        [&] {
+            if (no_commit_num > 4096) {
                 console->critical("no commit for {} cycles, dead lock at pc: 0x{:016x}\n",
-                                  dead_lock_detect_freq,sim_base.get_pc());
-                state = sim_abort;
+                                  4096, sim_base.get_pc());
+                sim_base.set_state(SimBase::sim_abort);
             }
-            // memory
-            uint64_t rdata = device_manager.update_outputs();
+        },
+        "dead_lock_check",
+        4096
+    });
+
+    sim_base.add_after_step_task({
+        [&] {
+            const uint64_t rdata = device_manager.update_outputs();
+            const auto top = sim_base.top;
             const bool device_sucess = device_manager.update_inputs(
                 top->io_mem_port_i_raddr, top->io_mem_port_i_rd,
                 {
-                    top->io_mem_port_i_waddr, top->io_mem_port_i_wdata,
-                    top->io_mem_port_i_wstrb
+                    .waddr = top->io_mem_port_i_waddr,
+                    .wdata = top->io_mem_port_i_wdata,
+                    .wstrb = top->io_mem_port_i_wstrb
                 },
                 top->io_mem_port_i_we);
 
             if (!device_sucess) {
                 console->critical("device error at pc: 0x{:016x}\n",
                                   sim_base.get_pc());
-                state = sim_abort;
+                sim_base.set_state(SimBase::sim_abort);
             }
 
             top->io_mem_port_o_rdata = rdata;
+        },
+        "update devices",
+        0
+    });
 
+    sim_base.add_after_step_task({
+        [&] {
+            const auto top = sim_base.top;
+            if (top->io_difftest_bits_exception_valid && top->io_difftest_valid) {
+                const auto cause = top->io_difftest_bits_exception_cause;
+                if (cause == 3) {
+                    // ebreak
+                    console->info("AM exit(ebreak) at pc: 0x{:016x}\n",
+                                  sim_base.get_pc());
+                    sim_base.set_state(SimBase::sim_finish);
+                }
+            }
+        },
+        "am exit(ebreak) check",
+        0
+    });
+
+
+    sim_base.add_after_step_task({
+        [&] {
+            const auto top = sim_base.top;
             // diff test
             if (top->io_difftest_valid) {
                 const auto step_num = top->io_difftest_bits_commited_num;
@@ -178,8 +262,6 @@ int main(int argc, char** argv) {
 
                 commit_num += step_num;
                 no_commit_num = 0;
-                _trace->trace("pc 0x{:016x}",
-                              sim_base.get_pc());
 
                 if (has_interrupt & has_exception || has_exception & has_mmio || has_exception & has_csr_skip ||
                     has_mmio & has_csr_skip || has_interrupt & has_mmio || has_interrupt & has_csr_skip) {
@@ -187,18 +269,13 @@ int main(int argc, char** argv) {
                     console->critical("has_interrupt: {}, has_exception: {}, has_mmio: {}, "
                                       "has_csr_skip: {}\n",
                                       has_interrupt, has_exception, has_mmio, has_csr_skip);
-                    state = sim_abort;
+                    sim_base.set_state(SimBase::sim_abort);
                 }
 
 
                 if (top->io_difftest_bits_exception_valid) {
                     _trace->info("exception cause 0x{:x},pc 0x{:016x}\n",
                                  cause, sim_base.get_pc());
-                    if (am_en && cause == 3) {
-                        // ebreak
-                        console->info("AM exit");
-                        state = sim_stop;
-                    }
                 }
                 if (difftest_en & diff_ref.has_value()) {
                     // TODO: NOT IMPLEMENTED
@@ -232,28 +309,44 @@ int main(int argc, char** argv) {
                             console->critical("pc mismatch: ref: 0x{:016x}, dut: "
                                               "0x{:016x}\n\n",
                                               diff_ref->get_pc(), sim_base.get_pc());
-                            state = sim_abort;
+                            sim_base.set_state(SimBase::sim_abort);
                         }
                     }
                 }
-                return false;
             }
-            // for riscof and riscv-tests, use to_host to communicate with simulation
-            // environment
-            if (to_host_check_freq > 1024) {
-                _ipc->info("clk_num: {}, commit_num: {}, IPC: {} \n",
-                           clk_num, commit_num,
-                           static_cast<double_t>(commit_num) / static_cast<double_t>(clk_num + 1)
-                );
-                to_host_check_freq = 0;
-                sim_mem.check_to_host([&] {
-                    state = sim_stop;
-                    console->info("Write tohost at pc: 0x{:016x}\n",
-                                  sim_base.get_pc());
-                });
-            }
+        },
+        "difftest",
+        0
+    });
 
-            return false;
+
+    sim_base.reset();
+
+    console->info("Simulator init finished");
+
+
+    perf_monitor.add_perf_counter({
+            "IPC", &commit_num,
+            &clk_num
+        }
+
+    );
+    perf_monitor.add_perf_counter({
+            "CPI", &clk_num,
+            &commit_num
+        }
+
+    );
+
+
+    console->info("Simulator start");
+    auto start_time = std::chrono::utc_clock::now();
+    while
+    (!sim_base.finished() && clk_num < max_cycles
+    ) {
+        sim_base.step([&]() {
+            no_commit_num += 1;
+            clk_num += 1;
         });
     }
 
@@ -261,43 +354,27 @@ int main(int argc, char** argv) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - start_time);
 
 
-    if (dump_signature_file.has_value()) {
+    if
+    (dump_signature_file
+        .
+        has_value()
+    ) {
         sim_mem.dump_signature(dump_signature_file.value());
     }
 
+    console->info(
+        "Simulator exit, Simulate {} cycles in {} ms, Speed {:.2f}K inst/second ",
+        clk_num, duration.count(), static_cast<double>(commit_num) / (duration.count() + 1)
+    );
 
-    const auto bp_hit = sim_base.top->io_perf_monitor_bp_hit_counter;
-    const auto bp_num = sim_base.top->io_perf_monitor_bp_num_counter;
-    const auto icache_hit = sim_base.top->io_perf_monitor_icache_hit_counter;
-    const auto icache_num = sim_base.top->io_perf_monitor_icache_num_counter;
-    const auto dcache_hit = sim_base.top->io_perf_monitor_dcache_hit_counter;
-    const auto dcache_num = sim_base.top->io_perf_monitor_dcache_num_counter;
-    const auto itlb_hit = sim_base.top->io_perf_monitor_itlb_hit_counter;
-    const auto itlb_num = sim_base.top->io_perf_monitor_itlb_num_counter;
-    const auto dtlb_hit = sim_base.top->io_perf_monitor_dtlb_hit_counter;
-    const auto dtlb_num = sim_base.top->io_perf_monitor_dtlb_num_counter;
-
-
-    auto perf_monitor = PerfMonitor();
-    perf_monitor.add_perf_counter({"bp", bp_hit, bp_num});
-    perf_monitor.add_perf_counter({"icache", icache_hit, icache_num});
-    perf_monitor.add_perf_counter({"dcache", dcache_hit, dcache_num});
-    perf_monitor.add_perf_counter({"itlb", itlb_hit, itlb_num});
-    perf_monitor.add_perf_counter({"dtlb", dtlb_hit, dtlb_num});
-    perf_monitor.print_perf_counter();
-
-
-    // add one to avoid div zero
-    console->info("clk_num: {}, commit_num: {}, IPC: {}, SimSpeed: {} insts/seconds",
-                  clk_num, commit_num,
-                  static_cast<double_t>(commit_num) / static_cast<double_t>(clk_num + 1),
-                  commit_num * 1000 / (duration.count() + 1));
+    perf_monitor.print_perf_counter(true);
 
 
     bool success = !am_en || sim_base.get_reg(10) == 0;
 
     // zero means success
-    bool return_code = !(success && state != sim_abort);
+    bool return_code = !(success && sim_base.get_state() != SimBase::sim_abort);
 
-    return return_code;
+    return
+        return_code;
 }

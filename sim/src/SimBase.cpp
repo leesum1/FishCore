@@ -3,20 +3,18 @@
 #include "CSREncode.h"
 #include <memory>
 #include <iostream>
+#include <spdlog/logger.h>
+#include <execution>
 #include "Utils.h"
 
-SimBase::SimBase()
-{
+SimBase::SimBase() {
     top = std::make_shared<Vtop>();
 }
 
-void SimBase::dump_wave() const
-{
+void SimBase::dump_wave() const {
 #if VM_TRACE_FST == 1
-    if (wave_trace_flag)
-    {
-        if (tfp->isOpen() && top->contextp()->time() > wave_stime * 2)
-        {
+    if (wave_trace_flag) {
+        if (tfp->isOpen() && top->contextp()->time() > wave_stime * 2) {
             tfp->dump(top->contextp()->time());
         }
     }
@@ -24,8 +22,7 @@ void SimBase::dump_wave() const
     top->contextp()->timeInc(1);
 }
 
-void SimBase::enable_wave_trace(const std::string& file_name, const uint64_t wave_stime)
-{
+void SimBase::enable_wave_trace(const std::string& file_name, const uint64_t wave_stime) {
 #if VM_TRACE_FST == 1
     wave_trace_flag = true;
     this->wave_stime = wave_stime;
@@ -36,14 +33,11 @@ void SimBase::enable_wave_trace(const std::string& file_name, const uint64_t wav
 #endif
 }
 
-SimBase::~SimBase()
-{
+SimBase::~SimBase() {
 #if VM_TRACE_FST == 1
-    if (wave_trace_flag)
-    {
+    if (wave_trace_flag) {
         std::cout << "close wave trace file" << std::endl;
-        if (tfp->isOpen())
-        {
+        if (tfp->isOpen()) {
             tfp->flush();
             tfp->close();
             delete tfp;
@@ -52,29 +46,33 @@ SimBase::~SimBase()
 #endif
 }
 
-void SimBase::reset() const
-{
+void SimBase::reset() {
+    sim_state = sim_run;
     top->reset = 1;
 
-    for (int i = 0; i < 10; i++)
-    {
+    for (int i = 0; i < 10; i++) {
         top->clock ^= 1;
         top->eval();
     }
     top->reset = 0;
 }
 
-uint64_t SimBase::get_pc() const
-{
+void SimBase::set_state(const SimState_t state) {
+    sim_state = state;
+}
+
+SimBase::SimState_t SimBase::get_state() const {
+    return sim_state;
+}
+
+uint64_t SimBase::get_pc() const {
     return top->io_difftest_bits_pc;
 }
 
-uint64_t SimBase::get_reg(const int idx)
-{
+uint64_t SimBase::get_reg(const int idx) {
 #define GET_REG(top, idx) (top->io_difftest_bits_gpr_##idx)
 
-    switch (idx)
-    {
+    switch (idx) {
     case 0:
         return GET_REG(top, 0);
     case 1:
@@ -146,12 +144,10 @@ uint64_t SimBase::get_reg(const int idx)
 }
 
 
-uint64_t SimBase::get_csr(int idx)
-{
+uint64_t SimBase::get_csr(int idx) {
     MY_ASSERT(idx < 4096, "csr index out of range");
 #define GET_CSR(top, name) (top->io_difftest_bits_csr_##name)
-    switch (idx)
-    {
+    switch (idx) {
     case MISA:
         return GET_CSR(top, misa);
     case MSTATUS:
@@ -194,20 +190,46 @@ uint64_t SimBase::get_csr(int idx)
     }
 }
 
-void SimBase::step(
-    const std::function<bool(std::shared_ptr<Vtop>)>& func
-)
-{
+bool SimBase::finished() const {
+    return sim_state != sim_run;
+}
+
+void SimBase::add_after_step_task(const SimTask_t& task) {
+    after_step_tasks.emplace_back(task);
+}
+
+void SimBase::add_before_step_task(const SimTask_t& task) {
+    before_step_tasks.emplace_back(task);
+}
+
+void SimBase::step(const std::function<void()>& func) {
     top->clock ^= 1;
     top->eval();
     // always sample on posedge
-    if (top->clock == 1 && top->reset == 0)
-    {
-        if (func(top))
-        {
-            finish_flag = true;
-            top->contextp()->gotFinish(true);
-        }
+    if (top->clock == 1 && top->reset == 0) {
+        // execute before step tasks
+
+        std::for_each(std::execution::par_unseq, before_step_tasks.begin(), before_step_tasks.end(),
+                      [](SimTask_t& task) {
+                          task.counter++;
+                          if (task.counter >= task.period_cycle) {
+                              task.counter = 0;
+                              task.task_func();
+                          }
+                      });
+
+
+        func();
+
+        // // execute after step tasks
+        std::for_each(std::execution::unseq, after_step_tasks.begin(), after_step_tasks.end(), [](SimTask_t& task) {
+            task.counter++;
+            if (task.counter >= task.period_cycle) {
+                task.counter = 0;
+                task.task_func();
+            }
+        });
     }
+
     dump_wave();
 }

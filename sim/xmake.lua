@@ -12,12 +12,34 @@ if is_mode("debug") then
 	set_policy("build.sanitizer.address", true)
 end
 
+
+
+
+
+
+package("capstone_my")
+    add_deps("cmake")
+    set_sourcedir(path.join(os.scriptdir(), "third_party/capstone"))
+    on_install(function (package)
+        local configs = {}
+        table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"))
+        table.insert(configs, "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"))
+        import("package.tools.cmake").install(package, configs)
+    end)
+package_end()
+
+
+
+
+
 add_requires("cli11", { system = false })
 add_requires("assert", { system = true })
 add_requires("elfio", { system = false })
 add_requires("libsdl", { system = false })
 add_requires("readerwriterqueue", { system = false })
 add_requires("spdlog", { system = false })
+add_requires("tbb", { system = false })
+add_requires("capstone_my")
 
 set_policy("build.warning", true)
 -- set_warnings("all", "extra")
@@ -38,7 +60,8 @@ add_values("verilator.flags", "--trace-fst")
 
 -- add_values("verilator.flags", "--threads", "4")
 add_includedirs("src/include/")
-add_packages("cli11", "assert", "elfio", "libsdl", "readerwriterqueue", "spdlog")
+add_includedirs("third_party/capstone/include/capstone/")
+add_packages("cli11", "assert", "elfio", "libsdl", "readerwriterqueue", "spdlog","capstone_my","tbb")
 add_links("rv64emu_cbinding")
 
 -- for _, file in ipairs(os.files("test/*.cpp")) do

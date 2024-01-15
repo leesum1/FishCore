@@ -13,27 +13,47 @@
 #include <format>
 
 class SimBase {
-    bool finish_flag = false;
+public:
+    struct SimTask_t {
+        std::function<void()> task_func;
+        std::string name;
+        uint64_t period_cycle;
+        uint64_t counter = 0;
+    };
 
+    enum SimState_t {
+        sim_run,
+        sim_stop,
+        sim_abort,
+        sim_finish
+    };
 
+private:
 #if VM_TRACE_FST == 1
     VerilatedFstC* tfp = nullptr;
     bool wave_trace_flag = false;
     uint64_t wave_stime = 0;
 #endif
+    std::vector<SimTask_t> after_step_tasks;
+    std::vector<SimTask_t> before_step_tasks;
+    SimState_t sim_state = sim_stop;
 
 public:
     std::shared_ptr<Vtop> top;
 
     SimBase();
 
-    void enable_wave_trace(const std::string& file_name, const uint64_t wave_stime);
+    void enable_wave_trace(const std::string& file_name, uint64_t wave_stime);
 
     void dump_wave() const;
 
-    void step(const std::function<bool(std::shared_ptr<Vtop>)>& func);
+    void step(const std::function<void()>& func);
 
-    void reset() const;
+    void reset();
+
+    void set_state(SimState_t state);
+
+    [[nodiscard]] SimState_t get_state() const;
 
     uint64_t get_pc() const;
 
@@ -42,9 +62,10 @@ public:
     uint64_t get_csr(int idx);
 
 
-    bool finished() const {
-        return finish_flag;
-    }
+    bool finished() const;
+
+    void add_after_step_task(const SimTask_t& task);
+    void add_before_step_task(const SimTask_t& task);
 
     ~SimBase();
 };
