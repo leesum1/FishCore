@@ -34,7 +34,6 @@ int main(int argc, char** argv) {
     bool perf_trace_en = false;
     bool log_en = false;
     bool am_en = false;
-    bool debug_en = false;
     bool vga_en = false;
 
 
@@ -53,7 +52,6 @@ int main(int argc, char** argv) {
     app.add_option("--wave_stime", wave_stime, "start wave on N commit")->default_val(0);
     app.add_flag("-d,--difftest", difftest_en, "enable difftest with rv64emu")
        ->default_val(false);
-    app.add_flag("--debug", debug_en, "enable debug")->default_val(false);
     app.add_flag("-l,--log", log_en, "enable log")->default_val(false);
     app.add_flag("--itrace", itrace_en, "enable instruction trace")->default_val(false);
     app.add_flag("--perf_trace", perf_trace_en, "enable perf trace")->default_val(false);
@@ -69,20 +67,21 @@ int main(int argc, char** argv) {
     spdlog::init_thread_pool(1024 * 32, 1);
     auto console = spdlog::stdout_color_mt("console");
     // create a file rotating logger with 5mb size max and 3 rotated files
-    auto _trace = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
-        "trace", "trace.txt", 1024 * 1024 * 4, 1);
+    auto diff_trace = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
+        "diff_trace", "diff_trace.txt", 1024 * 1024 * 4, 1);
     auto perf_trace = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
         "perf_trace", "perf_trace.txt", 1024 * 1024 * 4, 1);
     auto itrace_log = spdlog::create_async<spdlog::sinks::rotating_file_sink_mt>(
         "itrace", "itrace.txt", 1024 * 1024 * 4, 1);
 
-    _trace->set_level(spdlog::level::info);
+    diff_trace->set_level(spdlog::level::info);
     perf_trace->set_level(spdlog::level::info);
     itrace_log->set_level(spdlog::level::info);
     itrace_log->set_pattern("%v");
     perf_trace->set_pattern("%v");
+    diff_trace->set_pattern("%v");
     if (!log_en) {
-        _trace->set_level(spdlog::level::off);
+        diff_trace->set_level(spdlog::level::off);
     }
     if (!itrace_en) {
         itrace_log->set_level(spdlog::level::off);
@@ -282,26 +281,30 @@ int main(int argc, char** argv) {
 
 
                     if (has_mmio || has_csr_skip) {
-                        _trace->info("skip mmio at pc: 0x{:016x},next pc: 0x{:016x}",
-                                     sim_base.get_pc(), next_pc);
+                        diff_trace->info("skip mmio or csr at pc: 0x{:016x},next pc: 0x{:016x}",
+                                         sim_base.get_pc(), next_pc);
                         diff_ref->ref_skip(
                             [&](const size_t idx) { return sim_base.get_reg(idx); },
                             next_pc);
                     }
                     else {
                         diff_ref->step(step_num);
+
+                        diff_trace->info("Commit {} inst at pc: 0x{:016x},next pc: 0x{:016x}",
+                                         step_num, sim_base.get_pc(), next_pc);
+
                         if (has_interrupt) {
-                            _trace->info("has_interrupt at pc: 0x{:016x},cause: 0x{:8x}",
-                                         sim_base.get_pc(), cause);
+                            diff_trace->info("has_interrupt at pc: 0x{:016x},cause: 0x{:8x}",
+                                             sim_base.get_pc(), cause);
                             diff_ref->raise_intr(cause & 0xffff);
                         }
                         const bool pc_mismatch = diff_ref->check_pc(diff_ref->get_pc(),
-                                                                    sim_base.get_pc(), debug_en);
+                                                                    sim_base.get_pc());
                         const bool gpr_mismatch = diff_ref->check_gprs(
                             [&](const size_t idx) { return sim_base.get_reg(idx); },
-                            [&](const size_t idx) { return diff_ref->get_reg(idx); }, debug_en);
+                            [&](const size_t idx) { return diff_ref->get_reg(idx); });
                         const bool csr_mismatch = diff_ref->check_csrs(
-                            [&](const size_t idx) { return sim_base.get_csr(idx); }, debug_en);
+                            [&](const size_t idx) { return sim_base.get_csr(idx); });
                         const bool mismatch = pc_mismatch | gpr_mismatch | csr_mismatch;
 
                         if (mismatch) {
@@ -311,6 +314,8 @@ int main(int argc, char** argv) {
                                               diff_ref->get_pc(), sim_base.get_pc());
                             sim_base.set_state(SimBase::sim_abort);
                         }
+                        diff_trace->info("--------------------End DiffTest at pc: 0x{:016x}----------------------\n",
+                                         sim_base.get_pc());
                     }
                 }
             },
