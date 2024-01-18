@@ -161,37 +161,33 @@ inline DiffTest::~DiffTest() { destroy_rv64emu(rv64emu_ref); }
 
 inline bool DiffTest::check_gprs(const read_gpr_fuc& dut_gpr,
                                  const read_gpr_fuc& ref_gpr) const {
-    bool fail = false;
-    // first item is the register index, second item is the value
-    auto no_pass_vec = std::vector<std::tuple<uint8_t, uint64_t>>();
-
-    for (int idx : std::views::iota(0, 32)) {
-        const auto ref_val = ref_gpr(idx);
-        if (auto dut_val = dut_gpr(idx); ref_val != dut_val) {
-            no_pass_vec.emplace_back(idx, dut_val);
-            fail = true;
+    auto log_registers = [&](const std::string& name, const read_gpr_fuc& gpr) {
+        for (const int idx : std::views::iota(0, 8)) {
+            diff_trace->info(
+                "{} reg: x{:02d}: 0x{:016x} x{:02d}: 0x{:016x} x{:02d}: 0x{:016x} x{:02d}: 0x{:016x}",
+                name, idx * 4, gpr(idx * 4), idx * 4 + 1, gpr(idx * 4 + 1),
+                idx * 4 + 2, gpr(idx * 4 + 2), idx * 4 + 3, gpr(idx * 4 + 3));
         }
-    }
+    };
 
-    for (const int idx : std::views::iota(0, 8)) {
-        diff_trace->info(
-            "ref reg: x{:02d}: 0x{:016x} x{:02d}: 0x{:016x} x{:02d}: 0x{:016x} x{:02d}: 0x{:016x}",
-            idx * 4, ref_gpr(idx * 4), idx * 4 + 1, ref_gpr(idx * 4 + 1),
-            idx * 4 + 2, ref_gpr(idx * 4 + 2), idx * 4 + 3, ref_gpr(idx * 4 + 3));
-    }
+    log_registers("ref", ref_gpr);
     diff_trace->info("");
-    for (const int idx : std::views::iota(0, 8)) {
-        diff_trace->info(
-            "dut reg: x{:02d}: 0x{:016x} x{:02d}: 0x{:016x} x{:02d}: 0x{:016x} x{:02d}: 0x{:016x}",
-            idx * 4, dut_gpr(idx * 4), idx * 4 + 1, dut_gpr(idx * 4 + 1),
-            idx * 4 + 2, dut_gpr(idx * 4 + 2), idx * 4 + 3, dut_gpr(idx * 4 + 3));
-    }
-    for (const auto& item : no_pass_vec) {
-        auto idx = std::get<0>(item);
-        auto dut_val = std::get<1>(item);
-        logger->critical(
-            " GPR {}({}) mismatch: ref value: 0x{:016x}, dut value: 0x{:016x}", idx,
-            get_gpr_name(idx), ref_gpr(idx), dut_val);
+    log_registers("dut", dut_gpr);
+
+
+    auto compare_and_log = [&](int idx, uint64_t ref_val, uint64_t dut_val) {
+        if (ref_val != dut_val) {
+            logger->critical(
+                " GPR {}({}) mismatch: ref value: 0x{:016x}, dut value: 0x{:016x}", idx,
+                get_gpr_name(idx), ref_val, dut_val);
+            return true;
+        }
+        return false;
+    };
+
+    bool fail = false;
+    for (const int idx : std::views::iota(0, 32)) {
+        fail |= compare_and_log(idx, ref_gpr(idx), dut_gpr(idx));
     }
 
     return fail;

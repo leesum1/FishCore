@@ -8,6 +8,7 @@ import leesum.Cache.{ICacheReq, ICacheResp}
 import leesum.Utils.DecoderHelper
 import leesum._
 import leesum.bpu.{BPInfo, BPUTop, BTBEntry, PreDocode}
+import leesum.moniter.PerfMonitorCounter
 import org.scalatest.flatspec.AnyFlatSpec
 
 class f2_f3_pipe_entry extends Bundle {
@@ -49,10 +50,16 @@ class IFUTop(
     val cmt_update_btb_data = Input(new BTBEntry())
     val cmt_update_bim_data = Input(UInt(2.W))
     val cmt_update_btb_way_sel = Input(UInt(log2Ceil(btb_way_count).W))
+
+    // f1 bp performance monitor
+    val perf_bp_f1 = Output(new PerfMonitorCounter)
   })
 
-  val nextline_bp = Module(new BPUTop(btb_way_count, 1024, 2048))
+  val bp_f1_perf = RegInit(0.U.asTypeOf(new PerfMonitorCounter))
 
+  io.perf_bp_f1 := bp_f1_perf
+
+  val nextline_bp = Module(new BPUTop(btb_way_count, 1024, 2048))
   val f3_bpu_update_valid_next = RegInit(false.B)
   val f3_bpu_update_pc_next = RegInit(0.U(39.W))
   val f3_bpu_update_sel_way_next = RegInit(0.U(log2Ceil(btb_way_count).W))
@@ -482,6 +489,10 @@ class IFUTop(
 
       // f3 flush
       when(bpu_alias_exist) {
+        assert(f3_bp_info.valid, "bpu_alias_exist should be true")
+
+        bp_f1_perf.inc_miss(1.U)
+
         f3_flush_next := true.B
         f3_redirect_next.valid := true.B
         f3_redirect_next.target := bpu_alias_pc
@@ -494,6 +505,8 @@ class IFUTop(
           bpu_alias_pc
         )
         f3_bpu_update_sel_way_next := bpu_alias_sel_way
+      }.elsewhen(f3_bp_info.valid && !bpu_alias_exist) {
+        bp_f1_perf.inc_hit(1.U)
       }
 
     }

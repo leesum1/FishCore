@@ -2,7 +2,12 @@ package leesum.lsu
 
 import chisel3._
 import chisel3.util.{Decoupled, Enum, MuxLookup, Queue, is, switch}
-import leesum.Cache.{LoadDcacheReq, LoadDcacheResp, StoreDcacheReq, StoreDcacheResp}
+import leesum.Cache.{
+  LoadDcacheReq,
+  LoadDcacheResp,
+  StoreDcacheReq,
+  StoreDcacheResp
+}
 import leesum._
 object AtomicOP extends ChiselEnum {
   val None = Value(0.U)
@@ -209,7 +214,6 @@ class AMOQueue extends Module {
 
   val load_shifted_rdata = RegInit(0.U(64.W))
 
-  // TODO: LR SC not implemented
   switch(state) {
     is(sIdle) {
       when(io.amo_commit.valid) {

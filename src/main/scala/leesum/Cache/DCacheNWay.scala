@@ -129,13 +129,14 @@ class DCacheNWay(way_nums: Int) extends Module {
   val dirty_reads = dirty_ways.zipWithIndex.map { case (dirty_array, i) =>
     dirty_array.io.addr := req_filed.index
     dirty_array.io.en := DCacheReqType.req_dirty_en(io.req_type) && io.req_valid
+
     dirty_array.io.wen := DCacheReqType.need_write_dirty(
       io.req_type
     ) && (i.U === io.req_way) // only write the selected way
     dirty_array.io.wdata := Mux(
       io.req_type === DCacheReqType.write,
       true.B, // write type
-      true.B // refill type TODO: when load, should be false
+      true.B // refill type TODO: when load refill, should be false
     )
     dirty_array.io.rdata
   }

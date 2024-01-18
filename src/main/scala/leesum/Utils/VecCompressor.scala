@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal}
-import leesum.{CheckOrder, Gather, GenVerilogHelper}
+import leesum.{CheckOrder, Gather, GenMaskOne, GenVerilogHelper}
 import org.scalatest.flatspec.AnyFlatSpec
 
 /** This module is used to convert a InstsItem to a stream of INSTEntry
@@ -58,15 +58,7 @@ class VecCompressor[T <: Data](gen: T, num: Int, formal: Boolean = false)
     )
   )
 
-  val compressed_valid = MuxLookup(valid_count, 0.U)(
-    Seq(
-      0.U -> 0.U,
-      1.U -> 1.U,
-      2.U -> 3.U,
-      3.U -> 7.U,
-      4.U -> 15.U
-    )
-  ).asBools
+  val compressed_valid = GenMaskOne(4, valid_count, start_left = false).asBools
   require(compressed_valid.length == 4, "compressed_valid must be 4")
 
   val compressed_data = VecInit(out_data_0, out_data_1, out_data_2, out_data_3)
@@ -99,15 +91,8 @@ class VecCompressorNew[T <: Data](gen: T, num: Int, formal: Boolean = false)
 
   val valid_seq = VecInit(io.in.map(_.valid))
   val valid_count = PopCount(valid_seq)
-  val compressed_valid = MuxLookup(valid_count, 0.U)(
-    Seq(
-      0.U -> 0.U,
-      1.U -> 1.U,
-      2.U -> 3.U,
-      3.U -> 7.U,
-      4.U -> 15.U
-    )
-  ).asBools
+
+  val compressed_valid = GenMaskOne(4, valid_count, start_left = false).asBools
 
   val out = Gather(io.in)
 

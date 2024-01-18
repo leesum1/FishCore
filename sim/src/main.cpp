@@ -30,9 +30,9 @@ int main(int argc, char** argv) {
     bool wave_en = false;
     uint64_t wave_stime = 0;
     bool difftest_en = false;
-    bool itrace_en = false;
-    bool perf_trace_en = false;
-    bool log_en = false;
+    bool itrace_log_en = false;
+    bool perf_trace_log_en = false;
+    bool difftest_log_en = false;
     bool am_en = false;
     bool vga_en = false;
 
@@ -52,9 +52,11 @@ int main(int argc, char** argv) {
     app.add_option("--wave_stime", wave_stime, "start wave on N commit")->default_val(0);
     app.add_flag("-d,--difftest", difftest_en, "enable difftest with rv64emu")
        ->default_val(false);
-    app.add_flag("-l,--log", log_en, "enable log")->default_val(false);
-    app.add_flag("--itrace", itrace_en, "enable instruction trace")->default_val(false);
-    app.add_flag("--perf_trace", perf_trace_en, "enable perf trace")->default_val(false);
+    // log options
+    app.add_flag("--difftest_log", difftest_log_en, "enable log")->default_val(false);
+    app.add_flag("--itrace", itrace_log_en, "enable instruction trace")->default_val(false);
+    app.add_flag("--perf_trace", perf_trace_log_en, "enable perf trace")->default_val(false);
+    // device options
     app.add_flag("--vga", vga_en, "enable am vga")->default_val(false);
 
 
@@ -80,13 +82,13 @@ int main(int argc, char** argv) {
     itrace_log->set_pattern("%v");
     perf_trace->set_pattern("%v");
     diff_trace->set_pattern("%v");
-    if (!log_en) {
+    if (!difftest_log_en) {
         diff_trace->set_level(spdlog::level::off);
     }
-    if (!itrace_en) {
+    if (!itrace_log_en) {
         itrace_log->set_level(spdlog::level::off);
     }
-    if (!perf_trace_en) {
+    if (!perf_trace_log_en) {
         perf_trace->set_level(spdlog::level::off);
     }
 
@@ -154,6 +156,9 @@ int main(int argc, char** argv) {
 
     auto perf_monitor = PerfMonitor();
     perf_monitor.add_perf_counter({
+        "bp_f1", &sim_base.top->io_perf_monitor_bp_f1_hit_counter, &sim_base.top->io_perf_monitor_bp_f1_num_counter
+    });
+    perf_monitor.add_perf_counter({
         "bp", &sim_base.top->io_perf_monitor_bp_hit_counter, &sim_base.top->io_perf_monitor_bp_num_counter
     });
     perf_monitor.add_perf_counter({
@@ -184,7 +189,7 @@ int main(int argc, char** argv) {
         }
     );
 
-    if (perf_trace_en) {
+    if (perf_trace_log_en) {
         sim_base.add_after_clk_rise_task({
             [&] {
                 perf_monitor.print_perf_counter(false);
@@ -330,7 +335,7 @@ int main(int argc, char** argv) {
 
     auto itrace = std::optional<Itrace>();
 
-    if (itrace_en) {
+    if (itrace_log_en) {
         itrace.emplace();
         sim_base.add_after_clk_rise_task({
             [&] {
@@ -390,6 +395,8 @@ int main(int argc, char** argv) {
 
 
     auto start_time = std::chrono::utc_clock::now();
+
+    // simulator loop
     while (!sim_base.finished() && sim_base.cycle_num < max_cycles) {
         sim_base.step();
     }

@@ -2,7 +2,6 @@
 
 #include "Vtop.h"
 #include <string>
-
 #if VM_TRACE_FST == 1
 
 #include "verilated_fst_c.h"

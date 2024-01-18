@@ -162,6 +162,9 @@ class FishCore(
   monitor.io.perf_dtlb := mmu.io.perf_dtlb
   monitor.io.perf_itlb := mmu.io.perf_itlb
 
+  // ifu <> monitor
+  monitor.io.perf_bp_f1 := ifu.io.perf_bp_f1
+
   // ifu <> decode stage
 
   for (i <- decode_stage.indices) {
@@ -219,7 +222,7 @@ class FishCore(
   rob.io.fu_branch_wb_port <> bru.io.out
   rob.io.fu_mul_div_wb_port <> mul_div.io.fu_div_mul_resp
   rob.io.fu_csr_wb_port <> csr.io.csr_resp
-  rob.io.fu_amo_wb_port <> lsu.io.amo_writeback
+//  rob.io.fu_amo_wb_port <> lsu.io.amo_writeback
 
   // scoreboard <> commit stage
   rob.io.pop_ports <> commit_stage.io.rob_commit_ports

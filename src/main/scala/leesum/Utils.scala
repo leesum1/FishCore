@@ -115,17 +115,28 @@ object CheckOrder {
   */
 object GenOrderVec {
   def apply(inputVector: Vec[Bool]): Vec[Bool] = {
-    val maskVector = Wire(Vec(inputVector.length, Bool()))
 
-    // The first element in the mask vector
-    maskVector(0) := inputVector(0)
+    val _x = 1
+      .to(inputVector.length)
+      .map(i => {
+        val mask = inputVector.take(i).reduce(_ && _)
+        mask
+      })
 
-    // Generate the mask for the rest of the elements
-    for (i <- 1 until inputVector.length) {
-      maskVector(i) := maskVector(i - 1) && inputVector(i)
-    }
-    maskVector
+    require(_x.size == inputVector.size)
+
+    VecInit(_x)
   }
+}
+
+object gen_GenOrderVec_verilog extends App {
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val in = Input(Vec(4, Bool()))
+      val out = Output(Vec(4, Bool()))
+    })
+    io.out := GenOrderVec(io.in)
+  })
 }
 
 /** SignExt is an object that provides methods for sign extending a given UInt.
@@ -188,6 +199,24 @@ object GenMaskZero {
       }
     }
   }
+
+  def apply(width: Int, zero_count: UInt, start_left: Boolean): UInt = {
+    assert(
+      zero_count <= width.U,
+      "zero_count must be less than width"
+    )
+
+    val mask_result = Mux1H(
+      0.to(width)
+        .map(i => {
+          val mask = GenMaskZero(width, i, start_left)
+          val eq = zero_count === i.U
+          eq -> mask
+        })
+    )
+    require(mask_result.getWidth == width)
+    mask_result
+  }
 }
 object GenMaskOne {
   def apply(width: Int, one_count: Int, start_left: Boolean = false): UInt = {
@@ -206,6 +235,35 @@ object GenMaskOne {
       }
     }
   }
+
+  def apply(width: Int, one_count: UInt, start_left: Boolean): UInt = {
+    assert(
+      one_count <= width.U,
+      "one_count must be less than width"
+    )
+
+    val mask_result = Mux1H(
+      0.to(width)
+        .map(i => {
+          val mask = GenMaskOne(width, i, start_left)
+          val eq = one_count === i.U
+          eq -> mask
+        })
+    )
+    require(mask_result.getWidth == width)
+    mask_result
+  }
+
+}
+
+object gen_maskone_verilog extends App {
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val one_count = Input(UInt(4.W))
+      val mask = Output(UInt(4.W))
+    })
+    io.mask := GenMaskZero(4, io.one_count, true)
+  })
 }
 
 /** PopCountOrder(vec) returns the number of valid bits before the first invalid

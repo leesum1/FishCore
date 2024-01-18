@@ -7,6 +7,7 @@
 // #include <execution>
 #include "Utils.h"
 
+
 SimBase::SimBase() {
     top = std::make_shared<Vtop>();
 }
@@ -204,6 +205,17 @@ void SimBase::add_before_clk_rise_task(const SimTask_t& task) {
 }
 
 void SimBase::step() {
+    auto execute_tasks = [&](auto& tasks) {
+        for (auto& task : tasks) {
+            task.counter += 1;
+            if (task.counter >= task.period_cycle) {
+                task.counter = 0;
+                task.task_func();
+            }
+        }
+    };
+
+
     top->clock ^= 1;
     top->eval();
     // always sample on posedge
@@ -216,23 +228,13 @@ void SimBase::step() {
         }
 
         // execute after step tasks
-        for (auto& task : after_clk_rise_tasks) {
-            task.counter++;
-            if (task.counter >= task.period_cycle) {
-                task.counter = 0;
-                task.task_func();
-            }
-        }
+        // execute_tasks_co(after_clk_rise_tasks);
+        execute_tasks(after_clk_rise_tasks);
     }
     else {
         // execute before step tasks
-        for (auto& task : before_clk_rise_tasks) {
-            task.counter++;
-            if (task.counter >= task.period_cycle) {
-                task.counter = 0;
-                task.task_func();
-            }
-        }
+        // execute_tasks_co(before_clk_rise_tasks);
+        execute_tasks(before_clk_rise_tasks);
     }
 
     dump_wave();

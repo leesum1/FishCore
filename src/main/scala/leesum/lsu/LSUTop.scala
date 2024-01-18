@@ -1,7 +1,7 @@
 package leesum.lsu
 
 import chisel3._
-import chisel3.util.Decoupled
+import chisel3.util.{Arbiter, Decoupled}
 import leesum.Cache.{
   LoadDcacheReq,
   LoadDcacheResp,
@@ -39,9 +39,7 @@ class LSUTop() extends Module {
     val amo_commit = Flipped(Decoupled(Bool()))
     val store_queue_empty = Output(Bool())
 
-    // write-back interface TODO: Add a arbiter
     val lsu_resp = Decoupled(new LSUResp)
-    val amo_writeback = Decoupled(new LSUResp)
     val agu_writeback = Decoupled(new AGUWriteBack)
   })
 
@@ -122,10 +120,12 @@ class LSUTop() extends Module {
   // agu queue <> commit
   amo_queue.io.amo_commit <> io.amo_commit
 
-  // load queue <> write-back
-  io.lsu_resp <> load_write_back
-  // amo queue <> write-back
-  io.amo_writeback <> amo_queue.io.amo_writeback
+  val lsu_write_back_arb = Module(new Arbiter(new LSUResp, 2))
+  lsu_write_back_arb.io.in(0) <> amo_queue.io.amo_writeback
+  lsu_write_back_arb.io.in(1) <> load_write_back
+
+  io.lsu_resp <> lsu_write_back_arb.io.out
+
 }
 
 object gen_lsu_verilog extends App {

@@ -99,10 +99,9 @@ class PTW(formal: Boolean = false) extends Module {
       io.dcache_load_req.valid := true.B
       io.dcache_load_req.bits.size := DcacheConst.SIZE8
       io.dcache_load_req.bits.is_mmio := false.B
-      // TODO: use concat
       io.dcache_load_req.bits.paddr := ptw_info_a + va.get_ppn(
         ptw_info_i
-      ) * ptw_info_pte_size.U
+      ) ## 0.U(3.W)
 
       when(io.dcache_load_req.fire && !io.flush) {
         state := sWaitDcacheResp

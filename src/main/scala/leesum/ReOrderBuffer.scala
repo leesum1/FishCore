@@ -53,7 +53,6 @@ class ReOrderBuffer(
       val fu_branch_wb_port = Flipped(Decoupled(new FuBranchResp))
       // lsu_port
       val fu_lsu_wb_port = Flipped(Decoupled(new LSUResp))
-      val fu_amo_wb_port = Flipped(Decoupled(new LSUResp))
       val fu_lsu_agu_wb_port = Flipped(Decoupled(new AGUWriteBack))
       //  mul_div_port
       val fu_mul_div_wb_port = Flipped(Decoupled(new FuMulDivResp))
@@ -139,19 +138,19 @@ class ReOrderBuffer(
     }
   }
 
-  def amo_write_back(amo_resp: LSUResp, en: Bool): Unit = {
-    when(en) {
-      val rob_idx = amo_resp.trans_id
-      // normal write-back in LoadQueue, no exception
-      rob.content(rob_idx).complete := true.B
-      rob.content(rob_idx).result := amo_resp.wb_data
-      rob.content(rob_idx).result_valid := true.B
-      assert(
-        rob.content_valid(rob_idx),
-        "rob entry must be valid"
-      )
-    }
-  }
+//  def amo_write_back(amo_resp: LSUResp, en: Bool): Unit = {
+//    when(en) {
+//      val rob_idx = amo_resp.trans_id
+//      // normal write-back in LoadQueue, no exception
+//      rob.content(rob_idx).complete := true.B
+//      rob.content(rob_idx).result := amo_resp.wb_data
+//      rob.content(rob_idx).result_valid := true.B
+//      assert(
+//        rob.content_valid(rob_idx),
+//        "rob entry must be valid"
+//      )
+//    }
+//  }
 
   def agu_write_back(agu_resp: AGUWriteBack, en: Bool) = {
     when(en) {
@@ -235,7 +234,7 @@ class ReOrderBuffer(
   io.fu_alu_wb_port.foreach(_.ready := true.B)
   io.fu_branch_wb_port.ready := true.B
   io.fu_lsu_wb_port.ready := true.B
-  io.fu_amo_wb_port.ready := true.B
+//  io.fu_amo_wb_port.ready := true.B
   io.fu_lsu_agu_wb_port.ready := true.B
   io.fu_mul_div_wb_port.ready := true.B
   io.fu_csr_wb_port.ready := true.B
@@ -245,7 +244,6 @@ class ReOrderBuffer(
   )
   agu_write_back(io.fu_lsu_agu_wb_port.bits, io.fu_lsu_agu_wb_port.fire)
   lsu_write_back(io.fu_lsu_wb_port.bits, io.fu_lsu_wb_port.fire)
-  amo_write_back(io.fu_amo_wb_port.bits, io.fu_amo_wb_port.fire)
   branch_write_back(io.fu_branch_wb_port.bits, io.fu_branch_wb_port.fire)
   mul_div_write_back(io.fu_mul_div_wb_port.bits, io.fu_mul_div_wb_port.fire)
   csr_write_back(io.fu_csr_wb_port.bits, io.fu_csr_wb_port.fire)
