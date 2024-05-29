@@ -2,7 +2,12 @@ package leesum.Utils
 
 import chisel3._
 import chisel3.util.BitPat
-import chisel3.util.experimental.decode.{TruthTable, decoder}
+import chisel3.util.experimental.decode.{
+  BoolDecodeField,
+  DecodePattern,
+  TruthTable,
+  decoder
+}
 
 // TODO: UNTESTED
 object DecoderHelper {

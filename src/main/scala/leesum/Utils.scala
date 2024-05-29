@@ -29,7 +29,7 @@ object GenVerilogHelper {
       firtoolOpts = Array(
         "--disable-all-randomization",
         "--strip-debug-info",
-//        "--lowering-options=disallowLocalVariables,disallowPackedArrays",
+        // "--lowering-options=disallowLocalVariables,disallowPackedArrays",
 //        "--split-verilog",
 //        "--lowering-options=disallowLocalVariables",
         "--lower-memories",
@@ -38,7 +38,7 @@ object GenVerilogHelper {
         "-O=release"
       )
     )
-    rm_anno_file()
+    // rm_anno_file()
   }
 }
 
@@ -1045,7 +1045,7 @@ object DensePrefixSum extends PrefixSum {
   }
 }
 
-object Gather {
+object Gather_Rocket {
   // Compress all the valid data to the lowest indices
   def apply[T <: Data](data: Seq[ValidIO[T]]): Vec[T] =
     apply(data, DensePrefixSum)
@@ -1098,10 +1098,132 @@ object gen_Gather_verilog extends App {
       val in = Input(Vec(8, ValidIO(UInt(32.W))))
       val out = Output(Vec(8, UInt(32.W)))
     })
-    io.out := Gather(io.in)
+//    io.out := Gather(io.in)
+    val out_reg = RegInit(VecInit(Seq.fill(8)(0.U(32.W))))
 
-    val cpress = Module(new VecCompressor(UInt(32.W), 4))
-//    cpress.io.in := io.in
-//    io.out := cpress.io.out.map(_.bits)
+//    out_reg := Gather_new(io.in.map(_.valid), io.in.map(_.bits))
+//    out_reg := Gather(io.in)
+    out_reg := Gather_LEESUM1(io.in)
+
+    io.out := ShiftRegister(out_reg, 10)
+
   })
+}
+
+object Gather_LEESUM2 {
+
+  def iter_once[T <: Data](
+      valid_seq: Seq[Bool],
+      data_seq: Seq[T],
+      iter_seq: Seq[T],
+      cur_layer: Int
+  ): Seq[T] = {
+    require(
+      valid_seq.size == data_seq.size,
+      "valid_seq and data_seq must have the same size"
+    )
+    if (cur_layer == data_seq.size - 1) {
+      println(s"cur_layer: $cur_layer")
+      println(s"cur_compressed_seq: ${data_seq.last}")
+      Seq(data_seq.last)
+    } else {
+      val next_compressed_seq =
+        iter_once(valid_seq, data_seq, iter_seq, cur_layer + 1)
+
+      val cur_valid = valid_seq(cur_layer)
+      val cur_data = data_seq(cur_layer)
+
+      println(s"cur_layer: $cur_layer")
+      val x = Vector.tabulate(data_seq.size - cur_layer)(i => {
+        if (i == 0) {
+          Mux(cur_valid, cur_data, next_compressed_seq(i))
+        } else if (i == data_seq.size - cur_layer - 1) {
+          next_compressed_seq.last
+        } else {
+          Mux(cur_valid, next_compressed_seq(i - 1), next_compressed_seq(i))
+        }
+
+      })
+
+      x
+    }
+  }
+
+  def apply[T <: Data](
+      valid_seq: Seq[Bool],
+      data_seq: Seq[T]
+  ): Seq[T] = {
+    require(
+      valid_seq.size == data_seq.size,
+      "valid_seq and data_seq must have the same size"
+    )
+    val compressed_seq = iter_once(valid_seq, data_seq, Seq(), 0)
+
+    require(compressed_seq.size == data_seq.size)
+    compressed_seq
+  }
+
+}
+
+object Gather_LEESUM1 {
+  def apply[T <: Data](data: Seq[ValidIO[T]]): Vec[T] = {
+    val popBits = log2Ceil(data.size)
+    val holes = data.map(x => WireInit(UInt(popBits.W), (!x.valid).asUInt))
+    val prefixHoles = DensePrefixSum(holes)(_ + _)
+
+    val prio_seq = 0.until(data.size).map { i =>
+      val pmux_valid = data.drop(i).map(_.valid)
+      val pmux_bits = data.drop(i).map(_.bits)
+      PriorityMux(pmux_valid, pmux_bits)
+    }
+    require(prio_seq.size == data.size)
+
+    val compressedData = Wire(Vec(data.size, data.head.bits.cloneType))
+
+    for (i <- 0 until data.size) {
+      val tmp_data = VecInit(prio_seq.drop(i))
+      val tmp_idx = prefixHoles(i)
+      compressedData(i) := tmp_data(tmp_idx)
+    }
+    compressedData
+  }
+}
+
+object gather_scala_test extends App {
+  def iter_once(
+      valid_seq: Seq[Boolean],
+      data_seq: Seq[Int],
+      iter_seq: Seq[Int],
+      cur_layer: Int
+  ): Seq[Int] = {
+    require(
+      valid_seq.size == data_seq.size,
+      "valid_seq and data_seq must have the same size"
+    )
+    if (cur_layer == data_seq.size - 1) {
+      println(s"cur_layer: $cur_layer")
+      println(s"cur_compressed_seq: ${data_seq.last}")
+      Seq(data_seq.last)
+    } else {
+      val next_compressed_seq =
+        iter_once(valid_seq, data_seq, iter_seq, cur_layer + 1)
+
+      val cur_valid = valid_seq(cur_layer)
+      val cur_data = data_seq(cur_layer)
+
+      val cur_compressed_valid_seq = Seq(cur_data) ++ next_compressed_seq
+      val cur_compressed_novalid_seq = next_compressed_seq ++ Seq(0)
+      val cur_compressed_seq =
+        if (cur_valid) cur_compressed_valid_seq else cur_compressed_novalid_seq
+
+      println(s"cur_layer: $cur_layer")
+      println(s"cur_compressed_seq: $cur_compressed_seq")
+      cur_compressed_seq
+    }
+  }
+
+  val gathered_seq =
+    iter_once(Seq(true, false, false, true), Seq(1, 2, 3, 4), Seq(), 0)
+  println(gathered_seq)
+
 }

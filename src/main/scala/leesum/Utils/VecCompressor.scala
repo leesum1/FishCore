@@ -4,7 +4,14 @@ import chisel3._
 import chisel3.util._
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal}
-import leesum.{CheckOrder, Gather, GenMaskOne, GenVerilogHelper}
+import leesum.{
+  CheckOrder,
+  Gather_Rocket,
+  Gather_LEESUM1,
+  Gather_LEESUM2,
+  GenMaskOne,
+  GenVerilogHelper
+}
 import org.scalatest.flatspec.AnyFlatSpec
 
 /** This module is used to convert a InstsItem to a stream of INSTEntry
@@ -87,14 +94,15 @@ class VecCompressorNew[T <: Data](gen: T, num: Int, formal: Boolean = false)
     val out = Output(Vec(num, Valid(gen)))
   })
 
-  require(num == 4, "only support 4 now")
+//  require(num == 4, "only support 4 now")
 
   val valid_seq = VecInit(io.in.map(_.valid))
   val valid_count = PopCount(valid_seq)
 
-  val compressed_valid = GenMaskOne(4, valid_count, start_left = false).asBools
+  val compressed_valid =
+    GenMaskOne(num, valid_count, start_left = false).asBools
 
-  val out = Gather(io.in)
+  val out = Gather_LEESUM2(io.in.map(_.valid), io.in.map(_.bits))
 
   io.out.zipWithIndex.foreach { case (x, i) =>
     x.valid := compressed_valid(i)
@@ -109,14 +117,29 @@ class VecCompressorNew[T <: Data](gen: T, num: Int, formal: Boolean = false)
 }
 
 object VecCompress {
-  def apply[T <: Data](in: Vec[Valid[T]]) = {
+  def apply[T <: Data](in: Vec[Valid[T]]): Vec[ValidIO[T]] = {
     val num = in.length
     val gen = in.head.bits.cloneType
     val out = Wire(Vec(num, Valid(gen)))
-    val compressor = Module(new VecCompressor(gen, num))
+    val compressor = Module(new VecCompressorNew(gen, num))
     compressor.io.in := in
     out := compressor.io.out
     out
+  }
+
+  def apply[T <: Data](
+      validV: Iterable[Bool],
+      dataV: Iterable[T]
+  ): Vec[ValidIO[T]] = {
+    val num = validV.size
+    val gen = dataV.head.cloneType
+    val in = Wire(Vec(num, Valid(gen)))
+    for ((v, d) <- validV.zip(dataV)) {
+      in(validV.toSeq.indexOf(v)).valid := v
+      in(validV.toSeq.indexOf(v)).bits := d
+    }
+
+    apply(in)
   }
 }
 

@@ -426,11 +426,13 @@ class DummyMultiPortFIFO[T <: Data](
     num_pop_ports
   )
 
+  val cmp_vec = VecCompress(io.in.map(_.valid), io.in.map(_.bits))
+
   fifo.push_pop_flush_cond(
     VecInit(io.in.map(_.fire)),
     VecInit(io.out.map(_.fire)),
     io.flush,
-    VecInit(io.in.map(_.bits))
+    VecInit(cmp_vec.map(_.bits))
   )
 
   val peek = fifo.peek()

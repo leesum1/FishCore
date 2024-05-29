@@ -340,7 +340,7 @@ class CommitStage(
 
       }
     }.elsewhen(entry.fu_op === FuOP.WFI) {
-      printf("WFI at %x\n", entry.pc)
+      // printf("WFI at %x\n", entry.pc)
       ack := true.B
     }
 

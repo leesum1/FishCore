@@ -1,22 +1,14 @@
 package leesum.Core
 import chisel3._
-import chisel3.util.{Valid, log2Ceil}
-import leesum.Cache.{DCacheConnect, DCacheReq, DCacheResp, DCacheTag, ICacheTop}
+import chisel3.util.Valid
+import leesum.Cache.{DCacheConnect, DCacheReq, DCacheResp, ICacheTop}
 import leesum.ICache.DCacheTop
-import leesum.lsu.LSUTop
-import leesum.axi4.{
-  AXI4SlaveBridge,
-  AXIDeMux,
-  AXIMasterIO,
-  AxiReadArbiter,
-  BasicMemoryIO,
-  MemoryIO64to32
-}
-import leesum.moniter.{DifftestPort, MonitorTop, PerfPort}
 import leesum._
-import leesum.devices.clint
-import leesum.fronten.{IFUTop, PCGenStage}
+import leesum.axi4.{AXIMasterIO, AxiReadArbiter}
+import leesum.fronten.IFUTop
+import leesum.lsu.LSUTop
 import leesum.mmu_sv39.MMU
+import leesum.moniter.{DifftestPort, MonitorTop, PerfPort}
 
 class FishCore(
     muldiv_en: Boolean = true,

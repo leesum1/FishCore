@@ -62,6 +62,8 @@ class IFUTop(
   val nextline_bp = Module(new BPUTop(btb_way_count, 1024, 2048))
   val f3_bpu_update_valid_next = RegInit(false.B)
   val f3_bpu_update_pc_next = RegInit(0.U(39.W))
+  val f3_bpu_update_btb_data_next = RegInit(0.U.asTypeOf(new BTBEntry()))
+
   val f3_bpu_update_sel_way_next = RegInit(0.U(log2Ceil(btb_way_count).W))
 
   when(f3_bpu_update_valid_next) {
@@ -84,11 +86,13 @@ class IFUTop(
   nextline_bp.io.f3_update_btb_pc := f3_bpu_update_pc_next
   nextline_bp.io.f3_update_btb_way_sel := f3_bpu_update_sel_way_next
 
-  // TODO: f3 btb update should refine!!!
-  nextline_bp.io.f3_update_btb_data.offset := 0.U
-  nextline_bp.io.f3_update_btb_data.is_rvc := false.B
-  nextline_bp.io.f3_update_btb_data.target_pc := "x80000000".asUInt
-  nextline_bp.io.f3_update_btb_data.bp_type := BpType.None
+//  // TODO: f3 btb update should refine!!!
+//  nextline_bp.io.f3_update_btb_data.offset := 0.U
+//  nextline_bp.io.f3_update_btb_data.is_rvc := false.B
+//  nextline_bp.io.f3_update_btb_data.target_pc := "x80000000".asUInt
+//  nextline_bp.io.f3_update_btb_data.bp_type := BpType.None
+
+  nextline_bp.io.f3_update_btb_data := f3_bpu_update_btb_data_next
 
   nextline_bp.io.clear_en := false.B // TODO: fence.i
 
@@ -329,7 +333,6 @@ class IFUTop(
       val bpu_alias_real_type = WireDefault(BpType.None)
       val bpu_alias_sel_way = f3_bp_info.sel_way
       val bpu_alias_mask = WireDefault("b1111".U(4.W))
-      val bpu_offset_mask = WireDefault("b1111".U(4.W))
       val bpu_alias_crossline_no_match = WireDefault(false.B)
 
       dontTouch(bpu_alias_exist)
@@ -387,7 +390,6 @@ class IFUTop(
             val bp_pos_not_match = WireDefault(false.B)
 
             val bp_alias_mask_by_idx = GenMaskOne(4, i)
-            val bp_offset_mask_by_idx = GenMaskOne(4, i + 1)
 
             val is_crossline = if (i == 0) {
               // first inst, may be cross line jump inst
@@ -435,7 +437,7 @@ class IFUTop(
             }
 
             when(bp_type_not_match) {
-              // 2. inst is jump, but bp is not jump (alias)
+              // 2. inst is jump, bp is jump, but type not match (alias)
               bpu_alias_exist := true.B
               bpu_alias_pc := inst.pc
               bpu_alias_mask := bp_alias_mask_by_idx
@@ -499,6 +501,7 @@ class IFUTop(
 
         // update bpu (btb)
         f3_bpu_update_valid_next := true.B
+        // we use upper pc to update bpu, when is cross line jump inst
         f3_bpu_update_pc_next := Mux(
           bpu_alias_crossline_no_match,
           bpu_alias_pc + 2.U,
