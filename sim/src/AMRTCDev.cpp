@@ -29,7 +29,7 @@ namespace SimDevices {
     }
 
     uint64_t AMRTCDev::update_outputs() {
-        MY_ASSERT(write_req_seq.empty());
+        MY_ASSERT(write_req_seq.empty(), "write request not empty");
 
         if (!read_req_seq.empty()) {
             auto read_addr = read_req_seq.back();

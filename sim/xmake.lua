@@ -33,7 +33,7 @@ package_end()
 
 
 add_requires("cli11", { system = false })
-add_requires("libassert", { system = false })
+-- add_requires("libassert", { system = false })
 add_requires("elfio", { system = false })
 add_requires("libsdl", { system = false })
 add_requires("readerwriterqueue", { system = false })
@@ -62,7 +62,7 @@ target("Vtop")
 --     add_values("verilator.flags", "--threads", "3")
     add_includedirs("src/include/")
     add_includedirs("third_party/capstone/include/capstone/")
-    add_packages("cli11", "libassert", "elfio", "libsdl", "readerwriterqueue", "spdlog","capstone_my")
+    add_packages("cli11", "elfio", "libsdl", "readerwriterqueue", "spdlog","capstone_my")
     add_links("rv64emu_cbinding")
 
 -- for _, file in ipairs(os.files("test/*.cpp")) do

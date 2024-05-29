@@ -17,7 +17,7 @@ namespace SimDevices
         this->mem_addr = base_addr;
         this->mem_size = mem_size;
         mem = std::vector<uint8_t>(mem_size);
-        MY_ASSERT(mem.size() == mem_size);
+        MY_ASSERT(mem.size() == mem_size, "memory size not match");
     }
 
 
@@ -26,8 +26,8 @@ namespace SimDevices
         //        if (in_range(addr)) {
         //            return 0;
         //        }
-        MY_ASSERT(in_range(addr));
-        MY_ASSERT(Utils::check_aligned(addr, 8));
+        MY_ASSERT(in_range(addr), "read address out of range");
+        MY_ASSERT(Utils::check_aligned(addr, 8), "read address not aligned");
         uint64_t result = 0;
         std::memcpy(&result, &mem[addr - mem_addr], sizeof(uint64_t));
         return result;
@@ -36,8 +36,8 @@ namespace SimDevices
 
     void SynReadMemoryDev::write(uint64_t addr, uint64_t wdata, uint8_t wstrb)
     {
-        MY_ASSERT(in_range(addr));
-        MY_ASSERT(Utils::check_aligned(addr, 8));
+        MY_ASSERT(in_range(addr), "write address out of range");
+        MY_ASSERT(Utils::check_aligned(addr, 8), "write address not aligned");
         auto wdata_seq = std::bit_cast<std::array<uint8_t, 8>>(wdata);
 
         for (int i = 0; i < 8; i++)
@@ -107,9 +107,9 @@ namespace SimDevices
             return false;
         }
 
-        ASSUME(reader.get_class() == ELFCLASS64);
-        ASSUME(reader.get_encoding() == ELFDATA2LSB);
-        ASSUME(reader.get_machine() == EM_RISCV);
+        MY_ASSERT(reader.get_class() == ELFCLASS64, "elf class not match");
+        MY_ASSERT(reader.get_encoding() == ELFDATA2LSB, "elf data not match");
+        MY_ASSERT(reader.get_machine() == EM_RISCV, "elf machine not match");
 
 
         load_elf_to_mem(reader);

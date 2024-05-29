@@ -15,7 +15,7 @@ Itrace::Itrace() {
 
 	cs_err err = cs_open(CS_ARCH_RISCV, static_cast<cs_mode>(CS_MODE_RISCV64C | CS_MODE_RISCVC), &handle);
 	if (err) {
-		logger->critical("Failed on cs_open() with error returned: %u\n", err);
+		logger->critical("Failed on cs_open() with error returned: {}\n",static_cast<int> (err));
 		exit(-1);
 	}
 }

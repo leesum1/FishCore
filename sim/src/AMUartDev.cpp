@@ -28,12 +28,12 @@ namespace SimDevices {
     }
 
     uint64_t AMUartDev::update_outputs() {
-        MY_ASSERT(read_req_seq.empty());
+        MY_ASSERT(read_req_seq.empty(), "read request not empty");
         if (!write_req_seq.empty()) {
             auto write_req = write_req_seq.back();
             write_req_seq.pop_back();
             auto offset = write_req.waddr - mem_addr;
-            MY_ASSERT(offset == 0);
+            MY_ASSERT(offset == 0, "write address out of range");
             char c = static_cast<char>(write_req.wdata & 0xff);
             std::cout << c;
         }

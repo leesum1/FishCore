@@ -2,7 +2,6 @@
 #include "Vtop.h"
 #include "CSREncode.h"
 #include <memory>
-#include <iostream>
 #include <spdlog/logger.h>
 // #include <execution>
 #include "Utils.h"
@@ -140,7 +139,7 @@ uint64_t SimBase::get_reg(const int idx) {
     case 31:
         return GET_REG(top, 31);
     default:
-        MY_ASSERT(false);
+        MY_ASSERT(false,"get_reg failed, index[%d] out of range", idx);
         return 0;
     }
 }
