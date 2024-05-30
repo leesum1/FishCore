@@ -1,0 +1,33 @@
+{
+  "packages": [
+    "circt@1.62.0",
+    "spike@latest",
+    "path:my-flakes/riscv-toolchain-flakes#riscv-gcc",
+    "path:my-flakes/sbt-overlay-flakes#sbt",
+    "rustup@latest",
+    "libiconv@latest",
+    "python@3.10",
+    "xmake@latest",
+    "verilator@latest",
+    "gnumake@latest",
+    "espresso@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo 'Welcome to devbox!' > /dev/null",
+      ". $VENV_DIR/bin/activate",
+      "projectDir=$(dirname $(readlink -f \"$0\"))",
+      "rustupHomeDir=\"$projectDir\"/.rustup",
+      "mkdir -p $rustupHomeDir",
+      "export RUSTUP_HOME=$rustupHomeDir",
+      "export LIBRARY_PATH=$LIBRARY_PATH:\"$projectDir/nix/profile/default/lib\"",
+      "rustup default stable",
+      "cargo fetch"
+    ],
+    "scripts": {
+      "test": [
+        "echo \"Error: no test specified\" && exit 1"
+      ]
+    }
+  }
+}
