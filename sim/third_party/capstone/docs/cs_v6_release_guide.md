@@ -157,13 +157,16 @@ Write it into `rename_arm64.sh` and run it on files with `sh rename_arm64.sh <sr
 
 These features are only supported by `auto-sync`-enabled architectures.
 
-**Instruction Encoding**
+**More code quality checks**
 
-TODO
+- `clang-tidy` is now run on all files changed by a PR.
 
 **Instruction formats for PPC**
 
-TODO
+The instruction encoding formats are added for PPC. They are accessible via `cs_ppc->format`.
+They do follow loosely the ISA formats of instructions but not quite. Unfortunately,
+LLV doesn't group the instruction formats perfectly aligned with the ISA.
+Nonetheless, we hope this additional information is useful to you.
 
 ### Instruction Alias
 

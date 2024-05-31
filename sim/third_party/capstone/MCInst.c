@@ -18,7 +18,7 @@
 
 void MCInst_Init(MCInst *inst)
 {
-	// unnecessary to initialize in loop . its expensive and inst->size shuold be honored
+	// unnecessary to initialize in loop . its expensive and inst->size should be honored
 	inst->Operands[0].Kind = kInvalid;
 	inst->Operands[0].ImmVal = 0;
 
@@ -36,6 +36,7 @@ void MCInst_Init(MCInst *inst)
 		inst->tied_op_idx[i] = -1;
 	inst->isAliasInstr = false;
 	inst->fillDetailOps = false;
+	memset(&inst->hppa_ext, 0, sizeof(inst->hppa_ext));
 }
 
 void MCInst_clear(MCInst *inst)
@@ -88,7 +89,7 @@ unsigned MCInst_getNumOperands(const MCInst *inst)
 	return inst->size;
 }
 
-// This addOperand2 function doesnt free Op
+// This addOperand2 function doesn't free Op
 void MCInst_addOperand2(MCInst *inst, MCOperand *Op)
 {
 	assert(inst->size < MAX_MC_OPS);

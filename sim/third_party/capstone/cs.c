@@ -1,6 +1,6 @@
 /* Capstone Disassembly Engine */
 /* By Nguyen Anh Quynh <aquynh@gmail.com>, 2013-2019 */
-#if defined (WIN32) || defined (WIN64) || defined (_WIN32) || defined (_WIN64)
+#ifdef _MSC_VER
 #pragma warning(disable:4996)			// disable MSVC's warning on strcpy()
 #pragma warning(disable:28719)		// disable MSVC's warning on strcpy()
 #endif
@@ -71,8 +71,9 @@
 #include "arch/SH/SHModule.h"
 #include "arch/TriCore/TriCoreModule.h"
 #include "arch/Alpha/AlphaModule.h"
+#include "arch/HPPA/HPPAModule.h"
 
-static const struct {
+typedef struct cs_arch_config {
 	// constructor initialization
 	cs_err (*arch_init)(cs_struct *);
 	// support cs_option()
@@ -80,187 +81,241 @@ static const struct {
 	// bitmask for finding disallowed modes for an arch:
 	// to be called in cs_open()/cs_option()
 	cs_mode arch_disallowed_mode_mask;
-} arch_configs[MAX_ARCH] = {
+} cs_arch_config;
+
+#define CS_ARCH_CONFIG_ARM \
+	{ \
+		ARM_global_init, \
+		ARM_option, \
+		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_ARM | CS_MODE_V8 | CS_MODE_MCLASS | CS_MODE_THUMB | CS_MODE_BIG_ENDIAN), \
+	}
+#define CS_ARCH_CONFIG_AARCH64 \
+	{ \
+		AArch64_global_init, \
+		AArch64_option, \
+		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_ARM | CS_MODE_BIG_ENDIAN), \
+	}
+#define CS_ARCH_CONFIG_MIPS \
+	{ \
+		Mips_global_init, \
+		Mips_option, \
+		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_32 | CS_MODE_64 | CS_MODE_MICRO \
+			| CS_MODE_MIPS32R6 | CS_MODE_BIG_ENDIAN | CS_MODE_MIPS2 | CS_MODE_MIPS3), \
+	}
+#define CS_ARCH_CONFIG_X86 \
+	{ \
+		X86_global_init, \
+		X86_option, \
+		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_32 | CS_MODE_64 | CS_MODE_16), \
+	}
+#define CS_ARCH_CONFIG_PPC \
+	{ \
+		PPC_global_init, \
+		PPC_option, \
+		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_32 | CS_MODE_64 | CS_MODE_BIG_ENDIAN \
+				| CS_MODE_QPX | CS_MODE_PS | CS_MODE_BOOKE), \
+	}
+#define CS_ARCH_CONFIG_SPARC \
+	{ \
+		Sparc_global_init, \
+		Sparc_option, \
+		~(CS_MODE_BIG_ENDIAN | CS_MODE_V9), \
+	}
+#define CS_ARCH_CONFIG_SYSZ \
+	{ \
+		SystemZ_global_init, \
+		SystemZ_option, \
+		~(CS_MODE_BIG_ENDIAN), \
+	}
+#define CS_ARCH_CONFIG_XCORE \
+	{ \
+		XCore_global_init, \
+		XCore_option, \
+		~(CS_MODE_BIG_ENDIAN), \
+	}
+#define CS_ARCH_CONFIG_M68K \
+	{ \
+		M68K_global_init, \
+		M68K_option, \
+		~(CS_MODE_BIG_ENDIAN | CS_MODE_M68K_000 | CS_MODE_M68K_010 | CS_MODE_M68K_020 \
+				| CS_MODE_M68K_030 | CS_MODE_M68K_040 | CS_MODE_M68K_060), \
+	}
+#define CS_ARCH_CONFIG_TMS320C64X \
+	{ \
+		TMS320C64x_global_init, \
+		TMS320C64x_option, \
+		~(CS_MODE_BIG_ENDIAN), \
+	}
+#define CS_ARCH_CONFIG_M680X \
+	{ \
+		M680X_global_init, \
+		M680X_option, \
+		~(CS_MODE_M680X_6301 | CS_MODE_M680X_6309 | CS_MODE_M680X_6800 \
+				| CS_MODE_M680X_6801 | CS_MODE_M680X_6805 | CS_MODE_M680X_6808 \
+				| CS_MODE_M680X_6809 | CS_MODE_M680X_6811 | CS_MODE_M680X_CPU12 \
+				| CS_MODE_M680X_HCS08), \
+	}
+#define CS_ARCH_CONFIG_EVM \
+	{ \
+		EVM_global_init, \
+		EVM_option, \
+		0, \
+	}
+#define CS_ARCH_CONFIG_MOS65XX \
+	{ \
+		MOS65XX_global_init, \
+		MOS65XX_option, \
+		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_MOS65XX_6502 | CS_MODE_MOS65XX_65C02 \
+				| CS_MODE_MOS65XX_W65C02 | CS_MODE_MOS65XX_65816_LONG_MX), \
+	}
+#define CS_ARCH_CONFIG_WASM \
+	{ \
+		WASM_global_init, \
+		WASM_option, \
+		0, \
+	}
+#define CS_ARCH_CONFIG_BPF \
+	{ \
+		BPF_global_init, \
+		BPF_option, \
+		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_BPF_CLASSIC | CS_MODE_BPF_EXTENDED \
+				| CS_MODE_BIG_ENDIAN), \
+	}
+#define CS_ARCH_CONFIG_RISCV \
+	{ \
+		RISCV_global_init, \
+		RISCV_option, \
+		~(CS_MODE_RISCV32 | CS_MODE_RISCV64 | CS_MODE_RISCVC), \
+	}
+#define CS_ARCH_CONFIG_SH \
+	{ \
+		SH_global_init, \
+		SH_option, \
+		~(CS_MODE_SH2 | CS_MODE_SH2A | CS_MODE_SH3 | \
+		  CS_MODE_SH4 | CS_MODE_SH4A | \
+		  CS_MODE_SHFPU | CS_MODE_SHDSP|CS_MODE_BIG_ENDIAN), \
+	}
+#define CS_ARCH_CONFIG_TRICORE \
+	{ \
+		TRICORE_global_init, \
+		TRICORE_option, \
+		~(CS_MODE_TRICORE_110 | CS_MODE_TRICORE_120 | CS_MODE_TRICORE_130 \
+		| CS_MODE_TRICORE_131 | CS_MODE_TRICORE_160 | CS_MODE_TRICORE_161 \
+		| CS_MODE_TRICORE_162 | CS_MODE_LITTLE_ENDIAN), \
+	}
+#define CS_ARCH_CONFIG_ALPHA \
+	{ \
+		ALPHA_global_init, \
+		ALPHA_option, \
+		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_BIG_ENDIAN), \
+	}
+
+#ifdef CAPSTONE_USE_ARCH_REGISTRATION
+static cs_arch_config arch_configs[MAX_ARCH];
+static uint32_t all_arch;
+#else
+static const cs_arch_config arch_configs[MAX_ARCH] = {
 #ifdef CAPSTONE_HAS_ARM
-	{
-		ARM_global_init,
-		ARM_option,
-		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_ARM | CS_MODE_V8 | CS_MODE_MCLASS
-				| CS_MODE_THUMB | CS_MODE_BIG_ENDIAN)
-	},
+	CS_ARCH_CONFIG_ARM,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_AARCH64
-	{
-		AArch64_global_init,
-		AArch64_option,
-		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_ARM | CS_MODE_BIG_ENDIAN),
-	},
+	CS_ARCH_CONFIG_AARCH64,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_MIPS
-	{
-		Mips_global_init,
-		Mips_option,
-		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_32 | CS_MODE_64 | CS_MODE_MICRO
-				| CS_MODE_MIPS32R6 | CS_MODE_BIG_ENDIAN | CS_MODE_MIPS2 | CS_MODE_MIPS3),
-	},
+	CS_ARCH_CONFIG_MIPS,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_X86
-	{
-		X86_global_init,
-		X86_option,
-		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_32 | CS_MODE_64 | CS_MODE_16),
-	},
+	CS_ARCH_CONFIG_X86,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_POWERPC
-	{
-		PPC_global_init,
-		PPC_option,
-		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_32 | CS_MODE_64 | CS_MODE_BIG_ENDIAN
-				| CS_MODE_QPX | CS_MODE_PS | CS_MODE_BOOKE),
-	},
+	CS_ARCH_CONFIG_PPC,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_SPARC
-	{
-		Sparc_global_init,
-		Sparc_option,
-		~(CS_MODE_BIG_ENDIAN | CS_MODE_V9),
-	},
+	CS_ARCH_CONFIG_SPARC,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_SYSZ
-	{
-		SystemZ_global_init,
-		SystemZ_option,
-		~(CS_MODE_BIG_ENDIAN),
-	},
+	CS_ARCH_CONFIG_SYSZ,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_XCORE
-	{
-		XCore_global_init,
-		XCore_option,
-		~(CS_MODE_BIG_ENDIAN),
-	},
+	CS_ARCH_CONFIG_XCORE,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_M68K
-	{
-		M68K_global_init,
-		M68K_option,
-		~(CS_MODE_BIG_ENDIAN | CS_MODE_M68K_000 | CS_MODE_M68K_010 | CS_MODE_M68K_020
-				| CS_MODE_M68K_030 | CS_MODE_M68K_040 | CS_MODE_M68K_060),
-	},
+	CS_ARCH_CONFIG_M68K,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_TMS320C64X
-	{
-		TMS320C64x_global_init,
-		TMS320C64x_option,
-		~(CS_MODE_BIG_ENDIAN),
-	},
+	CS_ARCH_CONFIG_TMS320C64X,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_M680X
-	{
-		M680X_global_init,
-		M680X_option,
-		~(CS_MODE_M680X_6301 | CS_MODE_M680X_6309 | CS_MODE_M680X_6800
-				| CS_MODE_M680X_6801 | CS_MODE_M680X_6805 | CS_MODE_M680X_6808
-				| CS_MODE_M680X_6809 | CS_MODE_M680X_6811 | CS_MODE_M680X_CPU12
-				| CS_MODE_M680X_HCS08),
-	},
+	CS_ARCH_CONFIG_M680X,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_EVM
-	{
-		EVM_global_init,
-		EVM_option,
-		0,
-	},
+	CS_ARCH_CONFIG_EVM,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_MOS65XX
-	{
-		MOS65XX_global_init,
-		MOS65XX_option,
-		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_MOS65XX_6502 | CS_MODE_MOS65XX_65C02
-				| CS_MODE_MOS65XX_W65C02 | CS_MODE_MOS65XX_65816_LONG_MX),
-	},
+	CS_ARCH_CONFIG_MOS65XX,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_WASM
-	{
-		WASM_global_init,
-		WASM_option,
-		0,
-	},
+	CS_ARCH_CONFIG_WASM,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_BPF
-	{
-		BPF_global_init,
-		BPF_option,
-		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_BPF_CLASSIC | CS_MODE_BPF_EXTENDED
-				| CS_MODE_BIG_ENDIAN),
-	},
+	CS_ARCH_CONFIG_BPF,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_RISCV
-	{
-		RISCV_global_init,
-		RISCV_option,
-		~(CS_MODE_RISCV32 | CS_MODE_RISCV64 | CS_MODE_RISCVC),
-	},
+	CS_ARCH_CONFIG_RISCV,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_SH
-	{
-		SH_global_init,
-		SH_option,
-		~(CS_MODE_SH2 | CS_MODE_SH2A | CS_MODE_SH3 |
-		  CS_MODE_SH4 | CS_MODE_SH4A |
-		  CS_MODE_SHFPU | CS_MODE_SHDSP|CS_MODE_BIG_ENDIAN),
-	},
+	CS_ARCH_CONFIG_SH,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_TRICORE
-	{
-		TRICORE_global_init,
-		TRICORE_option,
-		~(CS_MODE_TRICORE_110 | CS_MODE_TRICORE_120 | CS_MODE_TRICORE_130
-		| CS_MODE_TRICORE_131 | CS_MODE_TRICORE_160 | CS_MODE_TRICORE_161
-		| CS_MODE_TRICORE_162 | CS_MODE_LITTLE_ENDIAN),
-	},
+	CS_ARCH_CONFIG_TRICORE,
 #else
 	{ NULL, NULL, 0 },
 #endif
 #ifdef CAPSTONE_HAS_ALPHA
+	CS_ARCH_CONFIG_ALPHA,
+#else
+	{ NULL, NULL, 0 },
+#endif
+#ifdef CAPSTONE_HAS_HPPA
 	{
-		ALPHA_global_init,
-		ALPHA_option,
-		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_BIG_ENDIAN),
+		HPPA_global_init,
+		HPPA_option,
+		~(CS_MODE_LITTLE_ENDIAN | CS_MODE_BIG_ENDIAN | CS_MODE_HPPA_11
+		| CS_MODE_HPPA_20 | CS_MODE_HPPA_20W),
 	},
 #else
 	{ NULL, NULL, 0 },
@@ -326,7 +381,11 @@ static const uint32_t all_arch = 0
 #ifdef CAPSTONE_HAS_ALPHA
 	| (1 << CS_ARCH_ALPHA)
 #endif
+#ifdef CAPSTONE_HAS_HPPA
+	| (1 << CS_ARCH_HPPA)
+#endif
 ;
+#endif
 
 
 #if defined(CAPSTONE_USE_SYS_DYN_MEM)
@@ -387,6 +446,163 @@ unsigned int CAPSTONE_API cs_version(int *major, int *minor)
 	return (CS_API_MAJOR << 8) + CS_API_MINOR;
 }
 
+#define CS_ARCH_REGISTER(id) \
+	cs_arch_config cfg = CS_ARCH_CONFIG_##id; \
+	arch_configs[CS_ARCH_##id] = cfg; \
+	all_arch |= 1 << CS_ARCH_##id
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_arm(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_ARM)
+	CS_ARCH_REGISTER(ARM);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_aarch64(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_AARCH64)
+	CS_ARCH_REGISTER(AARCH64);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_mips(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_MIPS)
+	CS_ARCH_REGISTER(MIPS);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_x86(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_X86)
+	CS_ARCH_REGISTER(X86);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_powerpc(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_POWERPC)
+	CS_ARCH_REGISTER(PPC);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_sparc(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_SPARC)
+	CS_ARCH_REGISTER(SPARC);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_sysz(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_SYSZ)
+	CS_ARCH_REGISTER(SYSZ);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_xcore(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_XCORE)
+	CS_ARCH_REGISTER(XCORE);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_m68k(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_M68K)
+	CS_ARCH_REGISTER(M68K);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_tms320c64x(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_TMS320C64X)
+	CS_ARCH_REGISTER(TMS320C64X);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_m680x(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_M680X)
+	CS_ARCH_REGISTER(M680X);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_evm(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_EVM)
+	CS_ARCH_REGISTER(EVM);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_mos65xx(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_MOS65XX)
+	CS_ARCH_REGISTER(MOS65XX);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_wasm(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_WASM)
+	CS_ARCH_REGISTER(WASM);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_bpf(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_BPF)
+	CS_ARCH_REGISTER(BPF);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_riscv(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_RISCV)
+	CS_ARCH_REGISTER(RISCV);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_sh(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_SH)
+	CS_ARCH_REGISTER(SH);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_tricore(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_TRICORE)
+	CS_ARCH_REGISTER(TRICORE);
+#endif
+}
+
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_alpha(void)
+{
+#if defined(CAPSTONE_USE_ARCH_REGISTRATION) && defined(CAPSTONE_HAS_ALPHA)
+	CS_ARCH_REGISTER(ALPHA);
+#endif
+}
+
 CAPSTONE_EXPORT
 bool CAPSTONE_API cs_support(int query)
 {
@@ -401,7 +617,7 @@ bool CAPSTONE_API cs_support(int query)
 				    (1 << CS_ARCH_RISCV) | (1 << CS_ARCH_MOS65XX)    |
 				    (1 << CS_ARCH_WASM)  | (1 << CS_ARCH_BPF)        |
 				    (1 << CS_ARCH_SH)    | (1 << CS_ARCH_TRICORE)    |
-					(1 << CS_ARCH_ALPHA));
+					(1 << CS_ARCH_ALPHA) | (1 << CS_ARCH_HPPA));
 
 	if ((unsigned int)query < CS_ARCH_MAX)
 		return all_arch & (1 << query);
@@ -560,22 +776,29 @@ cs_err CAPSTONE_API cs_close(csh *handle)
 	return CS_ERR_OK;
 }
 
-// replace str1 in target with str2; target starts with str1
-// output is put into result (which is array of char with size CS_MNEMONIC_SIZE)
-// return 0 on success, -1 on failure
+/// replace str1 in target with str2; target starts with str1
+/// output is put into result (which is array of char with size CS_MNEMONIC_SIZE)
+/// return 0 on success, -1 on failure
+#ifndef CAPSTONE_DIET
 static int str_replace(char *result, char *target, const char *str1, char *str2)
 {
+	size_t target_len = strlen(target);
+	size_t str1_len = strlen(str1);
+	if (target_len < str1_len) {
+		return -1;
+	}
+
 	// only perform replacement if the output fits into result
-	if (strlen(target) - strlen(str1) + strlen(str2) < CS_MNEMONIC_SIZE - 1)  {
-		// copy str2 to begining of result
-		strcpy(result, str2);
+	if (target_len - str1_len + strlen(str2) <= CS_MNEMONIC_SIZE - 1)  {
+		// copy str2 to beginning of result
 		// skip str1 - already replaced by str2
-		strcat(result, target + strlen(str1));
+		snprintf(result, CS_MNEMONIC_SIZE, "%s%s", str2, target + str1_len);
 
 		return 0;
 	} else
 		return -1;
 }
+#endif
 
 /// The asm string sometimes has a leading space or tab.
 /// Here we remove it.
@@ -735,6 +958,9 @@ static uint8_t skipdata_size(cs_struct *handle)
 		case CS_ARCH_ALPHA:
 			// Alpha alignment is 4.
 			return 4;
+		case CS_ARCH_HPPA:
+			// Hppa alignment is 4.
+			return 4;
 	}
 }
 
@@ -861,6 +1087,9 @@ cs_err CAPSTONE_API cs_option(csh ud, cs_opt_type type, size_t value)
 			break;
 	}
 
+	if (!arch_configs[handle->arch].arch_option)
+		return CS_ERR_ARCH;
+
 	return arch_configs[handle->arch].arch_option(handle, type, value);
 }
 
@@ -896,7 +1125,7 @@ static void skipdata_opstr(char *opstr, const uint8_t *buffer, size_t size)
 }
 #endif
 
-// dynamicly allocate memory to contain disasm insn
+// dynamically allocate memory to contain disasm insn
 // NOTE: caller must free() the allocated memory itself to avoid memory leaking
 CAPSTONE_EXPORT
 size_t CAPSTONE_API cs_disasm(csh ud, const uint8_t *buffer, size_t size, uint64_t offset, size_t count, cs_insn **insn)
@@ -985,7 +1214,7 @@ size_t CAPSTONE_API cs_disasm(csh ud, const uint8_t *buffer, size_t size, uint64
 			fill_insn(handle, insn_cache, ss.buffer, &mci, handle->post_printer, buffer);
 
 			// adjust for pseudo opcode (X86)
-			if (handle->arch == CS_ARCH_X86)
+			if (handle->arch == CS_ARCH_X86 && insn_cache->id != X86_INS_VCMP)
 				insn_cache->id += mci.popcode_adjust;
 
 			next_offset = insn_size;
@@ -1064,7 +1293,7 @@ size_t CAPSTONE_API cs_disasm(csh ud, const uint8_t *buffer, size_t size, uint64
 			// continue to fill in the cache after the last instruction
 			insn_cache = (cs_insn *)((char *)total + sizeof(cs_insn) * c);
 
-			// reset f back to 0, so we fill in the cache from begining
+			// reset f back to 0, so we fill in the cache from beginning
 			f = 0;
 		} else
 			insn_cache++;
@@ -1476,6 +1705,11 @@ int CAPSTONE_API cs_op_count(csh ud, const cs_insn *insn, unsigned int op_type)
 				if (insn->detail->alpha.operands[i].type == (alpha_op_type)op_type)
 					count++;
 			break;
+		case CS_ARCH_HPPA:
+			for (i = 0; i < insn->detail->hppa.op_count; i++)
+				if (insn->detail->hppa.operands[i].type == (hppa_op_type)op_type)
+					count++;
+			break;
 	}
 
 	return count;
@@ -1662,6 +1896,14 @@ int CAPSTONE_API cs_op_index(csh ud, const cs_insn *insn, unsigned int op_type,
 		case CS_ARCH_ALPHA:
 			for (i = 0; i < insn->detail->alpha.op_count; i++) {
 				if (insn->detail->alpha.operands[i].type == (alpha_op_type)op_type)
+					count++;
+				if (count == post)
+					return i;
+			}
+			break;
+		case CS_ARCH_HPPA:
+			for (i = 0; i < insn->detail->hppa.op_count; i++) {
+				if (insn->detail->hppa.operands[i].type == (hppa_op_type)op_type)
 					count++;
 				if (count == post)
 					return i;

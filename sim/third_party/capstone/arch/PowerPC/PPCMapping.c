@@ -171,18 +171,18 @@ static void PPC_add_branch_predicates(MCInst *MI, const uint8_t *Bytes,
 	switch (bh) {
 	default:
 		assert(0 && "Invalid BH value.");
-	case 0b00:
+	case 0:
 		PPC_get_detail(MI)->bc.bh = cond ? PPC_BH_NO_SUBROUTINE_RET :
 						   PPC_BH_SUBROUTINE_RET;
 		break;
-	case 0b01:
+	case 1:
 		PPC_get_detail(MI)->bc.bh = cond ? PPC_BH_RESERVED :
 						   PPC_BH_NO_SUBROUTINE_RET;
 		break;
-	case 0b10:
+	case 2:
 		PPC_get_detail(MI)->bc.bh = PPC_BH_RESERVED;
 		break;
-	case 0b11:
+	case 3:
 		PPC_get_detail(MI)->bc.bh = PPC_BH_NOT_PREDICTABLE;
 		break;
 	}
@@ -197,9 +197,13 @@ void PPC_set_instr_map_data(MCInst *MI, const uint8_t *Bytes, size_t BytesLen)
 	map_groups(MI, ppc_insns);
 	PPC_add_branch_predicates(MI, Bytes, BytesLen);
 	PPC_check_updates_cr0(MI);
+	const ppc_suppl_info *suppl_info = map_get_suppl_info(MI, ppc_insns);
+	if (suppl_info) {
+		PPC_get_detail(MI)->format = suppl_info->form;
+	}
 }
 
-/// Inialize PPCs detail.
+/// Initialize PPCs detail.
 void PPC_init_cs_detail(MCInst *MI)
 {
 	if (!detail_is_set(MI))

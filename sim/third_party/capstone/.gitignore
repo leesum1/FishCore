@@ -75,6 +75,8 @@ tests/test_bpf
 tests/test_sh
 tests/test_riscv
 tests/test_sh
+tests/test_alpha
+tests/test_hppa
 
 # regress binaries
 suite/regress/invalid_read_in_print_operand
@@ -129,7 +131,7 @@ fuzz_bindisasm
 fuzz_disasm
 fuzz_decode_platform
 capstone_get_setup
-suite/fuzz/
+suite/fuzz/corpus
 suite/cstest/cmocka/
 
 *.s
@@ -141,3 +143,6 @@ android-ndk-*
 
 # python virtual env
 .venv/
+
+# Auto-sync files
+suite/auto-sync/src/autosync.egg-info

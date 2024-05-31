@@ -26,8 +26,8 @@ typedef enum cs_op_type {
 	CS_OP_SPECIAL = 0x10, ///< Special operands from archs
 	CS_OP_MEM =
 		0x80, ///< Memory operand. Can be ORed with another operand type.
-	CS_OP_MEM_REG = CS_OP_MEM | CS_OP_REG,	   ///< Memory referenceing register operand.
-	CS_OP_MEM_IMM = CS_OP_MEM | CS_OP_IMM,	   ///< Memory referenceing immediate operand.
+	CS_OP_MEM_REG = CS_OP_MEM | CS_OP_REG,	   ///< Memory referencing register operand.
+	CS_OP_MEM_IMM = CS_OP_MEM | CS_OP_IMM,	   ///< Memory referencing immediate operand.
 
 } cs_op_type;
 
@@ -37,7 +37,7 @@ typedef enum cs_ac_type {
 	CS_AC_INVALID = 0,    ///< Uninitialized/invalid access type.
 	CS_AC_READ = 1 << 0,  ///< Operand read from memory or register.
 	CS_AC_WRITE = 1 << 1, ///< Operand write to memory or register.
-	CS_AC_READ_WRTE =
+	CS_AC_READ_WRITE =
 		CS_AC_READ |
 		CS_AC_WRITE, ///< Operand reads and writes from/to memory or register.
 } cs_ac_type;

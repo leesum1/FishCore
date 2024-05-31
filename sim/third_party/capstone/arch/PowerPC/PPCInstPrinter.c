@@ -50,9 +50,11 @@
 
 // Static function declarations. These are functions which have the same identifiers
 // over all architectures. Therefor they need to be static.
+#ifndef CAPSTONE_DIET
 static void printCustomAliasOperand(MCInst *MI, uint64_t Address,
 				    unsigned OpIdx, unsigned PrintMethodIdx,
 				    SStream *O);
+#endif
 static void printOperand(MCInst *MI, unsigned OpNo, SStream *O);
 static void printPredicateOperand(MCInst *MI, unsigned OpNo, SStream *O,
 				  const char *Modifier);
@@ -648,7 +650,7 @@ void printTLSCall(MCInst *MI, unsigned OpNo, SStream *O)
 {
 	add_cs_detail(MI, PPC_OP_GROUP_TLSCall, OpNo);
 
-	// Expresion logic removed.
+	// Expression logic removed.
 
 	set_mem_access(MI, true);
 	SStream_concat0(O, "(");
@@ -680,7 +682,7 @@ bool showRegistersWithPercentPrefix(const MCInst *MI, const char *RegName)
 }
 
 /// getVerboseConditionalRegName - This method expands the condition register
-/// when requested explicitly or targetting Darwin.
+/// when requested explicitly or targeting Darwin.
 const char *getVerboseConditionRegName(const MCInst *MI, unsigned RegNum,
 				       unsigned RegEncoding)
 {

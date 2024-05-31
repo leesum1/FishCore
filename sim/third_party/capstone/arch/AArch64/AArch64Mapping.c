@@ -181,7 +181,7 @@ void AArch64_add_vas(MCInst *MI, const SStream *OS) {
 		}
 		vl |= (num << 8);
 
-		// Determine op index by searching for trainling commata after op string
+		// Determine op index by searching for trailing commata after op string
 		uint32_t op_idx = 0;
 		const char *comma_ptr = strchr(OS->buffer, ',');;
 		while (comma_ptr && comma_ptr < vl_ptr) {
@@ -247,7 +247,7 @@ void AArch64_init_cs_detail(MCInst *MI)
 /// So the only generic way to determine, if the memory access is in
 /// post-indexed addressing mode, is by search for "<membase>], #<memdisp>" in
 /// @p OS.
-/// Searching the asm string to determine such a property is enourmously ugly
+/// Searching the asm string to determine such a property is enormously ugly
 /// and wastes resources.
 /// Sorry, I know and do feel bad about it. But for now it works.
 static bool AArch64_check_post_index_am(const MCInst *MI, const SStream *OS) {
@@ -279,7 +279,7 @@ static void AArch64_check_updates_flags(MCInst *MI)
 	if (!detail_is_set(MI))
 		return;
 	cs_detail *detail = get_detail(MI);
-	// Implicity written registers
+	// Implicitly written registers
 	for (int i = 0; i < detail->regs_write_count; ++i) {
 		if (detail->regs_write[i] == 0)
 			break;
@@ -926,7 +926,7 @@ static void add_cs_detail_general(MCInst *MI, aarch64_op_group op_group,
 			break;
 		case AArch64_OP_FP: {
 			// printOperand does not handle FP operands. But sometimes
-			// is is used to print FP operands as normal immediate.
+			// is used to print FP operands as normal immediate.
 			AArch64_get_detail_op(MI, 0)->type = AArch64_OP_IMM;
 			AArch64_get_detail_op(MI, 0)->imm = MCInst_getOpVal(MI, OpNum);
 			AArch64_get_detail_op(MI, 0)->access = map_get_op_access(MI, OpNum);
@@ -944,7 +944,7 @@ static void add_cs_detail_general(MCInst *MI, aarch64_op_group op_group,
 	}
 	case AArch64_OP_GROUP_AdrLabel: {
 		int64_t Offset = MCInst_getOpVal(MI, OpNum);
-		AArch64_set_detail_op_imm(MI, OpNum, AArch64_OP_IMM, (MI->address & -4096) + Offset);
+		AArch64_set_detail_op_imm(MI, OpNum, AArch64_OP_IMM, (MI->address & -4) + Offset);
 		break;
 	}
 	case AArch64_OP_GROUP_AdrpLabel: {
@@ -1084,7 +1084,7 @@ static void add_cs_detail_general(MCInst *MI, aarch64_op_group op_group,
 		const char *Dot = strstr(RegName, ".");
 		AArch64Layout_VectorLayout vas = AArch64Layout_Invalid;
 		if (!Dot) {
-			// The matrix dimensions are machine dependendent.
+			// The matrix dimensions are machine dependent.
 			// Currently we do not support differentiation of machines.
 			// So we just indicate the use of the complete matrix.
 			vas = sme_reg_to_vas(MCInst_getOpVal(MI, OpNum));
@@ -1353,7 +1353,7 @@ static void add_cs_detail_template_1(MCInst *MI, aarch64_op_group op_group,
 		const char *Dot = strstr(RegName, ".");
 		AArch64Layout_VectorLayout vas = AArch64Layout_Invalid;
 		if (!Dot) {
-			// The matrix dimensions are machine dependendent.
+			// The matrix dimensions are machine dependent.
 			// Currently we do not support differentiation of machines.
 			// So we just indicate the use of the complete matrix.
 			vas = sme_reg_to_vas(MCInst_getOpVal(MI, OpNum));
@@ -1483,7 +1483,7 @@ static void add_cs_detail_template_1(MCInst *MI, aarch64_op_group op_group,
 	case AArch64_OP_GROUP_ZPRasFPR_32:
 	case AArch64_OP_GROUP_ZPRasFPR_64:
 	case AArch64_OP_GROUP_ZPRasFPR_8: {
-		unsigned Base;
+		unsigned Base = AArch64_NoRegister;
 		unsigned Width = temp_arg_0;
 		switch (Width) {
 		case 8:

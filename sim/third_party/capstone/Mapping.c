@@ -11,7 +11,7 @@ static unsigned short *make_id2insn(const insn_map *insns, unsigned int size)
 {
 	// NOTE: assume that the max id is always put at the end of insns array
 	unsigned short max_id = insns[size - 1].id;
-	unsigned short i;
+	unsigned int i;
 
 	unsigned short *cache =
 		(unsigned short *)cs_mem_calloc(max_id + 1, sizeof(*cache));
@@ -95,7 +95,7 @@ void map_add_implicit_read(MCInst *MI, uint32_t Reg)
 		return;
 
 	uint16_t *regs_read = MI->flat_insn->detail->regs_read;
-	for (int i = 0; i < MAX_IMPL_W_REGS; ++i) {
+	for (int i = 0; i < MAX_IMPL_R_REGS; ++i) {
 		if (i == MI->flat_insn->detail->regs_read_count) {
 			regs_read[i] = Reg;
 			MI->flat_insn->detail->regs_read_count++;
@@ -181,6 +181,7 @@ void map_implicit_writes(MCInst *MI, const insn_map *imap)
 }
 
 /// Adds a given group to @MI->flat_insn.
+/// A group is never added twice.
 void add_group(MCInst *MI, unsigned /* arch_group */ group)
 {
 #ifndef CAPSTONE_DIET
@@ -191,6 +192,11 @@ void add_group(MCInst *MI, unsigned /* arch_group */ group)
 	if (detail->groups_count >= MAX_NUM_GROUPS) {
 		printf("ERROR: Too many groups defined.\n");
 		return;
+	}
+	for (int i = 0; i < detail->groups_count; ++i) {
+		if (detail->groups[i] == group) {
+			return;
+		}
 	}
 	detail->groups[detail->groups_count++] = group;
 #endif // CAPSTONE_DIET
@@ -216,6 +222,19 @@ void map_groups(MCInst *MI, const insn_map *imap)
 		detail->groups[detail->groups_count++] = group;
 		group = imap[Opcode].groups[++i];
 	}
+#endif // CAPSTONE_DIET
+}
+
+/// Returns the pointer to the supllementary information in
+/// the instruction mapping table @imap or NULL in case of failure.
+const void *map_get_suppl_info(MCInst *MI, const insn_map *imap)
+{
+#ifndef CAPSTONE_DIET
+	if (!MI->flat_insn->detail)
+		return NULL;
+
+	unsigned Opcode = MCInst_getOpcode(MI);
+	return &imap[Opcode].suppl_info;
 #endif // CAPSTONE_DIET
 }
 
@@ -315,6 +334,7 @@ DEFINE_get_detail_op(ppc, PPC);
 DEFINE_get_detail_op(tricore, TriCore);
 DEFINE_get_detail_op(aarch64, AArch64);
 DEFINE_get_detail_op(alpha, Alpha);
+DEFINE_get_detail_op(hppa, HPPA);
 
 /// Returns true if for this architecture the
 /// alias operands should be filled.

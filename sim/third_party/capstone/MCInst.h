@@ -124,13 +124,14 @@ struct MCInst {
 	// operand access index for list of registers sharing the same access right (for ARM)
 	uint8_t ac_idx;
 	uint8_t popcode_adjust;   // Pseudo X86 instruction adjust
-	char assembly[8];	// for special instruction, so that we dont need printer
+	char assembly[8];	// for special instruction, so that we don't need printer
 	unsigned char evm_data[32];	// for EVM PUSH operand
 	cs_wasm_op wasm_data;    // for WASM operand
 	MCRegisterInfo *MRI;
 	uint8_t xAcquireRelease;   // X86 xacquire/xrelease
 	bool isAliasInstr; // Flag if this MCInst is an alias.
 	bool fillDetailOps; // If set, detail->operands gets filled.
+	hppa_ext hppa_ext;	///< for HPPA operand. Contains info about modifiers and their effect on the instruction
 };
 
 void MCInst_Init(MCInst *inst);
@@ -152,7 +153,7 @@ MCOperand *MCInst_getOperand(MCInst *inst, unsigned i);
 
 unsigned MCInst_getNumOperands(const MCInst *inst);
 
-// This addOperand2 function doesnt free Op
+// This addOperand2 function doesn't free Op
 void MCInst_addOperand2(MCInst *inst, MCOperand *Op);
 
 bool MCInst_isPredicable(const MCInstrDesc *MIDesc);

@@ -11,7 +11,16 @@ clean_dir := ${FISH_CORE_HOME}/project \
 			 ${FISH_CORE_HOME}/sim/.cache \
 			 ${FISH_CORE_HOME}/sim/build \
 
+define check_and_create_folder
+    @if [ ! -d "$(1)" ]; then \
+        echo "Creating folder $(1)"; \
+        mkdir -p $(1); \
+    fi
+endef
+
+
 gen_fish_soc_verilog:
+	$(call check_and_create_folder,${FISH_CORE_HOME}/sim/vsrc)
 	cd ${FISH_CORE_HOME} && sbt "runMain  leesum.Core.gen_FishSoc"
 
 build_sim:gen_fish_soc_verilog

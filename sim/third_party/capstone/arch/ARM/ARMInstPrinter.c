@@ -7,7 +7,7 @@
 /* LLVM-tag: llvmorg-16.0.2-5-g464bda7750a3 */
 
 /* Only small edits allowed. */
-/* For multiple similiar edits, please create a Patch for the translator. */
+/* For multiple similar edits, please create a Patch for the translator. */
 
 /* Capstone's C++ file translator: */
 /* https://github.com/capstone-engine/capstone/tree/next/suite/auto-sync */
@@ -52,9 +52,11 @@
 
 // Static function declarations. These are functions which have the same identifiers
 // over all architectures. Therefor they need to be static.
+#ifndef CAPSTONE_DIET
 static void printCustomAliasOperand(MCInst *MI, uint64_t Address,
 				    unsigned OpIdx, unsigned PrintMethodIdx,
 				    SStream *O);
+#endif
 static void printOperand(MCInst *MI, unsigned OpNo, SStream *O);
 static void printPredicateOperand(MCInst *MI, unsigned OpNum, SStream *O);
 static void printRegName(SStream *OS, unsigned RegNo);

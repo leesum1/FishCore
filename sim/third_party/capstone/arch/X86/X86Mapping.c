@@ -1712,7 +1712,6 @@ static bool valid_bnd(cs_struct *h, unsigned int opcode)
 	// not found
 	return false;
 }
-#endif
 
 // return true if the opcode is XCHG [mem]
 static bool xchg_mem(unsigned int opcode)
@@ -1727,6 +1726,7 @@ static bool xchg_mem(unsigned int opcode)
 				 return true;
 	}
 }
+#endif
 
 // given MCInst's id, find out if this insn is valid for REP prefix
 static bool valid_rep(cs_struct *h, unsigned int opcode)
@@ -1783,6 +1783,7 @@ static bool valid_rep(cs_struct *h, unsigned int opcode)
 	return false;
 }
 
+#ifndef CAPSTONE_DIET
 // given MCInst's id, find if this is a "repz ret" instruction
 // gcc generates "repz ret" (f3 c3) instructions in some cases as an
 // optimization for AMD platforms, see:
@@ -1800,6 +1801,7 @@ static bool valid_ret_repz(cs_struct *h, unsigned int opcode)
 	// not found
 	return false;
 }
+#endif
 
 // given MCInst's id, find out if this insn is valid for REPE prefix
 static bool valid_repe(cs_struct *h, unsigned int opcode)
@@ -2096,7 +2098,7 @@ void op_addAvxBroadcast(MCInst *MI, x86_avx_bcast v)
 #ifndef CAPSTONE_DIET
 // map instruction to its characteristics
 typedef struct insn_op {
-	uint64_t flags;	// how this instruction update EFLAGS(arithmetic instrcutions) of FPU FLAGS(for FPU instructions)
+	uint64_t flags;	// how this instruction update EFLAGS(arithmetic instructions) of FPU FLAGS(for FPU instructions)
 	uint8_t access[6];
 } insn_op;
 
@@ -2241,5 +2243,28 @@ unsigned short X86_register_map(unsigned short id)
 
 	return 0;
 }
+
+/// The post-printer function. Used to fixup flaws in the disassembly information
+/// of certain instructions.
+void X86_postprinter(csh handle, cs_insn *insn, char *mnem, MCInst *mci) {
+	if (!insn || !insn->detail) {
+		return;
+	}
+	switch (insn->id) {
+	default:
+		break;
+	case X86_INS_RCL:
+		// Addmissing 1 immediate
+		if (insn->detail->x86.op_count > 1) {
+			return;
+		}
+		insn->detail->x86.operands[1].imm = 1;
+		insn->detail->x86.operands[1].type = X86_OP_IMM;
+		insn->detail->x86.operands[1].access = CS_AC_READ;
+		insn->detail->x86.op_count++;
+		break;
+	}
+}
+
 
 #endif

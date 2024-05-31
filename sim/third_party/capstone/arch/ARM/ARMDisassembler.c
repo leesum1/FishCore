@@ -7,7 +7,7 @@
 /* LLVM-tag: llvmorg-16.0.2-5-g464bda7750a3 */
 
 /* Only small edits allowed. */
-/* For multiple similiar edits, please create a Patch for the translator. */
+/* For multiple similar edits, please create a Patch for the translator. */
 
 /* Capstone's C++ file translator: */
 /* https://github.com/capstone-engine/capstone/tree/next/suite/auto-sync */
@@ -955,11 +955,8 @@ DecodeStatus AddThumbPredicate(MCInst *MI)
 			assert(TiedOp >= 0 &&
 			       "Inactive register in vpred_r is not tied to an output!");
 			// Copy the operand to ensure it's not invalidated when MI grows.
-			MCOperand *Op = malloc(sizeof(MCOperand));
-			memcpy(Op, MCInst_getOperand(MI, TiedOp),
-			       sizeof(MCOperand));
-			MCInst_insert0(MI, VCCPos + 3, Op);
-			free(Op);
+			MCOperand Op = *MCInst_getOperand(MI, TiedOp);
+			MCInst_insert0(MI, VCCPos + 3, &Op);
 		}
 	} else if (VCC != ARMVCC_None) {
 		Check(&S, MCDisassembler_SoftFail);
@@ -2085,7 +2082,7 @@ static DecodeStatus DecodeAddrMode2IdxInstruction(MCInst *Inst, unsigned Insn,
 		unsigned amt = fieldFromInstruction_4(Insn, 7, 5);
 		if (Opc == ARM_AM_ror && amt == 0)
 			Opc = ARM_AM_rrx;
-		unsigned imm = ARM_AM_getAM2Opc(Op, amt, Opc, idx_mode);
+		imm = ARM_AM_getAM2Opc(Op, amt, Opc, idx_mode);
 
 		MCOperand_CreateImm0(Inst, (imm));
 	} else {
@@ -6414,7 +6411,7 @@ static DecodeStatus DecoderForMRRC2AndMCRR2(MCInst *Inst, unsigned Val,
 	// Inst. Reason is because MRRC2 stores to two
 	// registers so it's tablegen desc has has two
 	// outputs whereas MCRR doesn't store to any
-	// registers so all of it's operands are listed
+	// registers so all of its operands are listed
 	// as inputs, therefore the operand order for
 	// MRRC2 needs to be [Rt, Rt2, cop, opc1, CRm]
 	// and MCRR2 operand order is [cop, opc1, Rt, Rt2, CRm]

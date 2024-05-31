@@ -42,7 +42,7 @@ extern "C" {
 ///         |--------|-------------|-------|------------|------------|
 /// Alter-  |        | Hint bit:   |       | Hint bit:  | Hint bit:  |
 /// native  | None   |   a         | None  |    a       |    t       |
-/// meaning |        | or ingored  |       | or ignored | or ignored |
+/// meaning |        | or ignored  |       | or ignored | or ignored |
 ///
 /// NOTE: If we do not decrement the counter, it is not used for the condition.
 ///
@@ -62,8 +62,8 @@ typedef enum ppc_pred {
 	PPC_PRED_GE = (0 << 5) | 4,
 	PPC_PRED_GT = (1 << 5) | 12,
 	PPC_PRED_NE = (2 << 5) | 4,
-	PPC_PRED_UN = (3 << 5) | 12, ///< Unordered (after fp comparision)
-	PPC_PRED_NU = (3 << 5) | 4,  ///< Not Unordered (after fp comparision)
+	PPC_PRED_UN = (3 << 5) | 12, ///< Unordered (after fp comparison)
+	PPC_PRED_NU = (3 << 5) | 4,  ///< Not Unordered (after fp comparison)
 	PPC_PRED_SO = (3 << 5) | 12, ///< summary overflow
 	PPC_PRED_NS = (3 << 5) | 4,  ///< not summary overflow
 
@@ -124,11 +124,11 @@ typedef enum {
 
 /// Masks of flags in the BO field.
 typedef enum {
-	PPC_BO_TEST_CR = 0b10000,  ///< Flag mask: Test CR bit.
-	PPC_BO_CR_CMP = 0b01000,   ///< Flag mask: Compare CR bit to 0 or 1.
-	PPC_BO_DECR_CTR = 0b00100, ///< Flag mask: Decrement counter.
-	PPC_BO_CTR_CMP = 0b00010,  ///< Flag mask: Compare CTR to 0 or 1.
-	PPC_BO_T = 0b00001,	   ///< Either ignored (z) or hint bit t
+	PPC_BO_TEST_CR = (1 << 4),  ///< Flag mask: Test CR bit.
+	PPC_BO_CR_CMP = (1 << 3),   ///< Flag mask: Compare CR bit to 0 or 1.
+	PPC_BO_DECR_CTR = (1 << 2), ///< Flag mask: Decrement counter.
+	PPC_BO_CTR_CMP = (1 << 1),  ///< Flag mask: Compare CTR to 0 or 1.
+	PPC_BO_T = 1,               ///< Either ignored (z) or hint bit t
 } ppc_bo_mask;
 
 /// Bit for branch taken (plus) or not-taken (minus) hint
@@ -136,11 +136,11 @@ typedef enum {
 /// Bit:  | 0 | 1 |
 /// Name: | a | t |
 typedef enum {
-	PPC_BR_NOT_GIVEN = 0b00,
-	PPC_BR_RESERVED = 0b01,
-	PPC_BR_NOT_TAKEN = 0b10, ///< Minus
-	PPC_BR_TAKEN = 0b11,	 ///< Plus
-	PPC_BR_HINT_MASK = 0b11,
+	PPC_BR_NOT_GIVEN = 0x0,
+	PPC_BR_RESERVED = 0x1,
+	PPC_BR_NOT_TAKEN = 0x2, ///< Minus
+	PPC_BR_TAKEN = 0x3,     ///< Plus
+	PPC_BR_HINT_MASK = 0x3,
 } ppc_br_hint;
 
 /// Encodes the different meanings of the BH field.
@@ -154,7 +154,7 @@ typedef enum {
 } ppc_bh;
 
 
-/// Returns the predicate wihtout branch hint information.
+/// Returns the predicate without branch hint information.
 inline static ppc_pred PPC_get_no_hint_pred(ppc_pred Code)
 {
 	switch (Code) {
@@ -881,22 +881,6 @@ static inline bool cs_ppc_bc_cr_bit_is_one(uint8_t bo)
 		return true;
 	return false;
 }
-
-#define PPC_NUM_OPS 8
-
-/// Instruction structure
-typedef struct cs_ppc {
-	/// branch code for branch instructions
-	ppc_bc bc;
-
-	/// if update_cr0 = True, then this 'dot' insn updates CR0
-	bool update_cr0;
-
-	/// Number of operands of this instruction,
-	/// or 0 when instruction has no operand.
-	uint8_t op_count;
-	cs_ppc_op operands[PPC_NUM_OPS]; ///< operands for this instruction.
-} cs_ppc;
 
 /// PPC instruction
 typedef enum ppc_insn {
@@ -3450,6 +3434,25 @@ static inline bool ppc_is_b_form(ppc_insn_form form)
 typedef struct {
 	ppc_insn_form form;
 } ppc_suppl_info;
+
+#define PPC_NUM_OPS 8
+
+/// Instruction structure
+typedef struct cs_ppc {
+	/// branch code for branch instructions
+	ppc_bc bc;
+
+	/// if update_cr0 = True, then this 'dot' insn updates CR0
+	bool update_cr0;
+
+	///< The instruction format. Can be use to determine the bit encoding of the instruction.
+	ppc_insn_form format;
+
+	/// Number of operands of this instruction,
+	/// or 0 when instruction has no operand.
+	uint8_t op_count;
+	cs_ppc_op operands[PPC_NUM_OPS]; ///< operands for this instruction.
+} cs_ppc;
 
 #ifdef __cplusplus
 }

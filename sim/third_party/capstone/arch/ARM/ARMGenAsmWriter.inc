@@ -9634,7 +9634,7 @@ void printInstruction(MCInst *MI, uint64_t Address, SStream *O)
 	assert(Bits != 0 && "Cannot print this instruction.");
 
 	// Fragment 0 encoded into 6 bits for 43 unique commands.
-	switch ((Bits >> 13) & 63) {
+	switch ((uint32_t)((Bits >> 13) & 63)) {
 	default:
 		assert(0 && "Invalid command number.");
 	case 0:
@@ -9860,7 +9860,7 @@ void printInstruction(MCInst *MI, uint64_t Address, SStream *O)
 	}
 
 	// Fragment 1 encoded into 7 bits for 89 unique commands.
-	switch ((Bits >> 19) & 127) {
+	switch ((uint32_t)((Bits >> 19) & 127)) {
 	default:
 		assert(0 && "Invalid command number.");
 	case 0:
@@ -10462,7 +10462,7 @@ void printInstruction(MCInst *MI, uint64_t Address, SStream *O)
 	}
 
 	// Fragment 2 encoded into 7 bits for 69 unique commands.
-	switch ((Bits >> 26) & 127) {
+	switch ((uint32_t)((Bits >> 26) & 127)) {
 	default:
 		assert(0 && "Invalid command number.");
 	case 0:
@@ -10877,7 +10877,7 @@ void printInstruction(MCInst *MI, uint64_t Address, SStream *O)
 	}
 
 	// Fragment 3 encoded into 6 bits for 39 unique commands.
-	switch ((Bits >> 33) & 63) {
+	switch ((uint32_t)((Bits >> 33) & 63)) {
 	default:
 		assert(0 && "Invalid command number.");
 	case 0:
@@ -11085,7 +11085,7 @@ void printInstruction(MCInst *MI, uint64_t Address, SStream *O)
 	}
 
 	// Fragment 4 encoded into 7 bits for 77 unique commands.
-	switch ((Bits >> 39) & 127) {
+	switch ((uint32_t)((Bits >> 39) & 127)) {
 	default:
 		assert(0 && "Invalid command number.");
 	case 0:
@@ -11527,7 +11527,7 @@ void printInstruction(MCInst *MI, uint64_t Address, SStream *O)
 	}
 
 	// Fragment 5 encoded into 5 bits for 27 unique commands.
-	switch ((Bits >> 46) & 31) {
+	switch ((uint32_t)((Bits >> 46) & 31)) {
 	default:
 		assert(0 && "Invalid command number.");
 	case 0:
@@ -11689,7 +11689,7 @@ void printInstruction(MCInst *MI, uint64_t Address, SStream *O)
 	}
 
 	// Fragment 6 encoded into 6 bits for 38 unique commands.
-	switch ((Bits >> 51) & 63) {
+	switch ((uint32_t)((Bits >> 51) & 63)) {
 	default:
 		assert(0 && "Invalid command number.");
 	case 0:
@@ -11897,7 +11897,7 @@ void printInstruction(MCInst *MI, uint64_t Address, SStream *O)
 	}
 
 	// Fragment 7 encoded into 4 bits for 16 unique commands.
-	switch ((Bits >> 57) & 15) {
+	switch ((uint32_t)((Bits >> 57) & 15)) {
 	default:
 		assert(0 && "Invalid command number.");
 	case 0:
@@ -13298,11 +13298,11 @@ static bool printAliasInstr(MCInst *MI, uint64_t Address, SStream *OS)
 	while (AsmString[I] != ' ' && AsmString[I] != '\t' &&
 	       AsmString[I] != '$' && AsmString[I] != '\0')
 		++I;
-	char *substr = malloc(I + 1);
+	char *substr = cs_mem_malloc(I + 1);
 	memcpy(substr, AsmString, I);
 	substr[I] = '\0';
 	SStream_concat0(OS, substr);
-	free(substr);
+	cs_mem_free(substr);
 	if (AsmString[I] != '\0') {
 		if (AsmString[I] == ' ' || AsmString[I] == '\t') {
 			SStream_concat1(OS, ' ');
@@ -13336,10 +13336,10 @@ static bool printAliasInstr(MCInst *MI, uint64_t Address, SStream *OS)
 #endif // CAPSTONE_DIET
 }
 
+#ifndef CAPSTONE_DIET
 void printCustomAliasOperand(MCInst *MI, uint64_t Address, unsigned OpIdx,
 			     unsigned PrintMethodIdx, SStream *OS)
 {
-#ifndef CAPSTONE_DIET
 	switch (PrintMethodIdx) {
 	default:
 		assert(0 && "Unknown PrintMethod kind");
@@ -13354,7 +13354,7 @@ void printCustomAliasOperand(MCInst *MI, uint64_t Address, unsigned OpIdx,
 		printMandatoryInvertedPredicateOperand(MI, OpIdx, OS);
 		break;
 	}
-#endif // CAPSTONE_DIET
 }
+#endif // CAPSTONE_DIET
 
 #endif // PRINT_ALIAS_INSTR

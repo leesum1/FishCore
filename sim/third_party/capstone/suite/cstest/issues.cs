@@ -1,3 +1,19 @@
+!# issue 2323 eBPF bswap16 instruction
+!# CS_ARCH_BPF, CS_MODE_LITTLE_ENDIAN+CS_MODE_BPF_EXTENDED, CS_OPT_DETAIL
+0xd7,0x53,0x3f,0x0c,0x10,0x00,0x00,0x00 == bswap16 r3
+
+!# issue 2323 eBPF bswap32 instruction
+!# CS_ARCH_BPF, CS_MODE_LITTLE_ENDIAN+CS_MODE_BPF_EXTENDED, CS_OPT_DETAIL
+0xd7,0x53,0x3f,0x0c,0x20,0x00,0x00,0x00 == bswap32 r3
+
+!# issue 2323 eBPF bswap64 instruction
+!# CS_ARCH_BPF, CS_MODE_LITTLE_ENDIAN+CS_MODE_BPF_EXTENDED, CS_OPT_DETAIL
+0xd7,0x53,0x3f,0x0c,0x40,0x00,0x00,0x00 == bswap64 r3
+
+!# issue 2258 vcmpunordss incorrect read/modified register
+!# CS_ARCH_X86, CS_MODE_64, CS_OPT_DETAIL
+0x62,0xd1,0x56,0x08,0xc2,0xca,0x03 == vcmpunordss k1, xmm5, xmm10 ; operands[0].access: WRITE ; operands[1].access: READ ; operands[2].access: READ
+
 !# issue 2062 repz Prefix
 !# CS_ARCH_X86, CS_MODE_64, CS_OPT_DETAIL
 0xf3,0xc3 == repz ret ; Prefix:0xf3 0x00 0x00 0x00
@@ -753,7 +769,7 @@
 
 !# issue 760
 !# CS_ARCH_ARM, CS_MODE_ARM, CS_OPT_DETAIL
-0x0: 0x02,0x80,0xbd,0xe8 == pop {r1, pc} ; op_count: 2 ; operands[0].type: REG = r1 ; operands[0].access: WRITE ; operands[1].type: REG = r15 ; operands[1].access: WRITE ; Write-back: True ; Registers read: r13 ; Registers modified: r13 r1 r15 ; Groups: IsARM return
+0x0: 0x02,0x80,0xbd,0xe8 == pop {r1, pc} ; op_count: 2 ; operands[0].type: REG = r1 ; operands[0].access: WRITE ; operands[1].type: REG = r15 ; operands[1].access: WRITE ; Write-back: True ; Registers read: r13 ; Registers modified: r13 r1 r15 ; Groups: IsARM return jump
 
 !# issue 750
 !# CS_ARCH_ARM, CS_MODE_ARM, CS_OPT_DETAIL
@@ -773,7 +789,7 @@
 
 !# issue 744
 !# CS_ARCH_ARM, CS_MODE_ARM, CS_OPT_DETAIL
-0x0: 0x02,0x80,0xbd,0xe8 == pop {r1, pc} ; op_count: 2 ; operands[0].type: REG = r1 ; operands[0].access: WRITE ; operands[1].type: REG = r15 ; operands[1].access: WRITE ; Write-back: True ; Registers read: r13 ; Registers modified: r13 r1 r15 ; Groups: IsARM return
+0x0: 0x02,0x80,0xbd,0xe8 == pop {r1, pc} ; op_count: 2 ; operands[0].type: REG = r1 ; operands[0].access: WRITE ; operands[1].type: REG = r15 ; operands[1].access: WRITE ; Write-back: True ; Registers read: r13 ; Registers modified: r13 r1 r15 ; Groups: IsARM return jump
 
 !# issue 741
 !# CS_ARCH_X86, CS_MODE_32, None
@@ -1047,3 +1063,18 @@
 !# CS_ARCH_AARCH64, CS_MODE_ARM, None
 0x0: 0x00,0x00,0x00,0x4c == st4 { v0.16b, v1.16b, v2.16b, v3.16b }, [x0]
 
+!# issue 2233 ARM write to PC is branch
+!# CS_ARCH_ARM, CS_MODE_THUMB, CS_OPT_DETAIL
+0x87,0x46 == mov pc, r0 ; Groups: IsThumb jump 
+
+!# issue 2128
+!# CS_ARCH_X86, CS_MODE_64, CS_OPT_DETAIL
+0x0: 0x4c,0x85,0x7d,0x30 == test	qword ptr [rbp + 0x30], r15 ; operands[1].type: REG = r15 ; operands[1].access: READ ; Registers read: rbp r15 ; Registers modified: rflags
+
+!# issue 2079
+!# CS_ARCH_X86, CS_MODE_32, CS_OPT_DETAIL
+0x0: 0xd1,0x10 == rcl	dword ptr [eax] ; operands[1].type: IMM = 0x1
+
+!# issue 2244
+!# CS_ARCH_X86, CS_MODE_64, CS_OPT_DETAIL
+0x0: 0xc5,0xfb,0xc2,0xda,0x06 == vcmpnlesd	xmm3, xmm0, xmm2 ; ID: 797

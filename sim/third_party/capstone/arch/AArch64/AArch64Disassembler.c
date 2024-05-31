@@ -360,25 +360,25 @@ static DecodeStatus getInstruction(csh handle, const uint8_t *Bytes, size_t Byte
 		// For Scalable Matrix Extension (SME) instructions that have an
 		// implicit operand for the accumulator (ZA) or implicit immediate zero
 		// which isn't encoded, manually insert operand.
-		for (unsigned i = 0; i < Desc.NumOperands; i++) {
-			if (Desc.OpInfo[i].OperandType == MCOI_OPERAND_REGISTER) {
-				switch (Desc.OpInfo[i].RegClass) {
+		for (unsigned j = 0; j < Desc.NumOperands; j++) {
+			if (Desc.OpInfo[j].OperandType == MCOI_OPERAND_REGISTER) {
+				switch (Desc.OpInfo[j].RegClass) {
 				default:
 					break;
 				case AArch64_MPRRegClassID:
-					MCInst_insert0(MI, i, MCOperand_CreateReg1(MI, AArch64_ZA));
+					MCInst_insert0(MI, j, MCOperand_CreateReg1(MI, AArch64_ZA));
 					break;
 				case AArch64_MPR8RegClassID:
-					MCInst_insert0(MI, i,
+					MCInst_insert0(MI, j,
 							  MCOperand_CreateReg1(MI, AArch64_ZAB0));
 					break;
 				case AArch64_ZTRRegClassID:
-					MCInst_insert0(MI, i, MCOperand_CreateReg1(MI, AArch64_ZT0));
+					MCInst_insert0(MI, j, MCOperand_CreateReg1(MI, AArch64_ZT0));
 					break;
 				}
-			} else if (Desc.OpInfo[i].OperandType ==
+			} else if (Desc.OpInfo[j].OperandType ==
 					   AArch64_OP_IMPLICIT_IMM_0) {
-				MCInst_insert0(MI, i, MCOperand_CreateImm1(MI, 0));
+				MCInst_insert0(MI, j, MCOperand_CreateImm1(MI, 0));
 			}
 		}
 
@@ -1871,9 +1871,9 @@ static DecodeStatus DecodeUnconditionalBranch(MCInst *Inst, uint32_t insn,
 
 static bool isInvalidPState(uint64_t Op1, uint64_t Op2)
 {
-	return Op1 == 0b000 && (Op2 == 0b000 || // CFINV
-							Op2 == 0b001 || // XAFlag
-							Op2 == 0b010);	// AXFlag
+	return Op1 == 0 && (Op2 == 0 || // CFINV
+							Op2 == 1 || // XAFlag
+							Op2 == 2);  // AXFlag
 }
 
 static DecodeStatus DecodeSystemPStateImm0_15Instruction(MCInst *Inst,
@@ -1988,7 +1988,7 @@ static DecodeStatus DecodeSyspXzrInstruction(MCInst *Inst, uint32_t insn,
 	unsigned CRm = fieldFromInstruction_4(insn, 8, 4);
 	unsigned op2 = fieldFromInstruction_4(insn, 5, 3);
 	unsigned Rt = fieldFromInstruction_4(insn, 0, 5);
-	if (Rt != 0b11111)
+	if (Rt != 0x1f)
 		return Fail;
 
 	MCOperand_CreateImm0(Inst, (op1));

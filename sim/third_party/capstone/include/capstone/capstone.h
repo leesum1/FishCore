@@ -151,6 +151,7 @@ typedef enum cs_arch {
 	CS_ARCH_SH,             ///< SH architecture
 	CS_ARCH_TRICORE,	///< TriCore architecture
 	CS_ARCH_ALPHA, 		///< Alpha architecture
+	CS_ARCH_HPPA, 		///< HPPA architecture
 	CS_ARCH_MAX,
 	CS_ARCH_ALL = 0xFFFF, // All architectures - for cs_support()
 } cs_arch;
@@ -209,7 +210,6 @@ typedef enum cs_mode {
 	CS_MODE_RISCV32  = 1 << 0,        ///< RISCV RV32G
 	CS_MODE_RISCV64  = 1 << 1,        ///< RISCV RV64G
 	CS_MODE_RISCVC   = 1 << 2,        ///< RISCV compressed instructure mode
-	CS_MODE_RISCV64C = CS_MODE_RISCV64 | CS_MODE_RISCVC, ///< RISCV RV64GC
 	CS_MODE_MOS65XX_6502 = 1 << 1, ///< MOS65XXX MOS 6502
 	CS_MODE_MOS65XX_65C02 = 1 << 2, ///< MOS65XXX WDC 65c02
 	CS_MODE_MOS65XX_W65C02 = 1 << 3, ///< MOS65XXX WDC W65c02
@@ -231,6 +231,9 @@ typedef enum cs_mode {
 	CS_MODE_TRICORE_160 = 1 << 5, ///< Tricore 1.6
 	CS_MODE_TRICORE_161 = 1 << 6, ///< Tricore 1.6.1
 	CS_MODE_TRICORE_162 = 1 << 7, ///< Tricore 1.6.2
+	CS_MODE_HPPA_11 = 1 << 1, ///< HPPA 1.1
+	CS_MODE_HPPA_20 = 1 << 2, ///< HPPA 2.0
+	CS_MODE_HPPA_20W = CS_MODE_HPPA_20 | (1 << 3), ///< HPPA 2.0 wide
 } cs_mode;
 
 typedef void* (CAPSTONE_API *cs_malloc_t)(size_t size);
@@ -373,6 +376,7 @@ typedef struct cs_opt_skipdata {
 #include "sh.h"
 #include "tricore.h"
 #include "alpha.h"
+#include "hppa.h"
 
 #define MAX_IMPL_W_REGS 47
 #define MAX_IMPL_R_REGS 20
@@ -418,6 +422,7 @@ typedef struct cs_detail {
 		cs_sh sh;        ///< SH architecture
 		cs_tricore tricore; ///< TriCore architecture
 		cs_alpha alpha; ///< Alpha architecture
+		cs_hppa hppa; ///< HPPA architecture
 	};
 } cs_detail;
 
@@ -523,6 +528,44 @@ typedef enum cs_err {
 CAPSTONE_EXPORT
 unsigned int CAPSTONE_API cs_version(int *major, int *minor);
 
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_arm(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_aarch64(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_mips(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_x86(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_powerpc(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_sparc(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_sysz(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_xcore(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_m68k(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_tms320c64x(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_m680x(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_evm(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_mos65xx(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_wasm(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_bpf(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_riscv(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_sh(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_tricore(void);
+CAPSTONE_EXPORT
+void CAPSTONE_API cs_arch_register_alpha(void);
 
 /**
  This API can be used to either ask for archs supported by this library,
@@ -628,7 +671,7 @@ const char * CAPSTONE_API cs_strerror(cs_err code);
  which complicates things. This is especially troublesome for the case @count=0,
  when cs_disasm() runs uncontrollably (until either end of input buffer, or
  when it encounters an invalid instruction).
-
+ 
  @handle: handle returned by cs_open()
  @code: buffer containing raw binary code to be disassembled.
  @code_size: size of the above code buffer.
@@ -695,7 +738,7 @@ cs_insn * CAPSTONE_API cs_malloc(csh handle);
  which complicates things. This is especially troublesome for the case
  @count=0, when cs_disasm() runs uncontrollably (until either end of input
  buffer, or when it encounters an invalid instruction).
-
+ 
  @handle: handle returned by cs_open()
  @code: buffer containing raw binary code to be disassembled
  @size: size of above code
