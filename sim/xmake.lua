@@ -25,10 +25,9 @@ package_end()
 
 add_requires("cli11", { system = false })
 add_requires("elfio", { system = false })
-add_requires("libsdl", { system = true})
+add_requires("libsdl", { system = true })
 add_requires("readerwriterqueue", { system = false })
 add_requires("spdlog", { system = false })
-add_requires("@verilator", { system = true })
 add_requires("capstone_my")
 -- add_requires("vcpkg::concurrencpp", {system = false})
 
