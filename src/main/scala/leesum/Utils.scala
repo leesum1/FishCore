@@ -26,6 +26,7 @@ object GenVerilogHelper {
 
     val x = ChiselStage.emitSystemVerilog(
       gen = gen,
+      args = Array("--firtool-binary-path", "firtool"),
       firtoolOpts = Array(
         "--disable-all-randomization",
         "--strip-debug-info",

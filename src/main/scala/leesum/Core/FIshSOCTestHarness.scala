@@ -188,18 +188,20 @@ class FishSoc(
 }
 
 object gen_FishSoc extends App {
+  val projectDir = System.getProperty("user.dir")
   GenVerilogHelper(
     new FishSoc(
       muldiv_en = true,
       rvc_en = true
     ),
-    "/home/leesum/workhome/chisel-fish/sim/vsrc/ysyx_v2.sv"
+    s"$projectDir/sim/vsrc/ysyx_v2.sv"
   )
 }
 
 /** This is a simplified version of CoreDutFull, which is used for VIVADO STA.
   */
 object gen_CoreTestSTA extends App {
+  val projectDir = System.getProperty("user.dir")
   GenVerilogHelper(
     new FishSoc(
       muldiv_en = false,

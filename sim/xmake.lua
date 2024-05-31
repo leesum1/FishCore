@@ -12,30 +12,20 @@ if is_mode("debug") then
 	set_policy("build.sanitizer.address", true)
 end
 
-
-
-
-
-
 package("capstone_my")
-    add_deps("cmake")
-    set_sourcedir(path.join(os.scriptdir(), "third_party/capstone"))
-    on_install(function (package)
-        local configs = {}
-        table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"))
-        table.insert(configs, "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"))
-        import("package.tools.cmake").install(package, configs)
-    end)
+add_deps("cmake")
+set_sourcedir(path.join(os.scriptdir(), "third_party/capstone"))
+on_install(function(package)
+	local configs = {}
+	table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"))
+	table.insert(configs, "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"))
+	import("package.tools.cmake").install(package, configs)
+end)
 package_end()
 
-
-
-
-
 add_requires("cli11", { system = false })
--- add_requires("libassert", { system = false })
 add_requires("elfio", { system = false })
-add_requires("libsdl", { system = false })
+add_requires("libsdl", { system = true})
 add_requires("readerwriterqueue", { system = false })
 add_requires("spdlog", { system = false })
 add_requires("@verilator", { system = true })
@@ -50,20 +40,22 @@ set_languages("cxx20")
 
 add_rules("plugin.compile_commands.autoupdate", { outputdir = "." })
 target("Vtop")
-    add_rules("verilator.binary")
-    set_toolchains("@verilator")
-    add_files("src/*.cpp")
-    add_files("vsrc/*.sv")
-    add_values("verilator.flags", "--top", "FishSoc","--Wno-WIDTHEXPAND")
+add_rules("verilator.binary")
+set_toolchains("@verilator")
+add_files("src/*.cpp")
+add_files("vsrc/*.sv")
+add_values("verilator.flags", "--top", "FishSoc", "--Wno-WIDTHEXPAND")
 --     add_values("verilator.flags", "--trace-fst")
-    -- add_values("verilator.flags", "--trace-max-array","256")
-    -- add_values("verilator.flags", "-DPRINTF_COND=0","-DASSERT_VERBOSE_COND=0","-DSTOP_COND=0")
+-- add_values("verilator.flags", "--trace-max-array","256")
+-- add_values("verilator.flags", "-DPRINTF_COND=0","-DASSERT_VERBOSE_COND=0","-DSTOP_COND=0")
 
 --     add_values("verilator.flags", "--threads", "3")
-    add_includedirs("src/include/")
-    add_includedirs("third_party/capstone/include/capstone/")
-    add_packages("cli11", "elfio", "libsdl", "readerwriterqueue", "spdlog","capstone_my")
-    add_links("rv64emu_cbinding")
+add_includedirs("src/include/")
+add_includedirs("third_party/capstone/include/capstone/")
+add_packages("cli11", "elfio", "libsdl", "readerwriterqueue", "spdlog", "capstone_my")
+add_linkdirs("ready_to_run")
+add_links("rv64emu_cbinding")
+add_rpathdirs("$(scriptdir)/ready_to_run")
 
 -- for _, file in ipairs(os.files("test/*.cpp")) do
 --     local name = path.basename(file)

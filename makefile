@@ -7,6 +7,9 @@ sim_dir := ${FISH_CORE_HOME}/sim
 clean_dir := ${FISH_CORE_HOME}/project \
 			 ${FISH_CORE_HOME}/.venv \
 			 ${FISH_CORE_HOME}/target \
+			 ${FISH_CORE_HOME}/sim/.xmake \
+			 ${FISH_CORE_HOME}/sim/.cache \
+			 ${FISH_CORE_HOME}/sim/build \
 
 gen_fish_soc_verilog:
 	cd ${FISH_CORE_HOME} && sbt "runMain  leesum.Core.gen_FishSoc"

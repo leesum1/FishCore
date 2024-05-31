@@ -341,6 +341,7 @@ hs_err_pid*
 # Configuration by leesum
 .*/
 gen_verilog
+Dockerfile
 *.anno.json
 /src/main/resources/BasicMemorySyncReadMemInit_0.txt
 /src/main/resources/BasicMemorySyncReadMemInit_1.txt
