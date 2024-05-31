@@ -340,6 +340,7 @@ hs_err_pid*
 
 # Configuration by leesum
 .*/
+!.devcontainer/
 gen_verilog
 Dockerfile
 *.anno.json
