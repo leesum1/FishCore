@@ -340,9 +340,11 @@ hs_err_pid*
 
 # Configuration by leesum
 .*/
-!.devcontainer/
 gen_verilog
 Dockerfile
+!.devcontainer/
+!.devcontainer/*
+
 *.anno.json
 /src/main/resources/BasicMemorySyncReadMemInit_0.txt
 /src/main/resources/BasicMemorySyncReadMemInit_1.txt
