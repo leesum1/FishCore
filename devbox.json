@@ -13,11 +13,13 @@
     "fish@latest",
     "SDL2@latest",
     "xz@latest",
-    "SDL2.dev"
+    "SDL2.dev",
+    "cmake@latest"
   ],
   "shell": {
     "init_hook": [
       "echo 'Welcome to devbox!' > /dev/null",
+      "unset -v CC CXX LD AR AS NM STRIP OBJCOPY OBJDUMP SIZE",
       ". $VENV_DIR/bin/activate"
     ],
     "scripts": {

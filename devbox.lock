@@ -149,6 +149,62 @@
         }
       }
     },
+    "cmake@latest": {
+      "last_modified": "2024-05-22T06:18:38Z",
+      "resolved": "github:NixOS/nixpkgs/3f316d2a50699a78afe5e77ca486ad553169061e#cmake",
+      "source": "devbox-search",
+      "version": "3.29.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/mjsdqwy2259jfys18h4n2hz2wf46i5va-cmake-3.29.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/mjsdqwy2259jfys18h4n2hz2wf46i5va-cmake-3.29.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/0l4mzjvc0k2i0mjmfwynj6iaq0zbd98y-cmake-3.29.2",
+              "default": true
+            },
+            {
+              "name": "debug",
+              "path": "/nix/store/hc06b2msm9wbz5wg5h57fzhidv2p51i4-cmake-3.29.2-debug"
+            }
+          ],
+          "store_path": "/nix/store/0l4mzjvc0k2i0mjmfwynj6iaq0zbd98y-cmake-3.29.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ci05wpr9gk1mihgbp3dxj9lnd69k0m6z-cmake-3.29.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/ci05wpr9gk1mihgbp3dxj9lnd69k0m6z-cmake-3.29.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/q1nssraba326p2kp6627hldd2bhg254c-cmake-3.29.2",
+              "default": true
+            },
+            {
+              "name": "debug",
+              "path": "/nix/store/01qzhw8554i60r2s83p1d6bbgayzwpql-cmake-3.29.2-debug"
+            }
+          ],
+          "store_path": "/nix/store/q1nssraba326p2kp6627hldd2bhg254c-cmake-3.29.2"
+        }
+      }
+    },
     "espresso@latest": {
       "last_modified": "2024-05-22T06:18:38Z",
       "resolved": "github:NixOS/nixpkgs/3f316d2a50699a78afe5e77ca486ad553169061e#espresso",
