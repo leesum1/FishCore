@@ -103,7 +103,7 @@ local.properties
 *.o
 *.ko
 *.obj
-*.elf
+# *.elf
 
 # Precompiled Headers
 *.gch
@@ -117,8 +117,8 @@ local.properties
 
 # Shared objects (inc. Windows DLLs)
 *.dll
-*.so
-*.so.*
+# *.so
+# *.so.*
 *.dylib
 
 # Executables
@@ -240,7 +240,7 @@ crashlytics-build.properties
 *.pch
 
 # Compiled Dynamic libraries
-*.so
+# *.so
 *.dylib
 *.dll
 
