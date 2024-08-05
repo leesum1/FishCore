@@ -429,6 +429,90 @@
         }
       }
     },
+    "just@latest": {
+      "last_modified": "2024-07-20T00:34:32Z",
+      "resolved": "github:NixOS/nixpkgs/2d65995365a2a6b05db69e344d3b673c8d541bcd#just",
+      "source": "devbox-search",
+      "version": "1.32.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ccckanc6vcj095h84hsp92f4kgjiblpj-just-1.32.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/vwpr0r66zc2ysz5cf4iyr345k7mv56dr-just-1.32.0-man",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/68rrkw55rpi9xkz0g8gi3j5b38vakp99-just-1.32.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/ccckanc6vcj095h84hsp92f4kgjiblpj-just-1.32.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/hk5ijln6kcl3xh7icg46wwd6blfiaxay-just-1.32.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/3hp5qcj8h23ibdrkzi3swg995bzbqxvc-just-1.32.0-man",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/kqpkqgbf1pnc85gmw4c4lp4ayxqf1ly9-just-1.32.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/hk5ijln6kcl3xh7icg46wwd6blfiaxay-just-1.32.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/w1634ijbj4d316gadgqp480sydksdani-just-1.32.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/ibz4bz1fgi5y5kxawjd4l0bi8v6i2rnx-just-1.32.0-man",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/3bfig0wi3xcnk7ilz031fpi09q361ryr-just-1.32.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/w1634ijbj4d316gadgqp480sydksdani-just-1.32.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1c8zwhwzvrv0m875aq99di6a0hf2h75i-just-1.32.0",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/13aywilvzdwi1hsiq9l8q9k50jdlmk19-just-1.32.0-man",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/rwj93jl9zig132pfq3w5scnacxdf961j-just-1.32.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/1c8zwhwzvrv0m875aq99di6a0hf2h75i-just-1.32.0"
+        }
+      }
+    },
     "neovim@latest": {
       "last_modified": "2024-05-24T22:06:51Z",
       "resolved": "github:NixOS/nixpkgs/1a9df4f74273f90d04e621e8516777efcec2802a#neovim",
@@ -771,6 +855,90 @@
             }
           ],
           "store_path": "/nix/store/6i4xxaa812vsbli9jkq4mksdddrk27lw-xz-5.4.6-bin"
+        }
+      }
+    },
+    "zlib.dev": {
+      "resolved": "github:NixOS/nixpkgs/75a52265bda7fd25e06e3a67dee3f0354e73243c#zlib.dev",
+      "source": "nixpkg"
+    },
+    "zlib@latest": {
+      "last_modified": "2024-07-05T12:16:31Z",
+      "resolved": "github:NixOS/nixpkgs/4284c2b73c8bce4b46a6adf23e16d9e2ec8da4bb#zlib",
+      "source": "devbox-search",
+      "version": "1.3.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/p6lh10p1i984zqfacn3kc9pn3nxsj44n-zlib-1.3.1",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/d9s89ja62dqfswka75rn7minwmn8xi4d-zlib-1.3.1-dev"
+            },
+            {
+              "name": "static",
+              "path": "/nix/store/vx3195nyvrbazl321kgxgbggf5f0755p-zlib-1.3.1-static"
+            }
+          ],
+          "store_path": "/nix/store/p6lh10p1i984zqfacn3kc9pn3nxsj44n-zlib-1.3.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/2qxcwya8zizcdmiwhpd7wvdxad5x5ygw-zlib-1.3.1",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/4f32crjfmzlzknnaw52hdjqix94gd605-zlib-1.3.1-dev"
+            },
+            {
+              "name": "static",
+              "path": "/nix/store/hyzwxjamswz4lgpq18ak4yljp6gbi5jm-zlib-1.3.1-static"
+            }
+          ],
+          "store_path": "/nix/store/2qxcwya8zizcdmiwhpd7wvdxad5x5ygw-zlib-1.3.1"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/q3y1wy13nbni0nvckh3g9p38laq2ml2a-zlib-1.3.1",
+              "default": true
+            },
+            {
+              "name": "static",
+              "path": "/nix/store/4fjwpih5f9n17ylfxdaipncv31ypjz2y-zlib-1.3.1-static"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/xdpn7fs3bza5vcsx26wydgbcd3bi43i5-zlib-1.3.1-dev"
+            }
+          ],
+          "store_path": "/nix/store/q3y1wy13nbni0nvckh3g9p38laq2ml2a-zlib-1.3.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/971g0fka30djkcww2ddpx7q66dr86c1q-zlib-1.3.1",
+              "default": true
+            },
+            {
+              "name": "static",
+              "path": "/nix/store/1m61dvwq67a0swig8n83ckjyq4508k34-zlib-1.3.1-static"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/dq03m14rqjvbz6pw42g555df4khh4bvr-zlib-1.3.1-dev"
+            }
+          ],
+          "store_path": "/nix/store/971g0fka30djkcww2ddpx7q66dr86c1q-zlib-1.3.1"
         }
       }
     }

@@ -14,7 +14,10 @@
     "SDL2@latest",
     "xz@latest",
     "SDL2.dev",
-    "cmake@latest"
+    "cmake@latest",
+    "zlib@latest",
+    "zlib.dev",
+    "just@latest"
   ],
   "shell": {
     "init_hook": [

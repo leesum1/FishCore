@@ -88,7 +88,8 @@ class DummyMulTest extends AnyFreeSpec with ChiselScalatestTester {
   def gen_mul_resp(
       op_a: Long,
       op_b: Long,
-      op_type: FuOP.Type,
+//      op_type: FuOP.Type,
+      op_type: UInt,
       is_rv32: Boolean
   ): MulResp = {
     val ref = new MulRef()
