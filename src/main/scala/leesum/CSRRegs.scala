@@ -104,7 +104,47 @@ class CSRDirectReadPorts extends Bundle {
   val stval = UInt(64.W)
   val sscratch = UInt(64.W)
 
+  // Debug mode
+  val dcsr = UInt(32.W)
+  val dpc = UInt(64.W)
+
   val satp = UInt(64.W)
+}
+
+class DcsrFiled(data: UInt) {
+  require(data.getWidth == 32)
+  def prv = data(1, 0)
+  def step = data(2)
+  def nmip = data(3)
+  def mprven = data(4)
+  def v = data(5)
+  def cause = data(8, 6)
+  def stoptime = data(9)
+  def stopcount = data(10)
+  def stepie = data(11)
+  def ebreaku = data(12)
+  def ebreaks = data(13)
+  def zero0 = data(14)
+  def ebreakm = data(15)
+  def ebreakvu = data(16)
+  def ebreakvs = data(17)
+  def zero1 = data(27, 18)
+  def debugver = data(31, 28)
+
+  def get_debug_dcsr(cause: UInt, cur_priv: UInt) = {
+    require(cause.getWidth == 3)
+    require(cur_priv.getWidth == 2)
+    val new_dcsr = Cat(
+      data(31, 9),
+      cause,
+      false.B, // not support v
+      data(4, 2),
+      cur_priv
+    )
+    require(new_dcsr.getWidth == 32)
+    new_dcsr
+  }
+
 }
 
 class MstatusFiled(data: UInt) {
@@ -313,6 +353,11 @@ class CSRDirectWritePorts extends Bundle {
   val sepc = Valid(UInt(64.W))
   val stval = Valid(UInt(64.W))
 
+  // Debug mode
+
+  val dcsr = Valid(UInt(32.W))
+  val dpc = Valid(UInt(64.W))
+
   val instret_inc = Valid(UInt(4.W))
 
   def clear(): Unit = {
@@ -328,6 +373,8 @@ class CSRDirectWritePorts extends Bundle {
     stvec.valid := false.B
     scause.valid := false.B
     instret_inc.valid := false.B
+    dcsr.valid := false.B
+    dpc.valid := false.B
 
     mstatus.bits := 0.U
     mcause.bits := 0.U
@@ -341,6 +388,8 @@ class CSRDirectWritePorts extends Bundle {
     stvec.bits := 0.U
     scause.bits := 0.U
     instret_inc.bits := 0.U
+    dcsr.bits := 0.U
+    dpc.bits := 0.U
   }
 }
 
@@ -599,6 +648,11 @@ class CSRRegs extends Module {
   val sscratch = RegInit(0.U(64.W))
   val satp = RegInit(0.U(64.W))
 
+  // Debug mode
+
+  val dcsr = RegInit(0.U(64.W))
+  val dpc = RegInit(0.U(64.W))
+
   // counters
   val mcounteren = RegInit(0.U(64.W))
   val scounteren = RegInit(0.U(64.W))
@@ -664,6 +718,10 @@ class CSRRegs extends Module {
       (CSRs.satp, satp, satp_read, satp_write),
       (CSRs.sip, mip, sip_sie_read, sip_sie_write),
       (CSRs.sie, mie, sip_sie_read, sip_sie_write),
+
+      // Debug mode
+      (CSRs.dcsr, dcsr, normal_read, normal_write),
+      (CSRs.dpc, dpc, normal_read, normal_write),
 
       // read only
       (CSRs.misa, misa, normal_read, empty_write),
@@ -757,6 +815,10 @@ class CSRRegs extends Module {
   io.direct_read_ports.satp := satp
   io.direct_read_ports.sscratch := sscratch
 
+  // debug mode
+  io.direct_read_ports.dcsr := dcsr(31, 0)
+  io.direct_read_ports.dpc := dpc
+
   when(io.direct_write_ports.mip.valid) {
     mip := io.direct_write_ports.mip.bits
   }
@@ -791,6 +853,14 @@ class CSRRegs extends Module {
   }
   when(io.direct_write_ports.scause.valid) {
     scause := io.direct_write_ports.scause.bits
+  }
+
+  // debug mode
+  when(io.direct_write_ports.dcsr.valid) {
+    dcsr := Cat(0.U(32.W), io.direct_write_ports.dcsr.bits)
+  }
+  when(io.direct_write_ports.dpc.valid) {
+    dpc := io.direct_write_ports.dpc.bits
   }
 
 }

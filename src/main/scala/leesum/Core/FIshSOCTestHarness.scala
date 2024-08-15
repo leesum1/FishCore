@@ -1,7 +1,7 @@
 package leesum.Core
 
 import chisel3._
-import chisel3.util.{Valid, log2Ceil}
+import chisel3.util.{Valid, ValidIO, log2Ceil}
 import leesum.{GenVerilogHelper, MSBDivFreq}
 import leesum.axi4.{
   AXI4SlaveBridge,
@@ -10,6 +10,7 @@ import leesum.axi4.{
   BasicMemoryIO,
   MemoryIO64to32
 }
+import leesum.dbg.DbgSlaveState
 import leesum.devices.{SifiveUart, clint, plic}
 import leesum.moniter.{DifftestPort, PerfPort}
 
@@ -82,6 +83,9 @@ class FishSoc(
     val difftest = Output(Valid(new DifftestPort(2)))
     val perf_monitor = Output(new PerfPort)
     val mem_port = Flipped(new BasicMemoryIO(32, 64))
+    // debug
+    val debug_state_regs = Output(new DbgSlaveState())
+    val debug_halt_req = Input(ValidIO(Bool()))
   })
 
   val core = Module(
@@ -90,6 +94,8 @@ class FishSoc(
 
   core.io.difftest <> io.difftest
   core.io.perf_monitor <> io.perf_monitor
+  core.io.debug_state_regs <> io.debug_state_regs
+  core.io.debug_halt_req <> io.debug_halt_req
 
   val axi_demux = Module(
     new AXIDeMux(4, 32, 64)

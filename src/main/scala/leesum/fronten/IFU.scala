@@ -51,6 +51,9 @@ class IFUTop(
     val cmt_update_bim_data = Input(UInt(2.W))
     val cmt_update_btb_way_sel = Input(UInt(log2Ceil(btb_way_count).W))
 
+    // halted
+    val halted = Input(Bool())
+
     // f1 bp performance monitor
     val perf_bp_f1 = Output(new PerfMonitorCounter)
   })
@@ -148,11 +151,11 @@ class IFUTop(
 
   def send_icache_req() = {
     // TODO: check it about flush
-    io.icache_req.valid := pc_gen_stage.io.pc.valid && !io.flush && !f3_flush_next
+    io.icache_req.valid := pc_gen_stage.io.pc.valid && !io.flush && !f3_flush_next && !io.halted
 
     // 1. flush from commit
     // 2. flush from f3 branch prediction
-    pc_gen_stage.io.pc.ready := io.icache_req.ready && !io.flush && !f3_flush_next
+    pc_gen_stage.io.pc.ready := io.icache_req.ready && !io.flush && !f3_flush_next && !io.halted
 //    io.icache_req.bits.va := pc_gen_stage.io.pc.bits
     io.icache_req.bits.va := pc_gen_stage.io.npc
     when(io.icache_req.fire) {

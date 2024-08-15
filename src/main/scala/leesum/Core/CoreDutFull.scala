@@ -1,10 +1,11 @@
 package leesum.Core
 import chisel3._
-import chisel3.util.Valid
+import chisel3.util.{Valid, ValidIO}
 import leesum.Cache.{DCacheConnect, DCacheReq, DCacheResp, ICacheTop}
 import leesum.ICache.DCacheTop
 import leesum._
 import leesum.axi4.{AXIMasterIO, AxiReadArbiter}
+import leesum.dbg.DbgSlaveState
 import leesum.fronten.IFUTop
 import leesum.lsu.LSUTop
 import leesum.mmu_sv39.MMU
@@ -33,6 +34,10 @@ class FishCore(
     val soft_int = Input(Bool())
     val mext_int = Input(Bool())
     val sext_int = Input(Bool())
+
+    // debug
+    val debug_state_regs = Output(new DbgSlaveState())
+    val debug_halt_req = Input(ValidIO(Bool()))
   })
 
   // monitor
@@ -282,6 +287,11 @@ class FishCore(
     lsu.io.dcache_load_resp
   )
 
+  // debug port
+  io.debug_state_regs := commit_stage.io.debug_state_regs
+  commit_stage.io.debug_halt_req := io.debug_halt_req
+
+  ifu.io.halted := commit_stage.io.debug_state_regs.is_halted
 }
 
 object gen_FishCore_verilog extends App {

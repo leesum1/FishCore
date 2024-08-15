@@ -2,6 +2,7 @@ package leesum
 import chisel3._
 import chisel3.util._
 import leesum.bpu.BTBEntry
+import leesum.dbg.DbgSlaveState
 import leesum.mmu_sv39.SfenceVMABundle
 import leesum.moniter.{CommitMonitorPort, PerfMonitorCounter}
 
@@ -57,6 +58,10 @@ class CommitStage(
     // privilege mode
     val cur_privilege_mode = Output(UInt(2.W))
 
+    // debug
+    val debug_state_regs = Output(new DbgSlaveState())
+    val debug_halt_req = Input(ValidIO(Bool()))
+
     // performance monitor
     val perf_commit = Output(new PerfMonitorCounter)
     val perf_bp = Output(new PerfMonitorCounter)
@@ -95,6 +100,14 @@ class CommitStage(
   val cmt_update_btb_way_sel_next = RegInit(0.U(log2Ceil(btb_way_count).W))
 
   val privilege_mode = RegInit(3.U(2.W)) // machine mode
+
+  val debug_state_regs = RegInit(0.U.asTypeOf(new DbgSlaveState()));
+
+  io.debug_state_regs := debug_state_regs
+
+  when(io.debug_halt_req.valid) {
+    debug_state_regs.set_haltreq(io.debug_halt_req.bits)
+  }
 
   // interrupt
   val interrupt_inject_types = VecInit(
@@ -574,6 +587,70 @@ class CommitStage(
     }
   }
 
+  def enter_debug_mode(
+      debug_cause: DebugCause.Type,
+      debug_newpc: UInt
+  ): Unit = {
+    val sIdle :: sEnterDebug :: sFlushCache :: Nil = Enum(3)
+    val debug_state = RegInit(sIdle)
+
+    val dcsr = new DcsrFiled(io.direct_read_ports.dcsr)
+
+    val debug_cause_buf = RegInit(DebugCause.no_debug)
+    val debug_newpc_buf = RegInit(0.U(64.W))
+
+    switch(debug_state) {
+      is(sIdle) {
+        printf("enter debug mode at %x\n", rob_data_seq.head.pc)
+
+        debug_state := sEnterDebug
+        debug_cause_buf := debug_cause
+        debug_newpc_buf := debug_newpc
+      }
+      is(sEnterDebug) {
+        // when enter debug mode, we should flush the pipeline
+        flush_next := true.B
+
+        // set dcsr
+        io.direct_write_ports.dcsr.valid := true.B
+        io.direct_write_ports.dcsr.bits := dcsr.get_debug_dcsr(
+          debug_cause_buf.asUInt,
+          privilege_mode
+        )
+
+        // set dpc
+        io.direct_write_ports.dpc.valid := true.B
+        io.direct_write_ports.dpc.bits := debug_newpc_buf
+
+        debug_state := sFlushCache
+      }
+      is(sFlushCache) {
+        dfencei_next := io.store_queue_empty
+
+        when(dfencei_next) {
+          assert(io.store_queue_empty, "store queue must be empty when fencei")
+        }
+
+        // clear icache after clear dcache
+        when(io.dcache_fencei_ack && io.dcache_fencei) {
+          flush_next := true.B
+          // icache only need one cycle to flush
+          ifencei_next := true.B
+          dfencei_next := false.B
+
+          // The hart enters Debug Mode.
+          debug_state_regs.is_halted := true.B
+
+          debug_state_regs.haltreq_signal := false.B
+
+          // debug mode is always performed in M mode
+          privilege_mode := Privilegelevel.M.U
+          debug_state := sIdle
+        }
+      }
+    }
+  }
+
   io.mmio_commit.noenq()
   io.store_commit.noenq()
   io.amo_commit.noenq()
@@ -594,10 +671,88 @@ class CommitStage(
   // -----------------------
   // retire logic
   // -----------------------
+  val is_haltreq = debug_state_regs.haltreq_signal
+  val is_stepreq = debug_state_regs.singlestep_debug_flag
+  val is_ebreakreq =
+    rob_data_seq.head.fu_op === FuOP.Ebreak && rob_valid_seq.head
+  val debug_cause = MuxCase(
+    DebugCause.no_debug,
+    Array(
+      is_haltreq -> DebugCause.halt_req,
+      is_stepreq -> DebugCause.step,
+      is_ebreakreq -> DebugCause.ebreak
+    )
+  )
+  val debug_newpc = rob_data_seq.head.pc
 
-  // TODO: implement not correct!!!!!!!!!
+  // 只有当不在debug模式下，且有debug_cause，且rob中有有效指令时，进入debug模式
+  val will_enter_debug_mode =
+    !debug_state_regs
+      .halted() && (debug_cause =/= DebugCause.no_debug) && rob_valid_seq.head
 
-  when(csr_side_effect && rob_valid_seq.head) {
+  val sDebugIdle :: sEnterDebug :: sFlushCache :: Nil = Enum(3)
+  val debug_state = RegInit(sDebugIdle)
+  val debug_cause_buf = RegInit(DebugCause.no_debug)
+  val debug_newpc_buf = RegInit(0.U(64.W))
+
+  when(will_enter_debug_mode) {
+    // 1. 首先检测是否需要进入 debug 模式
+    // 如果上一条指令有 csr side effect，那么需要 flush (进入 debug 模式就已经 flush 了)
+//    enter_debug_mode(debug_cause, debug_newpc)
+
+    val dcsr = new DcsrFiled(io.direct_read_ports.dcsr)
+
+    switch(debug_state) {
+      is(sDebugIdle) {
+        printf("enter debug mode at %x\n", rob_data_seq.head.pc)
+
+        debug_state := sEnterDebug
+        debug_cause_buf := debug_cause
+        debug_newpc_buf := debug_newpc
+      }
+      is(sEnterDebug) {
+
+        // set dcsr
+        io.direct_write_ports.dcsr.valid := true.B
+        io.direct_write_ports.dcsr.bits := dcsr.get_debug_dcsr(
+          debug_cause_buf.asUInt,
+          privilege_mode
+        )
+
+        // set dpc
+        io.direct_write_ports.dpc.valid := true.B
+        io.direct_write_ports.dpc.bits := debug_newpc_buf
+
+        debug_state := sFlushCache
+      }
+      is(sFlushCache) {
+        dfencei_next := io.store_queue_empty
+
+        when(dfencei_next) {
+          assert(io.store_queue_empty, "store queue must be empty when fencei")
+        }
+
+        // clear icache after clear dcache
+        when(io.dcache_fencei_ack && io.dcache_fencei) {
+          flush_next := true.B
+          // icache only need one cycle to flush
+          ifencei_next := true.B
+          dfencei_next := false.B
+
+          // The hart enters Debug Mode.
+          debug_state_regs.is_halted := true.B
+
+          debug_state_regs.haltreq_signal := false.B
+
+          // debug mode is always performed in M mode
+          privilege_mode := Privilegelevel.M.U
+          debug_state := sDebugIdle
+        }
+      }
+    }
+
+  }.elsewhen(csr_side_effect && rob_valid_seq.head) {
+    // 2. 检查是否因为上一条指令的 csr side effect 而需要 flush
     assert(
       has_interrupt === false.B,
       "csr side effect and interrupt should not happen at the same time"
@@ -606,17 +761,18 @@ class CommitStage(
     // and rerun the current inst
     csr_side_effect := false.B
     flush_next := true.B
-//    io.branch_commit.valid := true.B
-//    io.branch_commit.bits.target := rob_data_seq.head.pc
+    //    io.branch_commit.valid := true.B
+    //    io.branch_commit.bits.target := rob_data_seq.head.pc
 
     redirect_next.valid := true.B
     redirect_next.target := rob_data_seq.head.pc
   }
 
+  val can_retire_first_inst =
+    rob_valid_seq.head && !flush_next && !csr_side_effect && !will_enter_debug_mode
+
   // first inst
-  when(
-    rob_valid_seq.head && rob_data_seq.head.complete && !flush_next && !csr_side_effect
-  ) {
+  when(can_retire_first_inst && rob_data_seq.head.complete) {
     when(rob_data_seq.head.exception.valid) {
       retire_exception(rob_data_seq.head, pop_ack.head)
     }.elsewhen(
@@ -681,7 +837,7 @@ class CommitStage(
       }
     }
   }.elsewhen(
-    rob_valid_seq.head && !rob_data_seq.head.complete && !flush_next
+    can_retire_first_inst && !rob_data_seq.head.complete
   ) {
     // for csr, mmio, amo the complete flag is not set
     assert(
@@ -713,11 +869,15 @@ class CommitStage(
   // interrupt
   // ----------------------
 
+  // 1. 必须第一条指令正常完成, 才可以触发中断
+  // 2. 该指令只能是 alu, mul, div 类型的指令
+  // 3. 该指令不能触发异常
+
   when(
     pop_ack.head && !rob_data_seq.head.exception.valid && interrupt_inject_types
       .contains(
         rob_data_seq.head.fu_type.asUInt
-      ) && !csr_side_effect && !flush_next && !rob_data_seq.head.lsu_io_space
+      ) && can_retire_first_inst
   ) {
     val mip_and_mie = io.direct_read_ports.mip & io.direct_read_ports.mie
     dontTouch(mip_and_mie)
@@ -822,7 +982,7 @@ class CommitStage(
   when(
     rob_valid_seq(1) && rob_data_seq(
       1
-    ).complete && !flush_next && !has_interrupt && !csr_side_effect
+    ).complete && !has_interrupt && can_retire_first_inst
   ) {
 
     val constraint_fu_type = VecInit(

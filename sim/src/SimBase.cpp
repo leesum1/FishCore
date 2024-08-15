@@ -7,6 +7,12 @@
 #include "Utils.h"
 
 
+#if VM_TRACE_FST == 1
+
+#include "verilated_fst_c.h"
+
+#endif
+
 SimBase::SimBase() {
     top = std::make_shared<Vtop>();
 }
@@ -36,7 +42,7 @@ void SimBase::enable_wave_trace(const std::string& file_name, const uint64_t wav
 SimBase::~SimBase() {
 #if VM_TRACE_FST == 1
     if (wave_trace_flag) {
-        std::cout << "close wave trace file" << std::endl;
+//        std::cout << "close wave trace file" << std::endl;
         if (tfp->isOpen()) {
             tfp->flush();
             tfp->close();

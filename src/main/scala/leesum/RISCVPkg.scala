@@ -330,6 +330,51 @@ object TVECMask {
   final val BASE = ~0x0000000000000003L
 }
 
+//#[bitfield(u32)]
+//pub struct DcsrIn {
+//  #[bits(2)]
+//  pub prv: u8,
+//  pub step: bool,
+//  pub nmip: bool,
+//  pub mprven: bool,
+//  pub v: bool,
+//  #[bits(3)]
+//  pub cause: u8,
+//  pub stoptime: bool,
+//  pub stopcount: bool,
+//  pub stepie: bool,
+//  pub ebreaku: bool,
+//  pub ebreaks: bool,
+//  pub zero0: bool,
+//  pub ebreakm: bool,
+//  pub ebreakvu: bool,
+//  pub ebreakvs: bool,
+//  #[bits(10)]
+//  pub zero1: u16,
+//  #[bits(4)]
+//  pub debugver: u8,
+//}
+
+object DCSRMask {
+  final val PRV = 0x3L
+  final val STEP = 0x4L
+  final val NMIP = 0x8L
+  final val MPRVEN = 0x10L
+  final val V = 0x20L
+  final val CAUSE = 0x1c0L
+  final val STOPTIME = 0x200L
+  final val STOPCOUNT = 0x400L
+  final val STEPIE = 0x800L
+  final val EBREAKU = 0x1000L
+  final val EBREAKS = 0x2000L
+  final val ZERO0 = 0x4000L
+  final val EBREAKM = 0x8000L
+  final val EBREAKVU = 0x10000L
+  final val EBREAKVS = 0x20000L
+  final val ZERO1 = 0xfffc0000L
+  final val DEBUGVER = 0xf00000000L
+}
+
 object PTEMask {}
 
 object CSRs {
@@ -2560,6 +2605,16 @@ object ExceptionCause extends ChiselEnum {
     }
   }
 
+}
+
+object DebugCause extends ChiselEnum {
+  val no_debug = Value(0.U)
+  val ebreak = Value(1.U)
+  val trigger = Value(2.U)
+  val halt_req = Value(3.U)
+  val step = Value(4.U)
+  val reset_halt_req = Value(5.U)
+  val group = Value(6.U)
 }
 
 object BpType extends ChiselEnum {

@@ -44,7 +44,7 @@ set_toolchains("@verilator")
 add_files("src/*.cpp")
 add_files("vsrc/*.sv")
 add_values("verilator.flags", "--top", "FishSoc", "--Wno-WIDTHEXPAND")
---     add_values("verilator.flags", "--trace-fst")
+add_values("verilator.flags", "--trace-fst")
 -- add_values("verilator.flags", "--trace-max-array","256")
 -- add_values("verilator.flags", "-DPRINTF_COND=0","-DASSERT_VERBOSE_COND=0","-DSTOP_COND=0")
 
