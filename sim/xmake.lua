@@ -65,7 +65,7 @@ target("Vtop")
 	-- add_values("verilator.flags", "--trace-max-array","256")
 	-- add_values("verilator.flags", "-DPRINTF_COND=0","-DASSERT_VERBOSE_COND=0","-DSTOP_COND=0")
 
-	--     add_values("verilator.flags", "--threads", "3")
+	add_values("verilator.flags", "--threads", "3")
 	add_includedirs("src/include/")
 	add_includedirs("third_party/capstone/include/capstone/")
 	add_packages("cli11", "elfio", "libsdl", "readerwriterqueue", "spdlog", "capstone_my")

@@ -154,19 +154,20 @@ int main(int argc, char **argv) {
 
         static uint64_t halted_clk = 0;
         static bool is_halted = false;
+        static uint32_t cur_halt_count = 1;
 
         // 发出一个周期的 halt 请求
-        if (clk_num == 10000) {
+        if (clk_num == 10000 * cur_halt_count) {
           top->io_debug_halt_req_valid = 1;
           top->io_debug_halt_req_bits = 1;
         }
-        if (clk_num == 10001) {
+        if (clk_num == 10000 * cur_halt_count + 1) {
           top->io_debug_halt_req_valid = 0;
           top->io_debug_halt_req_bits = 0;
         }
 
         if (top->io_debug_state_regs_is_halted && !is_halted) {
-          console->info("halted at pc: 0x{:016x}\n", sim_base.get_pc());
+          perf_trace->info("halted at pc: 0x{:016x}\n", sim_base.get_pc());
           halted_clk = clk_num;
           is_halted = true;
         }
@@ -185,9 +186,10 @@ int main(int argc, char **argv) {
 
           // 等待处理器恢复
           if (top->io_debug_state_regs_is_halted == 0) {
-            console->info("resume at pc: 0x{:016x} clock:{}\n",
+            perf_trace->info("resume at pc: 0x{:016x} clock:{}\n",
                           sim_base.get_pc(), clk_num);
             is_halted = false;
+            cur_halt_count++;
           }
         }
       },

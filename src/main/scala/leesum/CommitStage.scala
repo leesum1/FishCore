@@ -679,6 +679,10 @@ class CommitStage(
   // -----------------------
 
   // -------------- enter debug mode start----------------
+
+  val debug_lock = RegInit(false.B)
+  debug_lock := false.B
+
   val dcsr = new DcsrFiled(io.direct_read_ports.dcsr)
   val is_haltreq = debug_state_regs.haltreq_signal
   val is_stepreq = debug_state_regs.singlestep_debug_flag
@@ -700,9 +704,14 @@ class CommitStage(
   val debug_newpc = rob_data_seq.head.pc
 
   // 只有当不在debug模式下，且有debug_cause，且rob中有有效指令时，进入debug模式
-  val will_enter_debug_mode =
-    !debug_state_regs
-      .halted() && (debug_cause =/= DebugCause.no_debug) && rob_valid_seq.head
+
+  val will_enter_debug_mode = Seq(
+    !debug_state_regs.halted(),
+    debug_cause =/= DebugCause.no_debug,
+    rob_valid_seq.head,
+    !flush_next,
+    !debug_lock
+  ).reduce(_ && _)
 
   val sDebugIdle :: sEnterDebug :: sFlushCache :: Nil = Enum(3)
   val debug_state = RegInit(sDebugIdle)
@@ -716,7 +725,6 @@ class CommitStage(
 
     switch(debug_state) {
       is(sDebugIdle) {
-        printf("enter debug mode at %x\n", rob_data_seq.head.pc)
 
         debug_state := sEnterDebug
         debug_cause_buf := debug_cause
@@ -789,9 +797,17 @@ class CommitStage(
   val resume_state = RegInit(sResumeIdle)
 
   when(will_exit_debug_mode) {
+    assert(
+      flush_next === false.B,
+      "flush_next must be false when exit debug mode"
+    )
+    assert(
+      debug_lock === false.B,
+      "debug_lock must be false when exit debug mode"
+    )
+
     switch(resume_state) {
       is(sResumeIdle) {
-        printf("exit debug mode at %x\n", rob_data_seq.head.pc)
         resume_state := sResumeExitDebug
       }
       is(sResumeExitDebug) {
@@ -924,6 +940,9 @@ class CommitStage(
       rob_data_seq.head.exception.valid === false.B,
       "rob entry must be not exception"
     )
+
+    debug_lock := true.B
+
     switch(rob_data_seq.head.fu_type) {
       is(FuType.Lsu) {
         when(
