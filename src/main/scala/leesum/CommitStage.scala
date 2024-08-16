@@ -5,6 +5,7 @@ import leesum.bpu.BTBEntry
 import leesum.dbg.DbgSlaveState
 import leesum.mmu_sv39.SfenceVMABundle
 import leesum.moniter.{CommitMonitorPort, PerfMonitorCounter}
+import leesum.CSRs.mstatus
 
 class RedirectPC extends Bundle {
   val valid = Bool()
@@ -61,6 +62,7 @@ class CommitStage(
     // debug
     val debug_state_regs = Output(new DbgSlaveState())
     val debug_halt_req = Input(ValidIO(Bool()))
+    val debug_resume_req = Input(ValidIO(Bool()))
 
     // performance monitor
     val perf_commit = Output(new PerfMonitorCounter)
@@ -107,6 +109,10 @@ class CommitStage(
 
   when(io.debug_halt_req.valid) {
     debug_state_regs.set_haltreq(io.debug_halt_req.bits)
+  }
+
+  when(io.debug_resume_req.valid) {
+    debug_state_regs.set_resumereq()
   }
 
   // interrupt
@@ -587,69 +593,69 @@ class CommitStage(
     }
   }
 
-  def enter_debug_mode(
-      debug_cause: DebugCause.Type,
-      debug_newpc: UInt
-  ): Unit = {
-    val sIdle :: sEnterDebug :: sFlushCache :: Nil = Enum(3)
-    val debug_state = RegInit(sIdle)
+  // def enter_debug_mode(
+  //     debug_cause: DebugCause.Type,
+  //     debug_newpc: UInt
+  // ): Unit = {
+  //   val sIdle :: sEnterDebug :: sFlushCache :: Nil = Enum(3)
+  //   val debug_state = RegInit(sIdle)
 
-    val dcsr = new DcsrFiled(io.direct_read_ports.dcsr)
+  //   val dcsr = new DcsrFiled(io.direct_read_ports.dcsr)
 
-    val debug_cause_buf = RegInit(DebugCause.no_debug)
-    val debug_newpc_buf = RegInit(0.U(64.W))
+  //   val debug_cause_buf = RegInit(DebugCause.no_debug)
+  //   val debug_newpc_buf = RegInit(0.U(64.W))
 
-    switch(debug_state) {
-      is(sIdle) {
-        printf("enter debug mode at %x\n", rob_data_seq.head.pc)
+  //   switch(debug_state) {
+  //     is(sIdle) {
+  //       printf("enter debug mode at %x\n", rob_data_seq.head.pc)
 
-        debug_state := sEnterDebug
-        debug_cause_buf := debug_cause
-        debug_newpc_buf := debug_newpc
-      }
-      is(sEnterDebug) {
-        // when enter debug mode, we should flush the pipeline
-        flush_next := true.B
+  //       debug_state := sEnterDebug
+  //       debug_cause_buf := debug_cause
+  //       debug_newpc_buf := debug_newpc
+  //     }
+  //     is(sEnterDebug) {
+  //       // when enter debug mode, we should flush the pipeline
+  //       flush_next := true.B
 
-        // set dcsr
-        io.direct_write_ports.dcsr.valid := true.B
-        io.direct_write_ports.dcsr.bits := dcsr.get_debug_dcsr(
-          debug_cause_buf.asUInt,
-          privilege_mode
-        )
+  //       // set dcsr
+  //       io.direct_write_ports.dcsr.valid := true.B
+  //       io.direct_write_ports.dcsr.bits := dcsr.get_debug_dcsr(
+  //         debug_cause_buf.asUInt,
+  //         privilege_mode
+  //       )
 
-        // set dpc
-        io.direct_write_ports.dpc.valid := true.B
-        io.direct_write_ports.dpc.bits := debug_newpc_buf
+  //       // set dpc
+  //       io.direct_write_ports.dpc.valid := true.B
+  //       io.direct_write_ports.dpc.bits := debug_newpc_buf
 
-        debug_state := sFlushCache
-      }
-      is(sFlushCache) {
-        dfencei_next := io.store_queue_empty
+  //       debug_state := sFlushCache
+  //     }
+  //     is(sFlushCache) {
+  //       dfencei_next := io.store_queue_empty
 
-        when(dfencei_next) {
-          assert(io.store_queue_empty, "store queue must be empty when fencei")
-        }
+  //       when(dfencei_next) {
+  //         assert(io.store_queue_empty, "store queue must be empty when fencei")
+  //       }
 
-        // clear icache after clear dcache
-        when(io.dcache_fencei_ack && io.dcache_fencei) {
-          flush_next := true.B
-          // icache only need one cycle to flush
-          ifencei_next := true.B
-          dfencei_next := false.B
+  //       // clear icache after clear dcache
+  //       when(io.dcache_fencei_ack && io.dcache_fencei) {
+  //         flush_next := true.B
+  //         // icache only need one cycle to flush
+  //         ifencei_next := true.B
+  //         dfencei_next := false.B
 
-          // The hart enters Debug Mode.
-          debug_state_regs.is_halted := true.B
+  //         // The hart enters Debug Mode.
+  //         debug_state_regs.is_halted := true.B
 
-          debug_state_regs.haltreq_signal := false.B
+  //         debug_state_regs.haltreq_signal := false.B
 
-          // debug mode is always performed in M mode
-          privilege_mode := Privilegelevel.M.U
-          debug_state := sIdle
-        }
-      }
-    }
-  }
+  //         // debug mode is always performed in M mode
+  //         privilege_mode := Privilegelevel.M.U
+  //         debug_state := sIdle
+  //       }
+  //     }
+  //   }
+  // }
 
   io.mmio_commit.noenq()
   io.store_commit.noenq()
@@ -671,13 +677,21 @@ class CommitStage(
   // -----------------------
   // retire logic
   // -----------------------
+
+  // -------------- enter debug mode start----------------
+  val dcsr = new DcsrFiled(io.direct_read_ports.dcsr)
   val is_haltreq = debug_state_regs.haltreq_signal
   val is_stepreq = debug_state_regs.singlestep_debug_flag
   val is_ebreakreq =
-    rob_data_seq.head.fu_op === FuOP.Ebreak && rob_valid_seq.head
+    rob_data_seq.head.fu_op === FuOP.Ebreak && rob_valid_seq.head && Seq(
+      dcsr.ebreakm && privilege_mode === Privilegelevel.M.U,
+      dcsr.ebreaks && privilege_mode === Privilegelevel.S.U,
+      dcsr.ebreaku && privilege_mode === Privilegelevel.U.U
+    ).reduce(_ || _)
+
   val debug_cause = MuxCase(
     DebugCause.no_debug,
-    Array(
+    Seq(
       is_haltreq -> DebugCause.halt_req,
       is_stepreq -> DebugCause.step,
       is_ebreakreq -> DebugCause.ebreak
@@ -699,8 +713,6 @@ class CommitStage(
     // 1. 首先检测是否需要进入 debug 模式
     // 如果上一条指令有 csr side effect，那么需要 flush (进入 debug 模式就已经 flush 了)
 //    enter_debug_mode(debug_cause, debug_newpc)
-
-    val dcsr = new DcsrFiled(io.direct_read_ports.dcsr)
 
     switch(debug_state) {
       is(sDebugIdle) {
@@ -768,8 +780,76 @@ class CommitStage(
     redirect_next.target := rob_data_seq.head.pc
   }
 
-  val can_retire_first_inst =
-    rob_valid_seq.head && !flush_next && !csr_side_effect && !will_enter_debug_mode
+  // -------------- enter debug mode end----------------
+
+  // -------------- exit debug mode start----------------
+  val will_exit_debug_mode =
+    debug_state_regs.halted() && debug_state_regs.resumereq_flag
+  val sResumeIdle :: sResumeExitDebug :: sResumeFlush :: Nil = Enum(3)
+  val resume_state = RegInit(sResumeIdle)
+
+  when(will_exit_debug_mode) {
+    switch(resume_state) {
+      is(sResumeIdle) {
+        printf("exit debug mode at %x\n", rob_data_seq.head.pc)
+        resume_state := sResumeExitDebug
+      }
+      is(sResumeExitDebug) {
+        // clear dcsr
+
+        resume_state := sResumeFlush
+      }
+      is(sResumeFlush) {
+        dfencei_next := io.store_queue_empty
+
+        when(dfencei_next) {
+          assert(io.store_queue_empty, "store queue must be empty when fencei")
+        }
+
+        // clear icache after clear dcache
+        when(io.dcache_fencei_ack && io.dcache_fencei) {
+          flush_next := true.B
+          // icache only need one cycle to flush
+          ifencei_next := true.B
+          dfencei_next := false.B
+
+          // 1. pc changes to the value stored in dpc.
+          redirect_next.valid := true.B
+          redirect_next.target := io.direct_read_ports.dpc
+
+          // 2. The current privilege mode and virtualization mode are changed to that specified by prv and v.
+          // NOT support virtualization now
+          privilege_mode := dcsr.prv
+
+          // 3. When resuming from debug mode, clear mstatus.MPRV if the new privilege mode is less than M-mode
+          val mstatus = new MstatusFiled(io.direct_read_ports.mstatus)
+          io.direct_write_ports.mstatus.valid := privilege_mode < Privilegelevel.M.U
+          io.direct_write_ports.mstatus.bits := mstatus.get_exit_debug_mstatus(
+            privilege_mode
+          )
+
+          // 4. The debug mode is cleared.
+          debug_state_regs.is_halted := false.B
+          debug_state_regs.resumereq_flag := false.B
+          debug_state_regs.resumeack_signal := (true.B)
+
+          // 5. check step, and set single step flag
+          when(dcsr.step) {
+            debug_state_regs.set_step()
+          }
+
+          resume_state := sResumeIdle
+        }
+      }
+    }
+  }
+
+  val can_retire_first_inst = rob_valid_seq.head && Seq(
+    !flush_next,
+    !csr_side_effect,
+    !will_enter_debug_mode,
+    !will_exit_debug_mode
+  ).reduce(_ && _)
 
   // first inst
   when(can_retire_first_inst && rob_data_seq.head.complete) {

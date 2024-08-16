@@ -18,6 +18,17 @@ class FishSoc(
     muldiv_en: Boolean = true,
     rvc_en: Boolean = false
 ) extends Module {
+
+  val io = IO(new Bundle {
+    val difftest = Output(Valid(new DifftestPort(2)))
+    val perf_monitor = Output(new PerfPort)
+    val mem_port = Flipped(new BasicMemoryIO(32, 64))
+    // debug
+    val debug_state_regs = Output(new DbgSlaveState())
+    val debug_halt_req = Input(ValidIO(Bool()))
+    val debug_resume_req = Input(ValidIO(Bool()))
+  })
+
   val boot_pc = 0x80000000L
   val mem_addr = 0x80000000L
   val mem_size = 0x8000000L
@@ -79,15 +90,6 @@ class FishSoc(
     addr_decoder.io.sel_idx
   }
 
-  val io = IO(new Bundle {
-    val difftest = Output(Valid(new DifftestPort(2)))
-    val perf_monitor = Output(new PerfPort)
-    val mem_port = Flipped(new BasicMemoryIO(32, 64))
-    // debug
-    val debug_state_regs = Output(new DbgSlaveState())
-    val debug_halt_req = Input(ValidIO(Bool()))
-  })
-
   val core = Module(
     new FishCore(muldiv_en, rvc_en, monitor_en, boot_pc, addr_map)
   )
@@ -96,6 +98,7 @@ class FishSoc(
   core.io.perf_monitor <> io.perf_monitor
   core.io.debug_state_regs <> io.debug_state_regs
   core.io.debug_halt_req <> io.debug_halt_req
+  core.io.debug_resume_req <> io.debug_resume_req
 
   val axi_demux = Module(
     new AXIDeMux(4, 32, 64)

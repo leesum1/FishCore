@@ -24,11 +24,19 @@ class DbgSlaveState extends Bundle {
   val is_halted = Bool()
 
   // 接口辅助函数
+
+  def set_step(): Unit = {
+    singlestep_execute_flag := true.B
+    singlestep_debug_flag := false.B
+  }
+
+
+
   def set_haltreq(new_value: Bool): Unit = {
     haltreq_signal := new_value
   }
 
-  def resumereq(): Unit = {
+  def set_resumereq(): Unit = {
     resumereq_flag := true.B
     resumeack_signal := false.B
   }

@@ -241,6 +241,17 @@ class MstatusFiled(data: UInt) {
     new_mstatus
   }
 
+  def get_exit_debug_mstatus(cur_priv: UInt) = {
+    require(cur_priv.getWidth == 2)
+    val new_mstatus = Cat(
+      data(63, 18),
+      Mux(cur_priv < Privilegelevel.M.U, false.B, this.mprv), // mpr
+      data(16, 0)
+    )
+    require(new_mstatus.getWidth == 64)
+    new_mstatus
+  }
+
 }
 
 class MtvecFiled(data: UInt) {

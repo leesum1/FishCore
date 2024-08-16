@@ -38,6 +38,7 @@ class FishCore(
     // debug
     val debug_state_regs = Output(new DbgSlaveState())
     val debug_halt_req = Input(ValidIO(Bool()))
+    val debug_resume_req = Input(ValidIO(Bool()))
   })
 
   // monitor
@@ -290,6 +291,7 @@ class FishCore(
   // debug port
   io.debug_state_regs := commit_stage.io.debug_state_regs
   commit_stage.io.debug_halt_req := io.debug_halt_req
+  commit_stage.io.debug_resume_req := io.debug_resume_req
 
   ifu.io.halted := commit_stage.io.debug_state_regs.is_halted
 }
