@@ -13,6 +13,10 @@ sim/build \
 "
 
 
+
+default: 
+    just --list
+
 gen_fish_soc_verilog:
     cd {{FISH_CORE_HOME}} && sbt "runMain leesum.Core.gen_FishSoc"
 

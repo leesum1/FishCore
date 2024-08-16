@@ -38,23 +38,63 @@ set_policy("build.warning", true)
 set_languages("cxx20")
 
 add_rules("plugin.compile_commands.autoupdate", { outputdir = "." })
-target("Vtop")
-add_rules("verilator.binary")
-set_toolchains("@verilator")
-add_files("src/*.cpp")
-add_files("vsrc/*.sv")
-add_values("verilator.flags", "--top", "FishSoc", "--Wno-WIDTHEXPAND")
-add_values("verilator.flags", "--trace-fst")
--- add_values("verilator.flags", "--trace-max-array","256")
--- add_values("verilator.flags", "-DPRINTF_COND=0","-DASSERT_VERBOSE_COND=0","-DSTOP_COND=0")
 
---     add_values("verilator.flags", "--threads", "3")
-add_includedirs("src/include/")
-add_includedirs("third_party/capstone/include/capstone/")
-add_packages("cli11", "elfio", "libsdl", "readerwriterqueue", "spdlog", "capstone_my")
-add_linkdirs("ready_to_run")
-add_links("rv64emu_cbinding")
-add_rpathdirs("$(scriptdir)/ready_to_run")
+
+
+-- 定义一个变量来控制是否启用 --trace 标志
+option("enable_trace")
+    set_default(true)  -- 默认启用 --trace
+    set_showmenu(true)
+    set_description("Enable Verilator trace")
+option_end()
+
+
+
+target("Vtop")
+	add_rules("verilator.binary")
+	set_toolchains("@verilator")
+	add_files("src/*.cpp")
+	add_files("vsrc/*.sv")
+	add_values("verilator.flags", "--top", "FishSoc", "--Wno-WIDTHEXPAND")
+
+
+	-- 根据 enable_trace 选项添加 --trace 标志
+	if has_config("enable_trace") then
+		add_values("verilator.flags", "--trace-fst")
+	end
+	-- add_values("verilator.flags", "--trace-max-array","256")
+	-- add_values("verilator.flags", "-DPRINTF_COND=0","-DASSERT_VERBOSE_COND=0","-DSTOP_COND=0")
+
+	--     add_values("verilator.flags", "--threads", "3")
+	add_includedirs("src/include/")
+	add_includedirs("third_party/capstone/include/capstone/")
+	add_packages("cli11", "elfio", "libsdl", "readerwriterqueue", "spdlog", "capstone_my")
+	add_linkdirs("ready_to_run")
+	add_links("rv64emu_cbinding")
+	add_rpathdirs("$(scriptdir)/ready_to_run")
+
+
+
+task("wave")
+    set_menu {
+        usage = "xmake wave",
+        description = "Open the waveform file with gtkwave",
+    }
+    on_run(function ()
+        local waveform_file = "build/linux/x86_64/release/wave.fst"
+        os.exec("gtkwave " .. waveform_file)
+    end)
+task_end()
+
+task("update_cc")
+	set_menu {
+		usage = "xmake update_cc",
+		description = "Update the compile_commands.json file",
+	}
+	on_run(function ()
+		os.exec("xmake project -k compile_commands")
+	end)
+task_end()
 
 -- for _, file in ipairs(os.files("test/*.cpp")) do
 --     local name = path.basename(file)
