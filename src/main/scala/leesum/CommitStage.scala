@@ -685,7 +685,9 @@ class CommitStage(
 
   val dcsr = new DcsrFiled(io.direct_read_ports.dcsr)
   val is_haltreq = debug_state_regs.haltreq_signal
-  val is_stepreq = debug_state_regs.singlestep_debug_flag
+  // 只有单步执行的指令执行完毕后，才能重新进入 debug 模式
+  val is_stepreq =
+    debug_state_regs.stepi_redebug_flag && !debug_state_regs.stepi_exec_flag
   val is_ebreakreq =
     rob_data_seq.head.fu_op === FuOP.Ebreak && rob_valid_seq.head && Seq(
       dcsr.ebreakm && privilege_mode === Privilegelevel.M.U,
@@ -850,7 +852,8 @@ class CommitStage(
           debug_state_regs.resumeack_signal := (true.B)
 
           // 5. check step, and set single step flag
-          when(dcsr.step) {
+          // use resume bits for step for test
+          when(dcsr.step || io.debug_resume_req.bits) {
             debug_state_regs.set_step()
           }
 
@@ -859,7 +862,9 @@ class CommitStage(
       }
     }
   }
+  // -------------- exit debug mode end----------------
 
+  // -------------- first inst retire start----------------
   val can_retire_first_inst = rob_valid_seq.head && Seq(
     !flush_next,
     !csr_side_effect,
@@ -867,7 +872,6 @@ class CommitStage(
     !will_exit_debug_mode
   ).reduce(_ && _)
 
-  // first inst
   when(can_retire_first_inst && rob_data_seq.head.complete) {
     when(rob_data_seq.head.exception.valid) {
       retire_exception(rob_data_seq.head, pop_ack.head)
@@ -964,20 +968,29 @@ class CommitStage(
     }
   }
 
+  // -------------- first inst retire end----------------
+
+  when(rob_valid_seq.head && pop_ack.head && debug_state_regs.stepi_exec_flag) {
+    //  after single step, should re-enter debug mode
+    debug_state_regs.stepi_exec_flag := false.B
+    debug_state_regs.stepi_redebug_flag := true.B
+  }
+
   // ----------------------
   // interrupt
   // ----------------------
 
-  // 1. 必须第一条指令正常完成, 才可以触发中断
-  // 2. 该指令只能是 alu, mul, div 类型的指令
-  // 3. 该指令不能触发异常
+  val can_handle_interrupt = Seq(
+    rob_valid_seq.head && pop_ack.head, // 第一条指令正常完成
+    !rob_data_seq.head.exception.valid, // 该指令不能触发异常
+    !debug_state_regs.stepi_exec_flag, // 不能是单步执行的指令
+    can_retire_first_inst,
+    interrupt_inject_types.contains(
+      rob_data_seq.head.fu_type.asUInt
+    ) // 该指令只能是 alu, mul, div 类型的指令
+  ).reduce(_ && _)
 
-  when(
-    pop_ack.head && !rob_data_seq.head.exception.valid && interrupt_inject_types
-      .contains(
-        rob_data_seq.head.fu_type.asUInt
-      ) && can_retire_first_inst
-  ) {
+  when(can_handle_interrupt) {
     val mip_and_mie = io.direct_read_ports.mip & io.direct_read_ports.mie
     dontTouch(mip_and_mie)
 
@@ -1073,17 +1086,16 @@ class CommitStage(
     }
   }
 
-  // ---------------------
-  // second inst
-  // ---------------------
+  // ---------------------- second inst retire start----------------
 
-  // TODO: refactor me
-  when(
-    rob_valid_seq(1) && rob_data_seq(
-      1
-    ).complete && !has_interrupt && can_retire_first_inst
-  ) {
+  val can_retire_second_inst = Seq(
+    can_retire_first_inst && pop_ack.head, // 第一条指令正常完成
+    rob_valid_seq(1) && rob_data_seq(1).complete, // 第二条指令可以提交
+    !has_interrupt, // 不能有中断
+    !debug_state_regs.stepi_exec_flag // 不能是单步执行的指令
+  ).reduce(_ && _)
 
+  when(can_retire_second_inst) {
     val constraint_fu_type = VecInit(
       Seq(
         FuType.Br.asUInt,
@@ -1109,6 +1121,8 @@ class CommitStage(
       }
     }
   }
+
+  // ---------------------- second inst retire end----------------
 
   // ---------------------
   // instret

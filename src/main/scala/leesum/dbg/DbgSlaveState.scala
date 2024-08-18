@@ -6,9 +6,9 @@ class DbgSlaveState extends Bundle {
   val resumereq_flag = Bool()
   // 临时的状态位, 当 resume 时, 检查 dcsr 中的 step 位，如果为1，则置 1
   // 单步执行完毕后，清零
-  val singlestep_execute_flag = Bool()
+  val stepi_exec_flag = Bool()
   // 单步执行完毕后，置 1，此时处理器进入 debug 状态
-  val singlestep_debug_flag = Bool()
+  val stepi_redebug_flag = Bool()
 
   // 由 dm 控制置 1 或者清零
   val resetreq_signal = Bool()
@@ -26,8 +26,8 @@ class DbgSlaveState extends Bundle {
   // 接口辅助函数
 
   def set_step(): Unit = {
-    singlestep_execute_flag := true.B
-    singlestep_debug_flag := false.B
+    stepi_exec_flag := true.B
+    stepi_redebug_flag := false.B
   }
 
 
