@@ -20,6 +20,9 @@ default:
 gen_fish_soc_verilog:
     cd {{FISH_CORE_HOME}} && sbt "runMain leesum.Core.gen_FishSoc"
 
+gen_fish_core_verilog:
+    cd {{FISH_CORE_HOME}} && sbt "runMain leesum.Core.gen_FishCore_verilog"
+
 build_sim: gen_fish_soc_verilog
     cd {{sim_dir}} && xmake
 

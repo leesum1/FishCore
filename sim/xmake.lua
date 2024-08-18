@@ -48,6 +48,12 @@ option("enable_trace")
     set_description("Enable Verilator trace")
 option_end()
 
+option("enable_multithread")
+	set_default(false)
+	set_showmenu(true)
+	set_description("Enable Verilator multithread simulation")
+option_end()
+
 
 
 target("Vtop")
@@ -62,10 +68,14 @@ target("Vtop")
 	if has_config("enable_trace") then
 		add_values("verilator.flags", "--trace-fst")
 	end
+
+	if has_config("enable_multithread") then
+		add_values("verilator.flags", "--threads", "3")
+	end
+
 	-- add_values("verilator.flags", "--trace-max-array","256")
 	-- add_values("verilator.flags", "-DPRINTF_COND=0","-DASSERT_VERBOSE_COND=0","-DSTOP_COND=0")
 
-	add_values("verilator.flags", "--threads", "3")
 	add_includedirs("src/include/")
 	add_includedirs("third_party/capstone/include/capstone/")
 	add_packages("cli11", "elfio", "libsdl", "readerwriterqueue", "spdlog", "capstone_my")
