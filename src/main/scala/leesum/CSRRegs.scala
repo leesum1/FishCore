@@ -371,6 +371,25 @@ class CSRDirectWritePorts extends Bundle {
 
   val instret_inc = Valid(UInt(4.W))
 
+  def any_valid(): Bool = {
+    Seq(
+      mstatus.valid,
+      mie.valid,
+      mip.valid,
+      mcause.valid,
+      mtvec.valid,
+      mepc.valid,
+      mtval.valid,
+      sepc.valid,
+      stval.valid,
+      stvec.valid,
+      scause.valid,
+      instret_inc.valid,
+      dcsr.valid,
+      dpc.valid
+    ).reduce(_ || _)
+  }
+
   def clear(): Unit = {
     mstatus.valid := false.B
     mcause.valid := false.B
@@ -404,10 +423,10 @@ class CSRDirectWritePorts extends Bundle {
   }
 }
 
-class CSRRegs extends Module {
+class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
   val io = IO(new Bundle {
-    val read_port = Flipped(new CSRReadPort)
-    val write_port = Flipped(new CSRWritePort)
+    val read_ports = Vec(read_port_num, Flipped(new CSRReadPort))
+    val write_ports = Vec(write_port_num, Flipped(new CSRWritePort))
     val direct_read_ports = Output(new CSRDirectReadPorts)
     val direct_write_ports = Input(new CSRDirectWritePorts)
     // privilege mode
@@ -757,9 +776,13 @@ class CSRRegs extends Module {
   // -----------------------
   // read write logic
   // -----------------------
-  io.write_port.write_ex_resp := false.B
-  io.read_port.read_ex_resp := false.B
-  io.read_port.read_data := 0.U
+  // io.write_port.write_ex_resp := false.B
+  // io.read_port.read_ex_resp := false.B
+  // io.read_port.read_data := 0.U
+
+  io.write_ports.foreach(_.write_ex_resp := false.B)
+  io.read_ports.foreach(_.read_ex_resp := false.B)
+  io.read_ports.foreach(_.read_data := 0.U)
 
   def check_csr_permission(addr: UInt, privilege_mode: UInt, is_write: Bool) = {
     assert(addr < 4096.U, "csr addr should be in [0, 4096)")
@@ -770,27 +793,60 @@ class CSRRegs extends Module {
     csr_ok
   }
 
-  when(io.write_port.write_en) {
-    when(
-      check_csr_permission(io.write_port.addr, io.cur_privilege_mode, true.B)
-    ) {
-      val w_ret = csr_map.write(io.write_port.addr, io.write_port.write_data)
-      io.write_port.write_ex_resp := !w_ret.valid
-    }.otherwise {
-      io.write_port.write_ex_resp := true.B
+  for (write_port <- io.write_ports) {
+    when(write_port.write_en) {
+      when(
+        check_csr_permission(write_port.addr, io.cur_privilege_mode, true.B)
+      ) {
+        val w_ret = csr_map.write(write_port.addr, write_port.write_data)
+        write_port.write_ex_resp := !w_ret.valid
+      }.otherwise {
+        write_port.write_ex_resp := true.B
+      }
     }
   }
-  when(io.read_port.read_en) {
-    when(
-      check_csr_permission(io.read_port.addr, io.cur_privilege_mode, false.B)
-    ) {
-      val r_ret = csr_map.read(io.read_port.addr)
-      io.read_port.read_data := r_ret.bits
-      io.read_port.read_ex_resp := !r_ret.valid
-    }.otherwise {
-      io.read_port.read_ex_resp := true.B
+
+  // 不能同时写入
+  assert(
+    !io.write_ports.map(_.write_en).reduce(_ && _),
+    "can not write csr at the same time"
+  )
+
+  for (read_port <- io.read_ports) {
+    when(read_port.read_en) {
+      when(
+        check_csr_permission(read_port.addr, io.cur_privilege_mode, false.B)
+      ) {
+        val r_ret = csr_map.read(read_port.addr)
+        read_port.read_data := r_ret.bits
+        read_port.read_ex_resp := !r_ret.valid
+      }.otherwise {
+        read_port.read_ex_resp := true.B
+      }
     }
   }
+
+  // when(io.write_port.write_en) {
+  //   when(
+  //     check_csr_permission(io.write_port.addr, io.cur_privilege_mode, true.B)
+  //   ) {
+  //     val w_ret = csr_map.write(io.write_port.addr, io.write_port.write_data)
+  //     io.write_port.write_ex_resp := !w_ret.valid
+  //   }.otherwise {
+  //     io.write_port.write_ex_resp := true.B
+  //   }
+  // }
+  // when(io.read_port.read_en) {
+  //   when(
+  //     check_csr_permission(io.read_port.addr, io.cur_privilege_mode, false.B)
+  //   ) {
+  //     val r_ret = csr_map.read(io.read_port.addr)
+  //     io.read_port.read_data := r_ret.bits
+  //     io.read_port.read_ex_resp := !r_ret.valid
+  //   }.otherwise {
+  //     io.read_port.read_ex_resp := true.B
+  //   }
+  // }
 
   // -----------------------
   // direct read write logic
@@ -873,6 +929,7 @@ class CSRRegs extends Module {
   when(io.direct_write_ports.dpc.valid) {
     dpc := io.direct_write_ports.dpc.bits
   }
+  
 
 }
 

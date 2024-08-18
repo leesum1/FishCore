@@ -50,7 +50,7 @@ class StaticBP extends Module {
 
   io.bp.bp_type := MuxCase(
     BpType.None,
-    Array(
+    Seq(
       (pre_decode === isJalr) -> BpType.Jalr,
       (pre_decode === isBranch) -> BpType.Branch,
       (pre_decode === isJal) -> BpType.Jal

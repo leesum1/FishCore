@@ -13,6 +13,13 @@ import leesum.axi4.{
 import leesum.dbg.DbgSlaveState
 import leesum.devices.{SifiveUart, clint, plic}
 import leesum.moniter.{DifftestPort, PerfPort}
+import leesum.RegFileReadPort
+import leesum.GPRsWritePort
+import leesum.CSRReadPort
+import leesum.CSRWritePort
+import chisel3.util.Decoupled
+import leesum.Cache.DCacheReq
+import leesum.Cache.DCacheResp
 
 class FishSoc(
     muldiv_en: Boolean = true,
@@ -27,6 +34,14 @@ class FishSoc(
     val debug_state_regs = Output(new DbgSlaveState())
     val debug_halt_req = Input(ValidIO(Bool()))
     val debug_resume_req = Input(ValidIO(Bool()))
+
+    val debug_gpr_read_port = Flipped(new RegFileReadPort)
+    val debug_gpr_write_port = new GPRsWritePort
+    val debug_csr_read_port = Flipped(new CSRReadPort)
+    val debug_csr_write_port = Flipped(new CSRWritePort)
+
+    val debug_dcache_req = Flipped(Decoupled(new DCacheReq))
+    val debug_dcache_resp = Decoupled(new DCacheResp)
   })
 
   val boot_pc = 0x80000000L
@@ -99,6 +114,12 @@ class FishSoc(
   core.io.debug_state_regs <> io.debug_state_regs
   core.io.debug_halt_req <> io.debug_halt_req
   core.io.debug_resume_req <> io.debug_resume_req
+  core.io.debug_gpr_read_port <> io.debug_gpr_read_port
+  core.io.debug_gpr_write_port <> io.debug_gpr_write_port
+  core.io.debug_csr_read_port <> io.debug_csr_read_port
+  core.io.debug_csr_write_port <> io.debug_csr_write_port
+  core.io.debug_dcache_req <> io.debug_dcache_req
+  core.io.debug_dcache_resp <> io.debug_dcache_resp
 
   val axi_demux = Module(
     new AXIDeMux(4, 32, 64)

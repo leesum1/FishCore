@@ -10,6 +10,7 @@ import leesum.fronten.IFUTop
 import leesum.lsu.LSUTop
 import leesum.mmu_sv39.MMU
 import leesum.moniter.{DifftestPort, MonitorTop, PerfPort}
+import chisel3.util.Decoupled
 
 class FishCore(
     muldiv_en: Boolean = true,
@@ -39,6 +40,14 @@ class FishCore(
     val debug_state_regs = Output(new DbgSlaveState())
     val debug_halt_req = Input(ValidIO(Bool()))
     val debug_resume_req = Input(ValidIO(Bool()))
+
+    val debug_gpr_read_port = Flipped(new RegFileReadPort)
+    val debug_gpr_write_port = new GPRsWritePort
+    val debug_csr_read_port = Flipped(new CSRReadPort)
+    val debug_csr_write_port = Flipped(new CSRWritePort)
+
+    val debug_dcache_req = Flipped(Decoupled(new DCacheReq))
+    val debug_dcache_resp = Decoupled(new DCacheResp)
   })
 
   // monitor
@@ -56,8 +65,8 @@ class FishCore(
   val issue_stage_rob = Module(new IssueStageNew(2, 2))
 
   val commit_stage = Module(new CommitStage(2, 2, monitor_en))
-  val reg_file = Module(new GPRs(2, 2, monitor_en))
-  val csr_regs = Module(new CSRRegs)
+  val reg_file = Module(new GPRs(3, 3, monitor_en))
+  val csr_regs = Module(new CSRRegs(2, 2))
 
   // fu
   val alu_seq = Seq.fill(2)(Module(new FuAlu))
@@ -67,7 +76,7 @@ class FishCore(
   val csr = Module(new FuCSR)
 
   val dcache_arb = Module(
-    new ReqRespArbiter(3, new DCacheReq, new DCacheResp)
+    new ReqRespArbiter(4, new DCacheReq, new DCacheResp)
   )
   dcache_arb.io.flush := false.B
 
@@ -204,11 +213,11 @@ class FishCore(
   issue_stage_rob.io.fu_port.csr_0 <> csr.io.csr_req
 
   // csr <> csr_regs
-  csr.io.csr_read_port <> csr_regs.io.read_port
-  csr.io.csr_write_port <> csr_regs.io.write_port
+  csr.io.csr_read_port <> csr_regs.io.read_ports(0)
+  csr.io.csr_write_port <> csr_regs.io.write_ports(0)
 
   // issue stage <> reg file
-  issue_stage_rob.io.gpr_read_port <> reg_file.io.read_ports
+  issue_stage_rob.io.gpr_read_port <> reg_file.io.read_ports.slice(0, 2)
 
   // rob <> fu
   require(rob.io.fu_alu_wb_port.length == alu_seq.length)
@@ -226,7 +235,7 @@ class FishCore(
   rob.io.pop_ports <> commit_stage.io.rob_commit_ports
 
   // commit stage <> reg file
-  commit_stage.io.gpr_commit_ports <> reg_file.io.write_ports
+  commit_stage.io.gpr_commit_ports <> reg_file.io.write_ports.slice(0, 2)
   // commit stage <> csr file
   commit_stage.io.direct_read_ports <> csr_regs.io.direct_read_ports
   commit_stage.io.direct_write_ports <> csr_regs.io.direct_write_ports
@@ -294,6 +303,14 @@ class FishCore(
   commit_stage.io.debug_resume_req := io.debug_resume_req
 
   ifu.io.halted := commit_stage.io.debug_state_regs.is_halted
+
+  io.debug_gpr_read_port <> reg_file.io.read_ports.last
+  io.debug_gpr_write_port <> reg_file.io.write_ports.last
+  io.debug_csr_read_port <> csr_regs.io.read_ports.last
+  io.debug_csr_write_port <> csr_regs.io.write_ports.last
+
+  io.debug_dcache_req <> dcache_arb.io.req_vec(3)
+  io.debug_dcache_resp <> dcache_arb.io.resp_vec(3)
 }
 
 object gen_FishCore_verilog extends App {
