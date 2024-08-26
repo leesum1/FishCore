@@ -943,6 +943,28 @@ class RegMap {
 
 }
 
+object CatReverse {
+
+  def apply[T <: Bits](a: T, r: T*): UInt = {
+    Cat((a :: r.toList).reverse)
+  }
+
+}
+
+object gen_CatReverse_verilog extends App {
+  GenVerilogHelper(new Module {
+    val io = IO(new Bundle {
+      val in0 = Input(UInt(4.W))
+      val in1 = Input(UInt(4.W))
+      val in2 = Input(UInt(8.W))
+      val out1 = Output(UInt(16.W))
+      val out2 = Output(UInt(16.W))
+    })
+    io.out1 := CatReverse(io.in0, io.in1, io.in2)
+    io.out2 := Cat(io.in0, io.in1, io.in2)
+  })
+}
+
 class MSBDivFreq(val N: Int) extends Module {
   val io = IO(new Bundle {
     val clk_div = Output(Bool())

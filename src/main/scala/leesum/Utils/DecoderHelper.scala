@@ -17,11 +17,21 @@ object DecoderHelper {
 //  ) = {
 //    vec.map(BitPat(_)).reduce((_: BitPat) ## (_: BitPat))
 //  }
+
+  def gen[T <: Data](
+      input: UInt,
+      default: T,
+      mapping: Seq[(UInt, T)]
+  ): T = {
+    apply(input, default, mapping.map(x => (BitPat(x._1), x._2)))
+  }
+
   def apply[T <: Data](
       input: UInt,
       default: T,
       mapping: Seq[(BitPat, T)]
   ): T = {
+
     mapping.foreach(x =>
       println(s"DecoderTree: ${x._1.getWidth} -> ${x._2.getWidth}")
     )
@@ -33,7 +43,6 @@ object DecoderHelper {
       mapping.map(_._2.getWidth).distinct.size == 1,
       "All output must have same width"
     )
-
     require(input.getWidth == mapping(0)._1.getWidth, "Input width mismatch")
     require(default.getWidth == mapping(0)._2.getWidth, "Output width mismatch")
 

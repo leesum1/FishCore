@@ -1,6 +1,7 @@
 package leesum
 import chisel3.util.{Cat, MuxLookup, Valid}
 import chisel3.{Reg, _}
+import chisel3.util.Mux1H
 
 class CSRMap {
   type ReadFunc = (UInt, UInt) => Valid[UInt]
@@ -32,20 +33,33 @@ class CSRMap {
     * @return
     *   Valid(UInt): bits is the read result
     */
-  def read(raddr: UInt): Valid[UInt] = {
-    val raddr_map = csr_map.map({ case (addr, (reg, read_func, _)) =>
-      val read_result = read_func(addr.U, reg)
-      (addr.U, read_result)
-    })
+  def read(raddr: UInt, use_one_hot: Boolean = false): Valid[UInt] = {
 
-    val default = Wire(Valid(UInt(64.W)))
-    default.valid := false.B
-    default.bits := 0.U
+    val default_witdth = csr_map.head._2._1.getWidth
+    val default_read = Wire(Valid(UInt(default_witdth.W)))
+    default_read.valid := false.B
+    default_read.bits := DontCare
 
-    val rdata = MuxLookup(raddr, default)(
-      raddr_map.toSeq
-    )
-    rdata
+    val raddr_map = csr_map
+      .map({ case (addr, (reg, read_func, _)) =>
+        val read_result = read_func(addr.U, reg)
+        (addr.U, read_result)
+      })
+      .toSeq
+
+    val raddr_map_1h = csr_map
+      .map({ case (addr, (reg, read_func, _)) =>
+        val read_result = read_func(addr.U, reg)
+        (addr.U === raddr, read_result)
+      })
+      .toSeq
+    // at least one csr read result is valid
+    val oneH_valid = raddr_map_1h.map(_._1).reduce(_ || _)
+
+    val rdata = MuxLookup(raddr, default_read)(raddr_map)
+    val rdata_1h = Mux(oneH_valid, Mux1H(raddr_map_1h), default_read)
+
+    if (use_one_hot) rdata_1h else rdata
   }
 
   /** This function is used to write csr register, if success, return a valid
@@ -929,7 +943,6 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
   when(io.direct_write_ports.dpc.valid) {
     dpc := io.direct_write_ports.dpc.bits
   }
-  
 
 }
 
