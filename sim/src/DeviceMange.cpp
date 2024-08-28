@@ -17,7 +17,7 @@ namespace SimDevices
             }
         }
 
-        MY_ASSERT(conflict == false, "device: {} address conflict", device->get_addr_info()[0].name);
+        MY_ASSERT(conflict == false, "device: %s address conflict", device->get_addr_info()[0].name.c_str());
 
         device_pool.push_back(device);
     }

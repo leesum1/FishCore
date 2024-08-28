@@ -361,105 +361,105 @@ int main(int argc, char **argv) {
   // Simulator Start Excuting
   // --------------------------
 
-  sim_base.add_after_clk_rise_task({
-      [&] {
-        const auto top = sim_base.top;
-        const uint64_t clk_num = sim_base.cycle_num;
+  // sim_base.add_after_clk_rise_task({
+  //     [&] {
+  //       const auto top = sim_base.top;
+  //       const uint64_t clk_num = sim_base.cycle_num;
 
-        static uint64_t halted_clk = 0;
-        static bool is_halted = false;
-        static uint32_t cur_halt_count = 1;
+  //       static uint64_t halted_clk = 0;
+  //       static bool is_halted = false;
+  //       static uint32_t cur_halt_count = 1;
 
-        // 发出一个周期的 halt 请求
-        if (clk_num == 10000 * cur_halt_count) {
-          top->io_debug_halt_req_valid = 1;
-          top->io_debug_halt_req_bits = 1;
-        }
-        if (clk_num == 10000 * cur_halt_count + 1) {
-          top->io_debug_halt_req_valid = 0;
-          top->io_debug_halt_req_bits = 0;
-        }
+  //       // 发出一个周期的 halt 请求
+  //       if (clk_num == 10000 * cur_halt_count) {
+  //         top->io_debug_halt_req_valid = 1;
+  //         top->io_debug_halt_req_bits = 1;
+  //       }
+  //       if (clk_num == 10000 * cur_halt_count + 1) {
+  //         top->io_debug_halt_req_valid = 0;
+  //         top->io_debug_halt_req_bits = 0;
+  //       }
 
-        if (top->io_debug_state_regs_is_halted && !is_halted) {
-          perf_trace->info("halted at pc: 0x{:016x}\n", sim_base.get_pc());
-          halted_clk = clk_num;
-          is_halted = true;
-        }
+  //       if (top->io_debug_state_regs_is_halted && !is_halted) {
+  //         perf_trace->info("halted at pc: 0x{:016x}\n", sim_base.get_pc());
+  //         halted_clk = clk_num;
+  //         is_halted = true;
+  //       }
 
-        if (is_halted) {
+  //       if (is_halted) {
 
-          // 发出一个周期的 resume 请求
-          if (clk_num == halted_clk + 200) {
-            top->io_debug_resume_req_valid = 1;
-            top->io_debug_resume_req_bits = 1;
-          }
-          if (clk_num == halted_clk + 201) {
-            top->io_debug_resume_req_valid = 0;
-            top->io_debug_resume_req_bits = 0;
-          }
+  //         // 发出一个周期的 resume 请求
+  //         if (clk_num == halted_clk + 200) {
+  //           top->io_debug_resume_req_valid = 1;
+  //           top->io_debug_resume_req_bits = 1;
+  //         }
+  //         if (clk_num == halted_clk + 201) {
+  //           top->io_debug_resume_req_valid = 0;
+  //           top->io_debug_resume_req_bits = 0;
+  //         }
 
-          // 等待处理器恢复
-          if (top->io_debug_state_regs_is_halted == 0) {
-            perf_trace->info("resume at pc: 0x{:016x} clock:{}\n",
-                             sim_base.get_pc(), clk_num);
-            is_halted = false;
-            cur_halt_count++;
-          }
-        }
-      },
-      "debug path test",
-      0,
-  });
+  //         // 等待处理器恢复
+  //         if (top->io_debug_state_regs_is_halted == 0) {
+  //           perf_trace->info("resume at pc: 0x{:016x} clock:{}\n",
+  //                            sim_base.get_pc(), clk_num);
+  //           is_halted = false;
+  //           cur_halt_count++;
+  //         }
+  //       }
+  //     },
+  //     "debug path test",
+  //     0,
+  // });
 
-  sim_base.add_after_clk_rise_task({
-      [&] {
-        const auto top = sim_base.top;
-        const uint64_t clk_num = sim_base.cycle_num;
+  // sim_base.add_after_clk_rise_task({
+  //     [&] {
+  //       const auto top = sim_base.top;
+  //       const uint64_t clk_num = sim_base.cycle_num;
 
-        static uint64_t halted_clk = 0;
-        static bool is_halted = false;
-        static uint32_t cur_halt_count = 1;
+  //       static uint64_t halted_clk = 0;
+  //       static bool is_halted = false;
+  //       static uint32_t cur_halt_count = 1;
 
-        // 发出一个周期的 halt 请求
-        if (clk_num == 10000 * cur_halt_count) {
-          top->io_debug_halt_req_valid = 1;
-          top->io_debug_halt_req_bits = 1;
-        }
-        if (clk_num == 10000 * cur_halt_count + 1) {
-          top->io_debug_halt_req_valid = 0;
-          top->io_debug_halt_req_bits = 0;
-        }
+  //       // 发出一个周期的 halt 请求
+  //       if (clk_num == 10000 * cur_halt_count) {
+  //         top->io_debug_halt_req_valid = 1;
+  //         top->io_debug_halt_req_bits = 1;
+  //       }
+  //       if (clk_num == 10000 * cur_halt_count + 1) {
+  //         top->io_debug_halt_req_valid = 0;
+  //         top->io_debug_halt_req_bits = 0;
+  //       }
 
-        if (top->io_debug_state_regs_is_halted && !is_halted) {
-          perf_trace->info("halted at pc: 0x{:016x}\n", sim_base.get_pc());
-          halted_clk = clk_num;
-          is_halted = true;
-        }
+  //       if (top->io_debug_state_regs_is_halted && !is_halted) {
+  //         perf_trace->info("halted at pc: 0x{:016x}\n", sim_base.get_pc());
+  //         halted_clk = clk_num;
+  //         is_halted = true;
+  //       }
 
-        if (is_halted) {
+  //       if (is_halted) {
 
-          // 发出一个周期的 resume 请求
-          if (clk_num == halted_clk + 200) {
-            top->io_debug_resume_req_valid = 1;
-            top->io_debug_resume_req_bits = 1;
-          }
-          if (clk_num == halted_clk + 201) {
-            top->io_debug_resume_req_valid = 0;
-            top->io_debug_resume_req_bits = 0;
-          }
+  //         // 发出一个周期的 resume 请求
+  //         if (clk_num == halted_clk + 200) {
+  //           top->io_debug_resume_req_valid = 1;
+  //           top->io_debug_resume_req_bits = 1;
+  //         }
+  //         if (clk_num == halted_clk + 201) {
+  //           top->io_debug_resume_req_valid = 0;
+  //           top->io_debug_resume_req_bits = 0;
+  //         }
 
-          // 等待处理器恢复
-          if (top->io_debug_state_regs_is_halted == 0) {
-            perf_trace->info("resume at pc: 0x{:016x} clock:{}\n",
-                             sim_base.get_pc(), clk_num);
-            is_halted = false;
-            cur_halt_count++;
-          }
-        }
-      },
-      "debug test",
-      0,
-  });
+  //         // 等待处理器恢复
+  //         if (top->io_debug_state_regs_is_halted == 0) {
+  //           perf_trace->info("resume at pc: 0x{:016x} clock:{}\n",
+  //                            sim_base.get_pc(), clk_num);
+  //           is_halted = false;
+  //           cur_halt_count++;
+  //         }
+  //       }
+  //     },
+  //     "debug test",
+  //     0,
+  // });
 
   //   sim_base.add_after_clk_rise_task({
   //     [&] {
