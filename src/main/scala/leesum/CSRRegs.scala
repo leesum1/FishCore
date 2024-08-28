@@ -33,7 +33,7 @@ class CSRMap {
     * @return
     *   Valid(UInt): bits is the read result
     */
-  def read(raddr: UInt, use_one_hot: Boolean = false): Valid[UInt] = {
+  def read(raddr: UInt, use_one_hot: Boolean = true): Valid[UInt] = {
 
     val default_witdth = csr_map.head._2._1.getWidth
     val default_read = Wire(Valid(UInt(default_witdth.W)))

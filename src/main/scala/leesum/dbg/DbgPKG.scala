@@ -2,7 +2,7 @@ package leesum.dbg
 
 import chisel3._
 import chisel3.util.Cat
-import leesum.CatReverse
+import leesum.{CatReverse, GenMaskOne}
 
 //#[bitfield(u32)]
 //pub struct DMStatus {
@@ -231,17 +231,40 @@ class AbstractcsFiled(data: UInt) {
 
   def get_new_write_data(wdata: UInt): UInt = {
     val w_cmderr = wdata(10, 8)
+    val new_cmderr = Wire(UInt(3.W))
 
-    // Gets set if an abstract command fails. The bits in
-    // this field remain set until they are cleared by writ-
-    // ing 1 to them. No abstract command is started
-    // until the value is reset to 0.
+    when(busy) {
+      // Writing this register while an abstract command is executing causes cmderr to become 1 (busy) once
+      new_cmderr := DbgPKG.CMDERR_BUSY.U
+    }.otherwise {
+      // this field remain set until they are cleared by writ-
+      // ing 1 to them. No abstract command is started
+      // until the value is reset to 0.
+      new_cmderr := cmderr & !w_cmderr
+    }
+
     val w_abstractcs = CatReverse(
       datacount,
       zero0,
-      cmderr & !w_cmderr,
+      new_cmderr,
       relaxedpriv,
       busy,
+      zero1,
+      progbufsize,
+      zero2
+    )
+    require(w_abstractcs.getWidth == 32)
+    w_abstractcs
+  }
+
+  def set_busy_and_cmderr_value(cmderr_value: UInt, busy_value: Bool): UInt = {
+    require(cmderr_value.getWidth == 3)
+    val w_abstractcs = CatReverse(
+      datacount,
+      zero0,
+      cmderr_value,
+      relaxedpriv,
+      busy_value,
       zero1,
       progbufsize,
       zero2
@@ -282,6 +305,32 @@ class CommandRegFiled(data: UInt) {
 
 }
 
+object CommandRegMask {
+
+//  require(data.getWidth == 32)
+//  def regno: UInt = data(15, 0)
+//  def write: Bool = data(16)
+//  def transfer: Bool = data(17)
+//  def postexec: Bool = data(18)
+//  def aarpostincrement: Bool = data(19)
+//  def aarsize: UInt = data(22, 20)
+//  def zero0: Bool = data(23)
+//  def cmdtype: UInt = data(31, 24)
+//
+//  def raw: UInt = data
+
+  def regno: Int = 0x0000_ffff
+  def write: Int = 0x0001_0000
+  def transfer: Int = 0x0002_0000
+  def postexec: Int = 0x0004_0000
+  def aarpostincrement: Int = 0x0008_0000
+  def aarsize: Int = 0x0070_0000
+  def zero0: Int = 0x0080_0000
+  def cmdtype: Int = 0xff00_0000
+
+  def all: Int = 0xffff_ffff
+}
+
 //#[bitfield(u32)]
 //pub struct CommandMem {
 //  #[bits(14)]
@@ -310,6 +359,20 @@ class CommandMemFiled(data: UInt) {
   def cmdtype: UInt = data(31, 24)
 
   def raw: UInt = data
+}
+
+object CommandMemMask {
+  def zero0: Int = 0x0000_3fff
+  def target_specific: Int = 0x0000_c000
+  def write: Int = 0x0001_0000
+  def zero1: Int = 0x0006_0000
+  def aampostincrement: Int = 0x0008_0000
+  def aamsize: Int = 0x0070_0000
+  def aamvirtual: Int = 0x0080_0000
+  def cmdtype: Int = 0xff00_0000
+
+  def all: Int = 0xffff_ffff
+
 }
 
 //#[bitfield(u32)]

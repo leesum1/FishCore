@@ -43,7 +43,6 @@ class DCacheReq extends Bundle {
   val id = UInt(8.W) // TODO: not implemented now
 
   def is_load = !is_store
-
 }
 class DCacheResp extends Bundle {
   val rdata = UInt(64.W)

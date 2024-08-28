@@ -289,6 +289,9 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
   val dmi_req_buf = RegInit(0.U.asTypeOf(new DMIReq(dm_config.abits)))
   val dmi_resp_buf = RegInit(0.U.asTypeOf(new DMIResp(dm_config.abits)))
+
+  val dmi_can_exit_side_effect_state = WireDefault(false.B)
+
   switch(dmi_state) {
     is(sDMI_IDLE) {
       io.dmi_req.ready := true.B
@@ -329,7 +332,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
           dmi_resp_buf.op := MuxCase(
             DbgPKG.DMI_OP_STATUS_FAILED.U,
             Seq(
-              (on_write_side_effect) -> DbgPKG.DMI_OP_STATUS_BUSY.U,
+//              (on_write_side_effect) -> DbgPKG.DMI_OP_STATUS_BUSY.U, TODO: 要不要进入到 busy 状态 ?
               (write_result.valid) -> DbgPKG.DMI_OP_STATUS_SUCCESS.U
             )
           )
@@ -356,8 +359,9 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       }
     }
     is(sDMI_SideEff) {
-      // side effect
-
+      when(dmi_can_exit_side_effect_state) {
+        dmi_state := sDMI_SenResp
+      }
     }
   }
 
@@ -367,6 +371,14 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
   // 须要解析 command 寄存器
   val command_field = new CommandFiled(command)
+  val abstractcs_field = new AbstractcsFiled(abstractcs)
+
+  def set_abstractcs_busy_cmderr(cmderr_value: UInt, busy_value: Bool): Unit = {
+    abstractcs := abstractcs_field.set_busy_and_cmderr_value(
+      cmderr_value,
+      busy_value
+    )
+  }
 
   // 1. 读取 gpr 寄存器: 不需要握手, 固定周期
   // 2. 读取 csr 寄存器: 需要握手, 不固定周期
@@ -376,31 +388,80 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
   val perf_abs_state = RegInit(sPerfABS_IDLE)
   val perf_abs_result_buf = RegInit(0.U(64.W))
+  val cmderr_buf = RegInit(0.U(3.W))
 
 //  dontTouch(perf_abs_state)
+  val supported_cmdtype = VecInit(
+    DbgPKG.COMDTYPE_ACCESS_REG.U,
+    DbgPKG.COMDTYPE_ACCESS_MEM.U
+  )
+
+  val not_supported_cmd_inst = VecInit(
+    supported_cmdtype.contains(
+      command_field.cmdtype
+    ) === false.B, // not support cmdtype
+    command_field.cmdtype === DbgPKG.COMDTYPE_ACCESS_REG.U && command_field.reg_field.aarsize === DbgPKG.AARSIZE_128.U, // not support 128 bit reg access
+    command_field.cmdtype === DbgPKG.COMDTYPE_ACCESS_MEM.U && command_field.mem_field.aamsize === DbgPKG.AARSIZE_128.U, // not support 128 bit mem access
+    command_field.cmdtype === DbgPKG.COMDTYPE_ACCESS_MEM.U && command_field.mem_field.aamvirtual, // not support virtual mem access
+    command_field.cmdtype === DbgPKG.COMDTYPE_ACCESS_MEM.U && command_field.mem_field.aampostincrement // not support aampostincrement
+  ).reduce(_ || _)
 
   switch(perf_abs_state) {
     is(sPerfABS_IDLE) {
+
+      // 1. 根据 command 寄存器的 cmdtype 字段, 执行不同的操作
       when(need_perform_abstract_command) {
-
-//        perf_abs_state := DecoderHelper.gen(
-//          command_field.cmdtype,
-//          sPerfABS_ERR,
-//          Seq(
-//            DbgPKG.COMDTYPE_ACCESS_REG.U(8.W) -> sPerfABS_REG,
-//            DbgPKG.COMDTYPE_ACCESS_MEM.U(8.W) -> sPerfABS_MEM
-//          )
-//        )
-
-        perf_abs_state := MuxLookup(
-          command_field.cmdtype,
-          sPerfABS_ERR
-        ) {
-          Seq(
-            DbgPKG.COMDTYPE_ACCESS_REG.U -> sPerfABS_REGReq,
-            DbgPKG.COMDTYPE_ACCESS_MEM.U -> sPerfABS_MEMReq
+        when(abstractcs_field.cmderr =/= DbgPKG.CMDERR_NONE.U) {
+          // No abstract command is started until the value is reset to 0.
+          // If cmderr is non-zero, writes to this register are ignored.
+          printf(
+            "Do not perform command when cmderr is not NONE, cmderr: %d\n",
+            abstractcs_field.cmderr
           )
+          // let dmi state machine continue
+          dmi_can_exit_side_effect_state := true.B
+        }.elsewhen(io.debug_state_regs.running()) {
+          // The abstract command couldn’t
+          // execute because the hart wasn’t in the required
+          // state (running/halted), or unavailable.
+
+          // If an abstract command is started while the selected hart is unavailable or if a hart becomes
+          // unavailable while executing an abstract command, then the Debug Module may terminate the abstract
+          // command, setting busy low, and cmderr to 4 (halt/resume). Alternatively, the command could just
+          // appear to be hung (busy never goes low).
+          printf("Do not perform command when hart is running\n")
+
+          cmderr_buf := DbgPKG.CMDERR_HALT_RESUME.U
+          perf_abs_state := sPerfABS_ERR
+
+        }.elsewhen(not_supported_cmd_inst) {
+          // not support cmd
+          printf("Do not support cmdtype: %d\n", command_field.cmdtype)
+
+          cmderr_buf := DbgPKG.CMDERR_NOTSUP.U
+          perf_abs_state := sPerfABS_ERR
+        }.otherwise {
+          // perform abstract command
+          set_abstractcs_busy_cmderr(DbgPKG.CMDERR_NONE.U(3.W), true.B)
+
+          val next_perf_abs_state = MuxLookup(
+            command_field.cmdtype,
+            sPerfABS_ERR
+          ) {
+            Seq(
+              DbgPKG.COMDTYPE_ACCESS_REG.U -> sPerfABS_REGReq,
+              DbgPKG.COMDTYPE_ACCESS_MEM.U -> sPerfABS_MEMReq
+            )
+          }
+
+          assert(
+            next_perf_abs_state =/= sPerfABS_ERR,
+            "not support cmdtype"
+          )
+
+          perf_abs_state := next_perf_abs_state
         }
+
       }
     }
     is(sPerfABS_REGReq) {
@@ -422,32 +483,38 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       ).reduce(_ || _)
 
       assert(
-        (reg_field.is_gpr && reg_field.is_csr) === false.B,
-        "only either gpr or csr"
+        cmd_not_support === false.B,
+        "not supported reg access addr or size"
       )
 
+      // -------------------
       // 读写 gpr
-      when(command_field.reg_field.is_gpr && !cmd_not_support) {
+      // -------------------
+      when(command_field.reg_field.is_gpr) {
         when(command_field.reg_field.write) {
-          // 写 gpr
+          // 写 gpr, size 在前面已经处理过了
           io.debug_gpr_write_port.wen := true.B
           io.debug_gpr_write_port.addr := command_field.reg_field.get_gpr_regno
           io.debug_gpr_write_port.wdata := w_regdata
         }.otherwise {
+          // 读取 gpr，读取的时候不在乎 32 位还是 64 位
           io.debug_gpr_read_port.rs1_addr := command_field.reg_field.get_gpr_regno
           perf_abs_result_buf := io.debug_gpr_read_port.rs1_data
         }
-
       }
+
+      // -------------------
       // 读写 csr
-      when(command_field.reg_field.is_csr && !cmd_not_support) {
+      // -------------------
+
+      when(command_field.reg_field.is_csr) {
         when(command_field.reg_field.write) {
-          // 写 csr
+          // 写 csr，size 在前面已经处理过了
           io.debug_csr_write_port.addr := command_field.reg_field.get_csr_regno
           io.debug_csr_write_port.write_en := true.B
           io.debug_csr_write_port.write_data := w_regdata
         }.otherwise {
-          // 读取 csr
+          // 读取 csr，读取的时候不在乎 32 位还是 64 位
           io.debug_csr_read_port.read_en := true.B
           io.debug_csr_read_port.addr := command_field.reg_field.get_csr_regno
           perf_abs_result_buf := io.debug_csr_read_port.read_data
@@ -455,27 +522,49 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
         // TODO: csr 不存在怎么办
       }
 
-      perf_abs_state := Mux(
-        cmd_not_support,
-        sPerfABS_ERR,
-        sPerfABS_REGResp
-      )
+      perf_abs_state := sPerfABS_REGResp;
+
     }
 
     is(sPerfABS_REGResp) {
       when(command_field.reg_field.write === false.B) {
         // 将读取到的寄存器写入到 data_arg 中, 不区分 32 位还是 64 位
+        // dmi 读取的时候会自动选择
         arg_write64(0, perf_abs_result_buf)
       }
-
+      set_abstractcs_busy_cmderr(DbgPKG.CMDERR_NONE.U(3.W), false.B)
       perf_abs_state := sPerfABS_IDLE
-      // 让 dmi 状态机继续
-      dmi_state := sDMI_SenResp
+      // let dmi state machine continue
+      dmi_can_exit_side_effect_state := true.B
     }
 
     is(sPerfABS_MEMReq) {
-      // 读取 mem
-      perf_abs_state := sPerfABS_IDLE
+      val mem_field = command_field.mem_field
+      // 获取须要写入的数据，同时处理 32 位和 64 位
+      val mem_wdata = Mux1H(
+        Seq(
+          (mem_field.aamsize === DbgPKG.AAMSIZE_32.U) -> Cat(
+            0.U(32.W),
+            arg_read32(0)
+          ),
+          (mem_field.aamsize === DbgPKG.AAMSIZE_64.U) -> arg_read64(0)
+        )
+      )
+
+      when(mem_field.write) {
+        // 写入 mem
+        io.debug_dcache_req.valid := true.B
+        io.debug_dcache_req.bits.wdata := mem_wdata
+
+        // io.debug_dcache_req.bits.paddr := mem_field.aamvirtual
+      }.otherwise {
+        // 读取 mem
+        io.debug_dcache_req.valid := true.B
+
+        // io.debug_dcache_req.bits.addr := mem_field.get_mem_addr
+        // io.debug_dcache_req.bits.wen := false.B
+      }
+
     }
 
     is(sPerfABS_MEMResp) {
@@ -485,13 +574,34 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
     is(sPerfABS_ERR) {
       // error
+      set_abstractcs_busy_cmderr(cmderr_buf, false.B)
+      dmi_can_exit_side_effect_state := true.B
       perf_abs_state := sPerfABS_IDLE
     }
+  }
+
+  // -------------------------
+  // assert
+  // -------------------------
+  when(abstractcs_field.busy === false.B) {
+    val cmderr_valid_value = VecInit(
+      DbgPKG.CMDERR_NONE.U,
+      DbgPKG.CMDERR_BUSY.U,
+      DbgPKG.CMDERR_NOTSUP.U,
+      DbgPKG.CMDERR_EXCEPTION.U,
+      DbgPKG.CMDERR_HALT_RESUME.U,
+      DbgPKG.CMDERR_BUS.U,
+      DbgPKG.CMDERR_RESERVED.U,
+      DbgPKG.CMDERR_OTHER.U
+    ).contains(abstractcs_field.cmderr)
+    assert(
+      cmderr_valid_value,
+      "This field(cmderr) only contains a valid value if busy is 0."
+    )
   }
 }
 
 object GenDebugModuleVerilog extends App {
   val dm_config = new DebugModuleConfig()
-
   GenVerilogHelper(new DebugModule(dm_config))
 }
