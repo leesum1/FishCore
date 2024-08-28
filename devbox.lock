@@ -69,6 +69,90 @@
         }
       }
     },
+    "binutils@latest": {
+      "last_modified": "2024-08-14T11:41:26Z",
+      "resolved": "github:NixOS/nixpkgs/0cb2fd7c59fed0cd82ef858cbcbdb552b9a33465#binutils",
+      "source": "devbox-search",
+      "version": "2.42",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/l897djcijvlhhxgbg9psmjrf9zpd6lxi-binutils-wrapper-2.42",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/5s72jgl0pzfrh4mvmdcfggwack3xklfr-binutils-wrapper-2.42-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/qz2dqn4kzp3har5k9vssazamljfrkvnd-binutils-wrapper-2.42-info"
+            }
+          ],
+          "store_path": "/nix/store/l897djcijvlhhxgbg9psmjrf9zpd6lxi-binutils-wrapper-2.42"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/6mx5y3dq6k829fhs7rpjw84yalvhhrrj-binutils-wrapper-2.42",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/pnmzbi53fa7mzf948iqrpajqygb5inh3-binutils-wrapper-2.42-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/6c86p48qm356s86yhgigcxn33ys3yrvr-binutils-wrapper-2.42-info"
+            }
+          ],
+          "store_path": "/nix/store/6mx5y3dq6k829fhs7rpjw84yalvhhrrj-binutils-wrapper-2.42"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/d2xylwpljksvvbr5gv4zqbbc4xxd1ypy-binutils-wrapper-2.42",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/i60a236ysqay0w2c7nkpkc6b7cxlw8bj-binutils-wrapper-2.42-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/79c6b336qzh7i24np1h6n2zpnsqcrb3a-binutils-wrapper-2.42-info"
+            }
+          ],
+          "store_path": "/nix/store/d2xylwpljksvvbr5gv4zqbbc4xxd1ypy-binutils-wrapper-2.42"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/qrw9mznq4p1135k53aa5g9saz229srf4-binutils-wrapper-2.42",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/z1q57nh1j8s6h10d2ibpbplg6a4frky2-binutils-wrapper-2.42-man",
+              "default": true
+            },
+            {
+              "name": "info",
+              "path": "/nix/store/mpnl7md0vwrbc5jrsxsb3w2qc2s0phcp-binutils-wrapper-2.42-info"
+            }
+          ],
+          "store_path": "/nix/store/qrw9mznq4p1135k53aa5g9saz229srf4-binutils-wrapper-2.42"
+        }
+      }
+    },
     "circt@1.62.0": {
       "last_modified": "2024-01-19T20:59:21Z",
       "resolved": "github:NixOS/nixpkgs/e5d1c87f5813afde2dda384ac807c57a105721cc#circt",
@@ -426,6 +510,54 @@
             }
           ],
           "store_path": "/nix/store/y9mnxlhj1hda3b75j0hbx80gqfaysvfh-gnumake-4.4.1"
+        }
+      }
+    },
+    "graalvm17-ce@latest": {
+      "last_modified": "2023-09-27T18:02:17Z",
+      "resolved": "github:NixOS/nixpkgs/517501bcf14ae6ec47efd6a17dda0ca8e6d866f9#graalvm17-ce",
+      "source": "devbox-search",
+      "version": "22.3.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4wh8kfpbm0z0syjgc1k7fkj9sfbrgkx3-graalvm17-ce-22.3.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/4wh8kfpbm0z0syjgc1k7fkj9sfbrgkx3-graalvm17-ce-22.3.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/yqcp64sj1kpwx9z0bvha43ys0ipdp2bj-graalvm17-ce-22.3.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/yqcp64sj1kpwx9z0bvha43ys0ipdp2bj-graalvm17-ce-22.3.1"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/52wadcwpjqyq3ymgyzw819w02kkn5971-graalvm17-ce-22.3.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/52wadcwpjqyq3ymgyzw819w02kkn5971-graalvm17-ce-22.3.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/i9rz6kivc49v38a7w6llhzv5bva85si8-graalvm17-ce-22.3.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/i9rz6kivc49v38a7w6llhzv5bva85si8-graalvm17-ce-22.3.1"
         }
       }
     },

@@ -17,13 +17,15 @@
     "cmake@latest",
     "zlib@latest",
     "zlib.dev",
-    "just@latest"
+    "just@latest",
+    "binutils@latest",
+    "graalvm17-ce@latest"
   ],
   "shell": {
     "init_hook": [
       "echo 'Welcome to devbox!' > /dev/null",
-      "unset -v CC CXX LD AR AS NM STRIP OBJCOPY OBJDUMP SIZE",
-      ". $VENV_DIR/bin/activate"
+      // "unset -v CC CXX LD AR AS NM STRIP OBJCOPY OBJDUMP SIZE",
+      // ". $VENV_DIR/bin/activate"
     ],
     "scripts": {
       "test": [
