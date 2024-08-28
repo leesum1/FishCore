@@ -35,9 +35,9 @@ object DcacheSize2AxiSize {
 
 class DCacheReq extends Bundle {
   val paddr = UInt(64.W)
-  val size = UInt(2.W)
-  val wdata = UInt(64.W)
-  val wstrb = UInt(8.W)
+  val size = UInt(2.W) // total bits == 2 ** size
+  val wdata = UInt(64.W) // use GenAxiWdata to generate
+  val wstrb = UInt(8.W) // use GenAxiWstrb to generate
   val is_store = Bool()
   val is_mmio = Bool()
   val id = UInt(8.W) // TODO: not implemented now
@@ -45,7 +45,7 @@ class DCacheReq extends Bundle {
   def is_load = !is_store
 }
 class DCacheResp extends Bundle {
-  val rdata = UInt(64.W)
+  val rdata = UInt(64.W) // // use GenAxiRdata to get right data
   val id = UInt(8.W) // TODO: not implemented now
   val exception = new ExceptionEntry()
 
@@ -59,14 +59,14 @@ class LoadDcacheReq extends Bundle {
 }
 class LoadDcacheResp extends Bundle {
   // the valid data is indicated by the paddr, like AXI4
-  val data = UInt(64.W)
+  val data = UInt(64.W) // use GenAxiRdata to get right data
   val exception = new ExceptionEntry(has_valid = true)
 }
 class StoreDcacheReq extends Bundle {
   val paddr = UInt(64.W)
   // wdata and wstrb indicate the valid data to be written, like AXI4
-  val wdata = UInt(64.W)
-  val wstrb = UInt(8.W)
+  val wdata = UInt(64.W) // use GenAxiWdata to generate
+  val wstrb = UInt(8.W) // use GenAxiWstrb to generate
   val size = UInt(2.W)
   val is_mmio = Bool()
 
@@ -125,6 +125,44 @@ object DCacheConnect {
     dcache_resp.ready <> store_resp.ready
     store_resp.bits.exception := dcache_resp.bits.exception
   }
+
+  def dcache_req_to_load_store_req(
+      dcache_req: DecoupledIO[DCacheReq],
+      load_req: DecoupledIO[LoadDcacheReq],
+      store_req: DecoupledIO[StoreDcacheReq]
+  ): Unit = {
+    load_req.valid := dcache_req.valid && !dcache_req.bits.is_store
+    store_req.valid := dcache_req.valid && dcache_req.bits.is_store
+    dcache_req.ready := load_req.valid || store_req.valid
+    load_req.bits.paddr := dcache_req.bits.paddr
+    load_req.bits.size := dcache_req.bits.size
+    load_req.bits.is_mmio := dcache_req.bits.is_mmio
+    store_req.bits.paddr := dcache_req.bits.paddr
+    store_req.bits.size := dcache_req.bits.size
+    store_req.bits.wdata := dcache_req.bits.wdata
+    store_req.bits.wstrb := dcache_req.bits.wstrb
+    store_req.bits.is_mmio := dcache_req.bits.is_mmio
+  }
+
+  def dcache_resp_to_load_store_resp(
+      last_is_store: Bool,
+      load_resp: DecoupledIO[LoadDcacheResp],
+      store_resp: DecoupledIO[StoreDcacheResp],
+      dcache_resp: DecoupledIO[DCacheResp]
+  ): Unit = {
+    dcache_resp.valid := load_resp.valid || store_resp.valid
+    dcache_resp.bits.rdata := Mux(!last_is_store, load_resp.bits.data, 0.U)
+    dcache_resp.bits.exception := Mux(
+      !last_is_store,
+      load_resp.bits.exception,
+      store_resp.bits.exception
+    )
+    dcache_resp.bits.id := 3.U
+
+    load_resp.ready := dcache_resp.valid && !last_is_store
+    store_resp.ready := dcache_resp.valid && last_is_store
+  }
+
 }
 
 class ByteEnableGenerator extends Module {

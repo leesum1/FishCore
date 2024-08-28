@@ -5,6 +5,7 @@ import chisel3.util.{DecoupledIO, _}
 import leesum.Cache.{DCacheReq, DCacheResp}
 import leesum.Utils.DecoderHelper
 import leesum._
+import leesum.axi4.AXIDef
 
 class DebugModuleConfig {
   val progbuf_num = 4
@@ -65,8 +66,9 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
     io.debug_csr_write_port.write_data := DontCare
     io.debug_csr_write_port.write_en := false.B
 
-    io.debug_dcache_req.noenq();
-    io.debug_dcache_resp.nodeq();
+    io.debug_dcache_req.noenq()
+    io.debug_dcache_req.bits.id := 3.U
+    io.debug_dcache_resp.nodeq()
   }
 
   clear_debug_port();
@@ -96,7 +98,6 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
     abstract_data(idx) := data
   }
 
-  // TODO: 检查排列顺序
   def arg_read64(idx: Int): UInt = {
     require(idx < dm_config.abstract_data_num / 2)
     val r64 = Cat(abstract_data(idx * 2 + 1), abstract_data(idx * 2))
@@ -390,6 +391,10 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
   val perf_abs_result_buf = RegInit(0.U(64.W))
   val cmderr_buf = RegInit(0.U(3.W))
 
+  val abs_mem_addr = arg_read64(1)
+  val abs_mem_wdata = arg_read64(0)
+  val abs_mem_size_buf = RegInit(0.U(2.W))
+
 //  dontTouch(perf_abs_state)
   val supported_cmdtype = VecInit(
     DbgPKG.COMDTYPE_ACCESS_REG.U,
@@ -540,36 +545,49 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
     is(sPerfABS_MEMReq) {
       val mem_field = command_field.mem_field
-      // 获取须要写入的数据，同时处理 32 位和 64 位
-      val mem_wdata = Mux1H(
+      // address on arg641
+      // wdata on arg640
+      val abs_mem_size = Mux1H(
         Seq(
-          (mem_field.aamsize === DbgPKG.AAMSIZE_32.U) -> Cat(
-            0.U(32.W),
-            arg_read32(0)
-          ),
-          (mem_field.aamsize === DbgPKG.AAMSIZE_64.U) -> arg_read64(0)
+          (mem_field.aamsize === DbgPKG.AARSIZE_32.U) -> AXIDef.SIZE_4,
+          (mem_field.aamsize === DbgPKG.AARSIZE_64.U) -> AXIDef.SIZE_8
         )
+      )(1, 0)
+      abs_mem_size_buf := abs_mem_size
+
+      io.debug_dcache_req.valid := true.B
+      io.debug_dcache_req.bits.is_mmio := false.B
+      io.debug_dcache_req.bits.is_store := mem_field.write
+      io.debug_dcache_req.bits.paddr := abs_mem_addr
+      io.debug_dcache_req.bits.wdata := GenAxiWdata(abs_mem_wdata, abs_mem_addr)
+      io.debug_dcache_req.bits.wstrb := GenAxiWstrb(
+        abs_mem_addr,
+        abs_mem_size
       )
+      io.debug_dcache_req.bits.size := abs_mem_size
 
-      when(mem_field.write) {
-        // 写入 mem
-        io.debug_dcache_req.valid := true.B
-        io.debug_dcache_req.bits.wdata := mem_wdata
-
-        // io.debug_dcache_req.bits.paddr := mem_field.aamvirtual
-      }.otherwise {
-        // 读取 mem
-        io.debug_dcache_req.valid := true.B
-
-        // io.debug_dcache_req.bits.addr := mem_field.get_mem_addr
-        // io.debug_dcache_req.bits.wen := false.B
+      // dcache req hs
+      when(io.debug_dcache_req.fire) {
+        perf_abs_state := sPerfABS_MEMResp
       }
-
     }
-
     is(sPerfABS_MEMResp) {
-      // 读取 mem
-      perf_abs_state := sPerfABS_IDLE
+      io.debug_dcache_resp.ready := true.B
+      when(io.debug_dcache_resp.fire) {
+
+        val shifted_rdata =
+          GetAxiRdata(
+            io.debug_dcache_resp.bits.rdata,
+            abs_mem_addr,
+            abs_mem_size_buf,
+            false.B
+          )
+        arg_write64(0, shifted_rdata)
+        set_abstractcs_busy_cmderr(DbgPKG.CMDERR_NONE.U(3.W), false.B)
+        perf_abs_state := sPerfABS_IDLE
+        // let dmi state machine continue
+        dmi_can_exit_side_effect_state := true.B
+      }
     }
 
     is(sPerfABS_ERR) {

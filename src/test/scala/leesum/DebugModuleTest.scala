@@ -4,6 +4,8 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.{DecoupledIO, ValidIO}
 import chiseltest._
+import leesum.Cache.{DCacheConnect, DummyDCache}
+import leesum.axi4.AXI4Memory
 import leesum.dbg.DbgPKG._
 import leesum.dbg.{
   CommandRegMask,
@@ -32,9 +34,16 @@ class DebugModuleTestDut(dm_config: DebugModuleConfig) extends Module {
   val debug_module = Module(new DebugModule(dm_config))
   val gprs = Module(new GPRs(1, 1))
   val csrs = Module(new CSRRegs(1, 1))
+  val axi4mem = Module(
+    new AXI4Memory(
+      32, 64, 0x1000_000L, 64, 0x8000_0000L
+    )
+  )
+  val dummy_dcache = Module(new DummyDCache())
 
   csrs.io.direct_write_ports.clear()
   csrs.io.cur_privilege_mode := 0.U
+  dummy_dcache.io.flush := false.B
 
   csrs.io.mtime := 0.U
   csrs.io.time_int := false.B
@@ -56,8 +65,28 @@ class DebugModuleTestDut(dm_config: DebugModuleConfig) extends Module {
   debug_module.io.debug_csr_write_port <> csrs.io.write_ports(0)
   debug_module.io.debug_csr_read_port <> csrs.io.read_ports(0)
 
-  debug_module.io.debug_dcache_req.nodeq()
-  debug_module.io.debug_dcache_resp.noenq()
+  dummy_dcache.io.axi_mem <> axi4mem.io
+
+  DCacheConnect.dcache_req_to_load_store_req(
+    debug_module.io.debug_dcache_req,
+    dummy_dcache.io.load_req,
+    dummy_dcache.io.store_req
+  )
+
+  val last_is_store = RegInit(false.B)
+  DCacheConnect.dcache_resp_to_load_store_resp(
+    last_is_store,
+    dummy_dcache.io.load_resp,
+    dummy_dcache.io.store_resp,
+    debug_module.io.debug_dcache_resp
+  )
+
+  when(dummy_dcache.io.store_req.fire) {
+    last_is_store := true.B
+  }.elsewhen(dummy_dcache.io.load_req.fire) {
+    last_is_store := false.B
+  }
+
 }
 
 class DebugModuleTest extends AnyFreeSpec with ChiselScalatestTester {
