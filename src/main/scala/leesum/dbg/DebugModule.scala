@@ -406,7 +406,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       command_field.cmdtype
     ) === false.B, // not support cmdtype
     command_field.cmdtype === DbgPKG.COMDTYPE_ACCESS_REG.U && command_field.reg_field.aarsize === DbgPKG.AARSIZE_128.U, // not support 128 bit reg access
-    command_field.cmdtype === DbgPKG.COMDTYPE_ACCESS_MEM.U && command_field.mem_field.aamsize === DbgPKG.AARSIZE_128.U, // not support 128 bit mem access
+    command_field.cmdtype === DbgPKG.COMDTYPE_ACCESS_MEM.U && command_field.mem_field.aamsize === DbgPKG.AAMSIZE_128.U, // not support 128 bit mem access
     command_field.cmdtype === DbgPKG.COMDTYPE_ACCESS_MEM.U && command_field.mem_field.aamvirtual, // not support virtual mem access
     command_field.cmdtype === DbgPKG.COMDTYPE_ACCESS_MEM.U && command_field.mem_field.aampostincrement // not support aampostincrement
   ).reduce(_ || _)
@@ -549,8 +549,10 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       // wdata on arg640
       val abs_mem_size = Mux1H(
         Seq(
-          (mem_field.aamsize === DbgPKG.AARSIZE_32.U) -> AXIDef.SIZE_4,
-          (mem_field.aamsize === DbgPKG.AARSIZE_64.U) -> AXIDef.SIZE_8
+          (mem_field.aamsize === DbgPKG.AAMSIZE_8.U) -> AXIDef.SIZE_1,
+          (mem_field.aamsize === DbgPKG.AAMSIZE_16.U) -> AXIDef.SIZE_2,
+          (mem_field.aamsize === DbgPKG.AAMSIZE_32.U) -> AXIDef.SIZE_4,
+          (mem_field.aamsize === DbgPKG.AAMSIZE_64.U) -> AXIDef.SIZE_8
         )
       )(1, 0)
       abs_mem_size_buf := abs_mem_size

@@ -8,6 +8,7 @@ import leesum.Cache.{DCacheConnect, DummyDCache}
 import leesum.axi4.AXI4Memory
 import leesum.dbg.DbgPKG._
 import leesum.dbg.{
+  CommandMemMask,
   CommandRegMask,
   DMIReq,
   DMIResp,
@@ -162,6 +163,41 @@ class DebugModuleTest extends AnyFreeSpec with ChiselScalatestTester {
         reg_cmd.getRawValue.U(32.W),
         DMI_OP_STATUS_SUCCESS.U
       )
+    (command_dmi_req, command_dmi_resp)
+  }
+
+  def gen_dmi_command_memtype(
+      aamsize: Int,
+      write: Boolean
+  ) = {
+    require(
+      Seq(
+        DbgPKG.AAMSIZE_8,
+        DbgPKG.AAMSIZE_16,
+        DbgPKG.AAMSIZE_32,
+        DbgPKG.AAMSIZE_64
+      ).contains(
+        aamsize
+      ),
+      "aamsize should be 8, 16, 32, 64"
+    )
+    val mem_cmd = new CSRBitField(0)
+    mem_cmd.setField(CommandMemMask.write, if (write) 1 else 0)
+    mem_cmd.setField(CommandMemMask.aamvirtual, 0) // physical address
+    mem_cmd.setField(CommandMemMask.aamsize, aamsize)
+    mem_cmd.setField(CommandMemMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_MEM)
+
+    val command_dmi_req =
+      gen_dmi_req(
+        DbgPKG.COMMAND_ADDR.U,
+        mem_cmd.getRawValue.U(32.W),
+        DMI_OP_WRITE.U
+      )
+    val command_dmi_resp = gen_dmi_resp(
+      DbgPKG.COMMAND_ADDR.U,
+      mem_cmd.getRawValue.U(32.W),
+      DMI_OP_STATUS_SUCCESS.U
+    )
     (command_dmi_req, command_dmi_resp)
   }
 
@@ -353,5 +389,163 @@ class DebugModuleTest extends AnyFreeSpec with ChiselScalatestTester {
         dut.clock.step(5)
 
       }
+  }
+
+  "Debug RW Mem Test" in {
+    test(new DebugModuleTestDut(dm_config))
+      .withAnnotations(
+        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+      ) { dut =>
+        dut.clock.step(5)
+
+        // halt core
+        dut.io.debug_state_regs.is_halted.poke(true.B)
+
+        def set_mem_addr(addr: Long) = {
+          // arg64 idx 1 : addr
+          val addr0 = addr & 0xffffffff
+          val addr1 = (addr >>> 32) & 0xffffffff
+          val write_absdata_dmi_addr0 =
+            gen_dmi_absdata(2, addr0, is_write = true)
+          val write_absdata_dmi_addr1 =
+            gen_dmi_absdata(3, addr1, is_write = true)
+          fork {
+            dut.io.dmi_req.enqueue(write_absdata_dmi_addr0._1)
+            dut.io.dmi_req.enqueue(write_absdata_dmi_addr1._1)
+          }.fork {
+            dut.io.dmi_resp.expectDequeue(write_absdata_dmi_addr0._2)
+            dut.io.dmi_resp.expectDequeue(write_absdata_dmi_addr1._2)
+          }.joinAndStep()
+        }
+        def set_mem_data(data: Long) = {
+          // arg64 idx 0 : data
+          val data0 = data & 0xffffffff
+          val data1 = (data >>> 32) & 0xffffffff
+          val write_absdata_dmi_data0 =
+            gen_dmi_absdata(0, data0, is_write = true)
+          val write_absdata_dmi_data1 =
+            gen_dmi_absdata(1, data1, is_write = true)
+          fork {
+            dut.io.dmi_req.enqueue(write_absdata_dmi_data0._1)
+            dut.io.dmi_req.enqueue(write_absdata_dmi_data1._1)
+          }.fork {
+            dut.io.dmi_resp.expectDequeue(write_absdata_dmi_data0._2)
+            dut.io.dmi_resp.expectDequeue(write_absdata_dmi_data1._2)
+          }.joinAndStep()
+        }
+
+        def get_mem_data(data: Long): Unit = {
+          val data0 = data & 0xffffffff
+          val data1 = (data >>> 32) & 0xffffffff
+          val read_absdata_dmi_data0 =
+            gen_dmi_absdata(0, data0, is_write = false)
+          val read_absdata_dmi_data1 =
+            gen_dmi_absdata(1, data1, is_write = false)
+          fork {
+            dut.io.dmi_req.enqueue(read_absdata_dmi_data0._1)
+            dut.io.dmi_req.enqueue(read_absdata_dmi_data1._1)
+          }.fork {
+            dut.io.dmi_resp.expectDequeue(read_absdata_dmi_data0._2)
+            dut.io.dmi_resp.expectDequeue(read_absdata_dmi_data1._2)
+          }.joinAndStep()
+        }
+
+        def clear_addr_and_data(): Unit = {
+          set_mem_addr(0x0)
+          set_mem_data(0x0)
+        }
+
+        // -------------------
+        // 1. write Mem
+        // -------------------
+
+        // 1. set mem addr and data
+        set_mem_addr(0x80000000)
+        set_mem_data(0xdeadbeef12345678L)
+
+        // 2. use abstract command to write mem
+        wait_dmi_transfer_task(
+          dut,
+          gen_dmi_command_memtype(DbgPKG.AAMSIZE_64, write = true)
+        )
+
+        // -------------------
+        // 2. read Mem
+        // -------------------
+        clear_addr_and_data()
+
+        // 1. set mem addr
+        set_mem_addr(0x80000000)
+
+        // 2. use abstract command to read mem
+        wait_dmi_transfer_task(
+          dut,
+          gen_dmi_command_memtype(DbgPKG.AAMSIZE_64, write = false)
+        )
+        // 3. check read data
+        get_mem_data(0xdeadbeef12345678L)
+
+        // 4. change AAMSIZE, read 32 bits
+        wait_dmi_transfer_task(
+          dut,
+          gen_dmi_command_memtype(DbgPKG.AAMSIZE_32, write = false)
+        )
+        get_mem_data(0x12345678L)
+        // 5. change AAMSIZE, read 16 bits
+        wait_dmi_transfer_task(
+          dut,
+          gen_dmi_command_memtype(DbgPKG.AAMSIZE_16, write = false)
+        )
+        get_mem_data(0x5678L)
+        // 6. change AAMSIZE, read 8 bits
+        wait_dmi_transfer_task(
+          dut,
+          gen_dmi_command_memtype(DbgPKG.AAMSIZE_8, write = false)
+        )
+        get_mem_data(0x78L)
+        // 7. change addr, read 32 bits
+        set_mem_addr(0x80000004)
+        wait_dmi_transfer_task(
+          dut,
+          gen_dmi_command_memtype(DbgPKG.AAMSIZE_32, write = false)
+        )
+        get_mem_data(0xdeadbeefL)
+        // 8. change addr, read 16 bits
+        set_mem_addr(0x80000006)
+        wait_dmi_transfer_task(
+          dut,
+          gen_dmi_command_memtype(DbgPKG.AAMSIZE_16, write = false)
+        )
+        get_mem_data(0xdeadL)
+        // 9. change addr, read 8 bits
+        set_mem_addr(0x80000007)
+        wait_dmi_transfer_task(
+          dut,
+          gen_dmi_command_memtype(DbgPKG.AAMSIZE_8, write = false)
+        )
+        get_mem_data(0xdeL)
+
+        set_mem_addr(0x80000004)
+        wait_dmi_transfer_task(
+          dut,
+          gen_dmi_command_memtype(DbgPKG.AAMSIZE_8, write = false)
+        )
+        get_mem_data(0xefL)
+
+        dut.clock.step(5)
+      }
+  }
+
+  private def wait_dmi_transfer_task(
+      dut: DebugModuleTestDut,
+      write_absdata_dmi_data0: (DMIReq, DMIResp)
+  ): Unit = {
+    fork {
+      // 0 到 10 随机延迟
+
+      dut.io.dmi_req.enqueue(write_absdata_dmi_data0._1)
+    }.fork {
+      dut.io.dmi_resp.expectDequeue(write_absdata_dmi_data0._2)
+    }.joinAndStep()
   }
 }
