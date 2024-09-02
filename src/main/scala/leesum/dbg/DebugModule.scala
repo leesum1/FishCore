@@ -16,7 +16,7 @@ class DebugModuleConfig {
 
 }
 
-class DMIReq(abits: Int = 6) extends Bundle {
+class DMIReq(abits: Int) extends Bundle {
   val addr = UInt(abits.W)
   val data = UInt(32.W)
   val op = UInt(2.W)

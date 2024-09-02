@@ -1250,3 +1250,15 @@ object gather_scala_test extends App {
   println(gathered_seq)
 
 }
+
+class BitMaskHelper {
+  def gen_mask(left: Int, right: Int): Long = {
+    require(right >= 0 && right < 64, "right must be in the range [0, 63]")
+    require(left > right && left < 64, "left must be in the range [right, 63]")
+
+    val mask = (1L << (left - right + 1)) - 1
+    mask << right
+  }
+
+  def all = gen_mask(63, 0)
+}

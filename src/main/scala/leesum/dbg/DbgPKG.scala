@@ -2,7 +2,7 @@ package leesum.dbg
 
 import chisel3._
 import chisel3.util.Cat
-import leesum.{CatReverse, GenMaskOne}
+import leesum.{BitMaskHelper, CatReverse, GenMaskOne}
 
 //#[bitfield(u32)]
 //pub struct DMStatus {
@@ -606,6 +606,12 @@ class DTMDMIFiled(data_reg: UInt) {
     )
     r_dmi
   }
+}
+
+object DTMDMIMask extends BitMaskHelper {
+  def op = gen_mask(1, 0)
+  def data = gen_mask(33, 2)
+  def addr = gen_mask(63, 34)
 }
 
 object DbgPKG {

@@ -83,6 +83,6 @@ class JtagShiftReg(max_width: Int = 32) extends Module {
 
 object GenJtagShiftRegVerilog extends App {
   GenVerilogHelper(
-    new JtagShiftReg(32)
+    new JtagShiftReg(39)
   )
 }

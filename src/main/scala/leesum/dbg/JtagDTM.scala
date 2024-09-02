@@ -156,7 +156,7 @@ object JtagState extends ChiselEnum {
 class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   val io = IO(new Bundle {
     val jtag = new JtagIO(as_master = false)
-    val dmi_req = DecoupledIO(new DMIReq)
+    val dmi_req = DecoupledIO(new DMIReq(dm_config.abits))
     val dmi_resp = Flipped(DecoupledIO(new DMIResp(dm_config.abits)))
 
     val dmi_reset_valid = Output(Bool())
@@ -171,7 +171,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   io.dmi_reset_valid := false.B
   io.dmi_hard_reset_valid := false.B
 
-  val dtm_reg_max_width = 34 + 5
+  val dtm_reg_max_width = 34 + dm_config.abits
 
   // JTAG state machine
   val jtag_state = RegInit(JtagState.TestLogicReset)
@@ -217,7 +217,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   val dmi_sticky_error = RegInit(false.B)
   val in_dmi_error = dmi_sticky_error || dmi_busy
 
-  val can_dmi_send_req = WireInit(false.B)
+  val can_dmi_send_req = RegInit(false.B)
 
   // -------------------------
   // map normal read write func define
@@ -262,7 +262,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
     reg := write_result.bits
     //  In Update-DR, the DTM starts the operation specified in op unless the current status reported in
     //  op is sticky
-    can_dmi_send_req := !dmi_sticky_error && !dmi_busy
+    can_dmi_send_req := !in_dmi_error
     write_result
   }
 
@@ -446,13 +446,14 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
 
   val dmi_state = RegInit(sDMIIdle)
 
-  val dmi_req_buf = RegInit(0.U.asTypeOf(new DMIReq))
+  val dmi_req_buf = RegInit(0.U.asTypeOf(new DMIReq(dm_config.abits)))
 
   switch(dmi_state) {
     is(sDMIIdle) {
       when(can_dmi_send_req) {
         dmi_state := sDMIReq
         dmi_busy := true.B
+        can_dmi_send_req := false.B
         dmi_req_buf.op := dtm_dmi_filed.op
         dmi_req_buf.addr := dtm_dmi_filed.address
         dmi_req_buf.data := dtm_dmi_filed.data

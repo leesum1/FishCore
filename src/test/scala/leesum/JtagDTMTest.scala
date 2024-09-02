@@ -1,12 +1,20 @@
 package leesum
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
-import chisel3.util.Decoupled
 import chiseltest._
-import leesum.Cache.{LoadDcacheReq, LoadDcacheResp}
-import leesum.lsu.{LoadQueue, LoadQueueIn, LoadWriteBack, StoreBypassData}
 import leesum.TestUtils.long2UInt64
-import leesum.dbg.{DbgPKG, DebugModuleConfig, JtagDTM, JtagState}
+import leesum.dbg.DbgPKG.{DMI_OP_NOP, DMI_OP_STATUS_SUCCESS, DMI_OP_WRITE}
+import leesum.dbg.{
+  CommandMemMask,
+  CommandRegMask,
+  DMIReq,
+  DMIResp,
+  DTMDMIMask,
+  DbgPKG,
+  DebugModuleConfig,
+  JtagDTM,
+  JtagState
+}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
@@ -147,7 +155,7 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
     dut.clock.step(1)
     dut.io.jtag_state.expect(JtagState.Exit1Dr)
 
-    dut.io.jtag.tdi.poke(false.B) // last bit
+    dut.io.jtag.tdi.poke(false.B)
     dut.io.jtag.tdi_en.poke(false.B)
 
     // --------- shift-DR Loop End ---------------
@@ -162,7 +170,92 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
 
   }
 
-  "JtagStateIdleTest" in {
+  /** Generate DMI command for register access. Shall write this command to DMI
+    * command register
+    * @param regno
+    *   register number
+    * @param aarsize
+    * @param write
+    * @return
+    */
+  def gen_dmi_command_regtype(
+      regno: Int,
+      aarsize: Int,
+      write: Boolean
+  ) = {
+    require(
+      Seq(DbgPKG.AARSIZE_32, DbgPKG.AARSIZE_64).contains(
+        aarsize
+      ),
+      "aarsize should be 32, 64"
+    )
+    val reg_cmd = new CSRBitField(0)
+    reg_cmd.setField(CommandRegMask.write, if (write) 1 else 0)
+    reg_cmd.setField(CommandRegMask.regno, regno)
+    reg_cmd.setField(CommandRegMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_REG)
+    reg_cmd.setField(CommandRegMask.aarsize, aarsize)
+    reg_cmd.getRawValue
+  }
+
+  /** Generate DMI command for memory access. Shall write this command to DMI
+    * command register
+    * @param aamsize
+    *   access size
+    * @param write
+    *   write or read
+    * @return
+    */
+  def gen_dmi_command_memtype(
+      aamsize: Int,
+      write: Boolean
+  ) = {
+    require(
+      Seq(
+        DbgPKG.AAMSIZE_8,
+        DbgPKG.AAMSIZE_16,
+        DbgPKG.AAMSIZE_32,
+        DbgPKG.AAMSIZE_64
+      ).contains(
+        aamsize
+      ),
+      "aamsize should be 8, 16, 32, 64"
+    )
+    val mem_cmd = new CSRBitField(0)
+    mem_cmd.setField(CommandMemMask.write, if (write) 1 else 0)
+    mem_cmd.setField(CommandMemMask.aamvirtual, 0) // physical address
+    mem_cmd.setField(CommandMemMask.aamsize, aamsize)
+    mem_cmd.setField(CommandMemMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_MEM)
+    mem_cmd.getRawValue
+  }
+
+  /** Generate DTM_DMI register data
+    * @param addr
+    *   address
+    * @param data
+    *   data
+    * @param op
+    *   operation
+    * @return
+    */
+  def gen_jtag_dtm_dmi_data(
+      addr: Int,
+      data: Long,
+      op: Int
+  ): Long = {
+    require(addr < 32)
+    require(
+      Seq(DbgPKG.DMI_OP_READ, DbgPKG.DMI_OP_WRITE, DbgPKG.DMI_OP_NOP)
+        .contains(op)
+    )
+
+    val dmi_reg_value = new CSRBitField(0)
+    dmi_reg_value.setField(DTMDMIMask.op, op)
+    dmi_reg_value.setField(DTMDMIMask.data, data)
+    dmi_reg_value.setField(DTMDMIMask.addr, addr)
+    dmi_reg_value.getRawValue
+  }
+
+  "JtagStateLogicResetTest" in {
     test(
       new JtagDTM(dm_config)
     )
@@ -180,7 +273,7 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
             dut.clock.step(1)
           }
           // 5 cycles of tms = 1
-          jtag_to_run_test_idle(dut)
+          jtag_to_test_logic_reset(dut)
 
           dut.io.jtag_state.expect(JtagState.TestLogicReset)
         }
@@ -219,7 +312,7 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
         // IDCODE should be 0xdeadbeef
         jtag_dr_in_out(
           dut,
-          long2UInt64(0x00),
+          long2UInt64(0L),
           0xdeadbeefL,
           32,
           check_out = true
@@ -251,7 +344,7 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
         )
 
         for (cur_val <- 1 until 20000) {
-          println(cur_val)
+//          println(cur_val)
           // read back old value, write new value
           jtag_dr_in_out(
             dut,
@@ -261,6 +354,88 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
             check_out = true
           )
         }
+
+        jtag_to_test_logic_reset(dut)
+        jtag_to_run_test_idle(dut)
+
+        // IDCODE should be 0xdeadbeef
+        jtag_dr_in_out(
+          dut,
+          long2UInt64(0x00),
+          0xdeadbeefL,
+          32,
+          check_out = true
+        )
+      }
+  }
+
+  "JtagRWDMITest" in {
+    test(
+      new JtagDTM(dm_config)
+    )
+      .withAnnotations(
+        Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
+      ) { dut =>
+        dut.io.jtag.tms.poke(false.B)
+        dut.io.jtag.tdi.poke(false.B)
+
+        jtag_to_run_test_idle(dut)
+
+        // ir select DMI register
+        jtag_ir_in_out(
+          dut,
+          long2UInt64(DbgPKG.JtagDTM_DMI),
+          0x1,
+          dm_config.ir_length
+        )
+
+        val dtm_dmi_data = gen_jtag_dtm_dmi_data(
+          DbgPKG.ABSTRACT_DATA_BASE,
+          0x12adbeefL,
+          DMI_OP_WRITE
+        )
+        jtag_dr_in_out(
+          dut,
+          long2UInt64(dtm_dmi_data),
+          0,
+          34 + dm_config.abits
+        )
+
+        println(dtm_dmi_data.toHexString)
+
+        // write 0x12adbeef to DMI register
+        dut.io.dmi_req.expectDequeue(
+          new DMIReq(dm_config.abits).Lit(
+            _.addr -> DbgPKG.ABSTRACT_DATA_BASE.U,
+            _.data -> 0x12adbeefL.U,
+            _.op -> DMI_OP_WRITE.U
+          )
+        )
+
+        dut.io.dmi_resp.enqueue(
+          new DMIResp(dm_config.abits).Lit(
+            _.addr -> DbgPKG.ABSTRACT_DATA_BASE.U,
+            _.data -> 0xdeadbeefL.U,
+            _.op -> DbgPKG.DMI_OP_STATUS_SUCCESS.U
+          )
+        )
+        dut.clock.step(5)
+
+        // read back 0x12ad34ef from DMI register
+
+        val read_back_dmi_data = gen_jtag_dtm_dmi_data(
+          DbgPKG.ABSTRACT_DATA_BASE,
+          0xdeadbeefL,
+          DbgPKG.DMI_OP_STATUS_SUCCESS
+        )
+
+        jtag_dr_in_out(
+          dut,
+          long2UInt64(0x00),
+          read_back_dmi_data,
+          34 + dm_config.abits,
+          check_out = true
+        )
 
       }
   }

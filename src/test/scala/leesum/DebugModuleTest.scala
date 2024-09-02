@@ -201,32 +201,6 @@ class DebugModuleTest extends AnyFreeSpec with ChiselScalatestTester {
     (command_dmi_req, command_dmi_resp)
   }
 
-  /** generate abstract command to r/w register
-    * @param addr
-    * @param aarsize_val
-    * @param is_write
-    * @return
-    */
-  def gen_abs_reg_cmd(
-      addr: Int,
-      aarsize_val: Int,
-      is_write: Boolean = false
-  ): UInt = {
-    require(
-      Seq(DbgPKG.AARSIZE_32, DbgPKG.AARSIZE_64, DbgPKG.AARSIZE_128).contains(
-        aarsize_val
-      ),
-      "aarsize_val should be 32, 64, 128"
-    )
-
-    val reg_cmd = new CSRBitField(0)
-    reg_cmd.setField(CommandRegMask.write, if (is_write) 1 else 0)
-    reg_cmd.setField(CommandRegMask.regno, addr)
-    reg_cmd.setField(CommandRegMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_REG)
-    reg_cmd.setField(CommandRegMask.aarsize, aarsize_val)
-    reg_cmd.getRawValue.U(32.W)
-  }
-
   "DMI hs test" in {
     test(new DebugModule(dm_config))
       .withAnnotations(
