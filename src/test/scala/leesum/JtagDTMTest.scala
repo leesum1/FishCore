@@ -65,28 +65,32 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
     var ir_out_shift: Long = 0
     // --------- shift-IR Loop Start ---------------
     for (i <- 0 until width - 1) {
-      dut.io.jtag.tdo_en.expect(true.B)
-      ir_out_shift |= dut.io.jtag.tdo.peekInt().toLong << i
-      println(ir_out, ir_out_shift)
 
       dut.io.jtag.tdi.poke(ir_in(i))
       dut.io.jtag.tdi_en.poke(true.B)
       dut.io.jtag.tms.poke(false.B)
       dut.clock.step(1)
+
+      dut.io.jtag.tdo_en.expect(true.B)
+      ir_out_shift |= dut.io.jtag.tdo.peekInt().toLong << i
+      println(ir_out, ir_out_shift)
+
       dut.io.jtag_state.expect(JtagState.ShiftIr)
     }
-    dut.io.jtag.tdo_en.expect(true.B)
-    ir_out_shift |= dut.io.jtag.tdo.peekInt().toLong << (width - 1)
-    println(ir_out, ir_out_shift)
+
     dut.io.jtag.tdi.poke(ir_in(width - 1)) // last bit
     dut.io.jtag.tdi_en.poke(true.B)
-
-    assert(ir_out_shift == ir_out, "ir_out_shift != ir_out")
 
     dut.io.jtag.tms.poke(true.B) // exit1-IR
     dut.clock.step(1)
     dut.io.jtag.tdi_en.poke(false.B)
     dut.io.jtag.tdi.poke(false.B)
+
+    dut.io.jtag.tdo_en.expect(true.B)
+    ir_out_shift |= dut.io.jtag.tdo.peekInt().toLong << (width - 1)
+    println(ir_out, ir_out_shift)
+    assert(ir_out_shift == ir_out, "ir_out_shift != ir_out")
+
     dut.io.jtag_state.expect(JtagState.Exit1Ir)
 
     // --------- shift-IR Loop End ---------------
@@ -128,16 +132,25 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
     // --------- shift-DR Loop Start ---------------
     for (i <- 0 until width - 1) {
 
-      dut.io.jtag.tdo_en.expect(true.B)
-      dr_out_shift |= dut.io.jtag.tdo.peekInt().toLong << i
-
       dut.io.jtag.tdi.poke(data_in(i))
       dut.io.jtag.tdi_en.poke(true.B)
 
       dut.io.jtag.tms.poke(false.B)
       dut.clock.step(1)
+
+      dut.io.jtag.tdo_en.expect(true.B)
+      dr_out_shift |= dut.io.jtag.tdo.peekInt().toLong << i
+
       dut.io.jtag_state.expect(JtagState.ShiftDr)
     }
+
+    dut.io.jtag.tdi.poke(data_in(width - 1)) // last bit
+    dut.io.jtag.tdi_en.poke(true.B)
+
+    dut.io.jtag.tms.poke(true.B) // exit1-DR
+    dut.clock.step(1)
+    dut.io.jtag_state.expect(JtagState.Exit1Dr)
+
     dut.io.jtag.tdo_en.expect(true.B)
     dr_out_shift |= dut.io.jtag.tdo.peekInt().toLong << (width - 1)
 
@@ -147,13 +160,6 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
         "dr_out_shift != data_out"
       )
     }
-
-    dut.io.jtag.tdi.poke(data_in(width - 1)) // last bit
-    dut.io.jtag.tdi_en.poke(true.B)
-
-    dut.io.jtag.tms.poke(true.B) // exit1-DR
-    dut.clock.step(1)
-    dut.io.jtag_state.expect(JtagState.Exit1Dr)
 
     dut.io.jtag.tdi.poke(false.B)
     dut.io.jtag.tdi_en.poke(false.B)

@@ -4,6 +4,7 @@ import chisel3.util.{DecoupledIO, _}
 import leesum.{CSRBitField, CSRMap, GenVerilogHelper}
 
 class JtagIO(as_master: Boolean) extends Bundle {
+  val tck = if (as_master) Output(Bool()) else Input(Bool())
   val tms = if (as_master) Output(Bool()) else Input(Bool())
   val tdi = if (as_master) Output(Bool()) else Input(Bool())
   val tdi_en = if (as_master) Output(Bool()) else Input(Bool())
@@ -12,6 +13,7 @@ class JtagIO(as_master: Boolean) extends Bundle {
 
   def clear(): Unit = {
     if (as_master) {
+      tck := false.B
       tms := false.B
       tdi := false.B
       tdi_en := false.B
@@ -427,15 +429,21 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   // TAP TDO logic
   // --------------------------
   withClock(clock_falling) {
+
+    val tdo_en = WireInit(false.B)
+    val tdo = WireInit(false.B)
+
     when(jtag_state === JtagState.ShiftIr) {
-      io.jtag.tdo := ir_shift_reg.io.shift_out
-      io.jtag.tdo_en := true.B
+      tdo := ir_shift_reg.io.shift_out
+      tdo_en := true.B
     }
 
     when(jtag_state === JtagState.ShiftDr) {
-      io.jtag.tdo := dr_shift_reg.io.shift_out
-      io.jtag.tdo_en := true.B
+      tdo := dr_shift_reg.io.shift_out
+      tdo_en := true.B
     }
+    io.jtag.tdo := RegNext(tdo)
+    io.jtag.tdo_en := RegNext(tdo_en)
   }
 
   // --------------------------
