@@ -23,7 +23,10 @@ class CSRMap {
     require(addr >= 0 && addr < 4096, s"csr addr $addr should be in [0, 4096)")
     require(!csr_map.contains(addr), s"csr addr $addr already exists")
 
+//    if (csr_map.isEmpty) {
     csr_map.addOne(addr, (reg, read_func, write_func))
+//    }
+
   }
 
   /** This function is used to read csr register, if success, return a valid
@@ -38,7 +41,7 @@ class CSRMap {
     val default_witdth = csr_map.head._2._1.getWidth
     val default_read = Wire(Valid(UInt(default_witdth.W)))
     default_read.valid := false.B
-    default_read.bits := DontCare
+    default_read.bits := 0.U
 
     val raddr_map = csr_map
       .map({ case (addr, (reg, read_func, _)) =>
@@ -83,6 +86,48 @@ class CSRMap {
     write_result
   }
 }
+//
+//object CSRMap {
+//
+//  def empty_write_func(reg_width: Int) = {
+//    val empty_write = (addr: UInt, reg: UInt, wdata: UInt) => {
+//      val write_result = Wire(Valid(UInt(reg_width.W)))
+//      write_result.valid := true.B
+//      write_result.bits := 0.U
+//      write_result
+//    }
+//
+//    empty_write
+//  }
+//  def zero_read_func(reg_width: Int) = {
+//    val empty_read = (addr: UInt, reg: UInt) => {
+//      val read_result = Wire(Valid(UInt(reg_width.W)))
+//      read_result.valid := true.B
+//      read_result.bits := 0.U
+//      read_result
+//    }
+//    empty_read
+//  }
+//  def normal_read_func(reg_width: Int) = {
+//    val normal_read = (addr: UInt, reg: UInt) => {
+//      val read_result = Wire(Valid(UInt(reg_width.W)))
+//      read_result.valid := true.B
+//      read_result.bits := reg
+//      read_result
+//    }
+//    normal_read
+//  }
+//  def normal_write_func(reg_width: Int) = {
+//    val normal_write = (addr: UInt, reg: UInt, wdata: UInt) => {
+//      val write_result = Wire(Valid(UInt(reg_width.W)))
+//      write_result.valid := true.B
+//      write_result.bits := wdata
+//      reg := write_result.bits
+//      write_result
+//    }
+//    normal_write
+//  }
+//}
 
 class CSRReadPort extends Bundle {
   val addr = Output(UInt(12.W))

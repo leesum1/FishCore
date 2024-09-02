@@ -19,7 +19,8 @@
     "zlib.dev",
     "just@latest",
     "binutils@latest",
-    "graalvm17-ce@latest"
+    "graalvm17-ce@latest",
+    "gcc@latest",
   ],
   "shell": {
     "init_hook": [
@@ -29,8 +30,8 @@
     ],
     "scripts": {
       "test": [
-        "echo \"Error: no test specified\" && exit 1"
-      ]
-    }
-  }
+        "echo \"Error: no test specified\" && exit 1",
+      ],
+    },
+  },
 }
