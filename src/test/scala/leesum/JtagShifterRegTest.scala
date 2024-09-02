@@ -34,12 +34,15 @@ class JtagShifterRegTest extends AnyFreeSpec with ChiselScalatestTester {
           var cur_shift_in_value = shift_in_value
           var cur_shift_out_value = shift_out_value
           for (i <- 0 until shift_len) {
-            dut.io.shift_valid.poke(true.B)
-            dut.io.shift_in.poke((cur_shift_in_value & 1) == 1)
-            dut.clock.step(1)
             dut.io.shift_out.expect((cur_shift_out_value & 1) == 1)
-            cur_shift_in_value = cur_shift_in_value >>> 1
             cur_shift_out_value = cur_shift_out_value >>> 1
+
+            dut.io.shift_in.poke((cur_shift_in_value & 1) == 1)
+            cur_shift_in_value = cur_shift_in_value >>> 1
+
+            dut.io.shift_valid.poke(true.B)
+            dut.clock.step(1)
+
           }
           dut.io.shift_valid.poke(false.B)
         }

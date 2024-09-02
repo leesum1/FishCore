@@ -498,6 +498,116 @@ class SBCSFiled(data: UInt) {
   def raw: UInt = data
 }
 
+//#[bitfield(u32)]
+//struct DTMIDCode {
+//  _pad: bool,
+//  #[bits(11)]
+//  manufld: u16,
+//  #[bits(16)]
+//  part_number: u16,
+//  #[bits(4)]
+//  version: u8,
+//}
+
+class DTMIDCodeFiled(data: UInt) {
+  require(data.getWidth == 32)
+
+  def _pad = data(0)
+  def manufld = data(11, 1)
+  def part_number = data(27, 12)
+  def version = data(31, 28)
+
+  def raw: UInt = data
+}
+
+//#[bitfield(u32)]
+//struct DTMCS {
+//  #[bits(4)]
+//  version: u8,
+//  #[bits(6)]
+//  abits: u8,
+//  #[bits(2)]
+//  dmistat: u8,
+//  #[bits(3)]
+//  idle: u8,
+//  _pad: bool,
+//  dmireset: bool,
+//  dtmhardreset: bool,
+//  #[bits(3)]
+//  errinfo: u8,
+//  #[bits(11)]
+//  _pad: u16,
+//}
+
+class DTMDTMCSFiled(data: UInt) {
+  require(data.getWidth == 32)
+  def version = data(3, 0)
+  def abits = data(9, 4)
+  def dmistat = data(11, 10)
+  def idle = data(14, 12)
+  def _pad0 = data(15)
+  def dmireset = data(16)
+  def dmihardreset = data(17)
+  def _pad1 = data(31, 18)
+
+  def raw: UInt = data
+
+  def get_read_data(new_dmistat: UInt): UInt = {
+    require(new_dmistat.getWidth == 2)
+    val r_dtmcs = CatReverse(
+      version,
+      abits,
+      new_dmistat,
+      idle,
+      _pad0,
+      false.B, // dmireset,
+      false.B, // dmihardreset,
+      0.U(14.W)
+    )
+    require(r_dtmcs.getWidth == 32)
+    r_dtmcs
+  }
+}
+
+object DTMCSMask {
+  def version = 0x0000_000f
+  def abits = 0x0000_03f0
+  def dmistat = 0x0000_0c00
+  def idle = 0x0000_7000
+  def _pad0 = 0x0000_8000
+  def dmireset = 0x0001_0000
+  def dmihardreset = 0x0002_0000
+
+  def all = 0xffff_ffff
+}
+
+//#[bitfield(u64)]
+//struct DTMI {
+//  #[bits(2)]
+//  op: u8,
+//  data: u32,
+//  #[bits(30)]
+//  address: u32,
+//}
+
+class DTMDMIFiled(data_reg: UInt) {
+  def op = data_reg(1, 0)
+  def data = data_reg(33, 2)
+  def address = data_reg(data_reg.getWidth - 1, 34)
+
+  def raw: UInt = data_reg
+
+  def get_read_data(new_op: UInt): UInt = {
+    require(new_op.getWidth == 2)
+    val r_dmi = CatReverse(
+      op,
+      data,
+      address
+    )
+    r_dmi
+  }
+}
+
 object DbgPKG {
 //  pub const ABSTRACT_DATA_BASE: usize = 0x04;
 //  pub const DMCONTROL_ADDR: usize = 0x10;
@@ -630,4 +740,20 @@ object DbgPKG {
   val DMI_OP_READ = 1
   val DMI_OP_WRITE = 2
   val DMI_OP_RESERVED = 3
+
+//    typedef enum logic [IrLength-1:0] {
+//      BYPASS0   = 'h0,
+//      IDCODE    = 'h1,
+//      DTMCSR    = 'h10,
+//      DMIACCESS = 'h11,
+//      BYPASS1   = 'h1f
+//    } ir_reg_e;
+
+  val JtagDTM_BYPASS0 = 0x0
+  val JtagDTM_IDCODE = 0x1
+  val JtagDTM_DTMCS = 0x10
+  val JtagDTM_DMI = 0x11
+  val JtagDTM_CUSTOM = 0x12
+  val JtagDTM_BYPASS1 = 0x1f
+
 }

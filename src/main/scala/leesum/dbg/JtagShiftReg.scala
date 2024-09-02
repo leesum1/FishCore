@@ -14,16 +14,22 @@ class JtagShiftReg(max_width: Int = 32) extends Module {
 
     val shift_valid = Input(Bool())
     val shift_reg_out = Output(UInt(max_width.W))
+
+    def clear(): Unit = {
+      shift_in := false.B
+      update_valid := false.B
+      update_data := 0.U
+      update_data_len := 0.U
+      shift_valid := false.B
+    }
   })
 
   val shift_reg = RegInit(0.U(max_width.W))
   val shift_reg_len = RegInit(0.U(log2Ceil(max_width + 1).W))
-  val shift_out_buf = RegInit(false.B)
   when(io.update_valid) {
     shift_reg := io.update_data
     shift_reg_len := io.update_data_len
   }.elsewhen(io.shift_valid) {
-    shift_out_buf := shift_reg(0)
     val next_shift_reg_uselookup = MuxLookup(
       shift_reg_len,
       shift_reg
@@ -64,7 +70,7 @@ class JtagShiftReg(max_width: Int = 32) extends Module {
     shift_reg := next_shift_reg_use1H
   }
 
-  io.shift_out := shift_out_buf
+  io.shift_out := shift_reg(0)
   io.shift_reg_out := shift_reg
 
   when(io.update_valid) {

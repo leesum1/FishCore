@@ -11,6 +11,7 @@ class DebugModuleConfig {
   val progbuf_num = 4
   val abstract_data_num = 6
   val abits = 6
+  val ir_length = 5
   val dm_base_addr = 0x0
 
 }
@@ -19,6 +20,8 @@ class DMIReq(abits: Int = 6) extends Bundle {
   val addr = UInt(abits.W)
   val data = UInt(32.W)
   val op = UInt(2.W)
+
+  def raw: UInt = Cat(addr, data, op)
 }
 
 class DMIResp(abits: Int) extends DMIReq(abits) {}
