@@ -7,18 +7,19 @@ import leesum.Utils.{CDCHandShakeMaster, CDCHandShakeReqResp, ClockGenerator}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
-class CDCHandShakeTestWrapper[T <: Data](
-    gen: T,
+class CDCHandShakeTestWrapper[T <: Data, U <: Data](
+    req_type: T,
+    resp_type: U,
     multi_clk_en: Boolean, // true: multi clock domain, false: one clock domain
     slow_to_fast: Boolean =
       false // true: slow clock to fast clock, false: fast clock to slow clock
 ) extends Module {
   val io = IO(new Bundle {
-    val req_clkA = Flipped(Decoupled(gen))
-    val resp_clkA = Decoupled(gen)
+    val req_clkA = Flipped(Decoupled(req_type))
+    val resp_clkA = Decoupled(resp_type)
 
-    val req_clkB = Decoupled(gen)
-    val resp_clkB = Flipped(Decoupled(gen))
+    val req_clkB = Decoupled(req_type)
+    val resp_clkB = Flipped(Decoupled(resp_type))
   })
 
   if (multi_clk_en) {
@@ -34,7 +35,7 @@ class CDCHandShakeTestWrapper[T <: Data](
     val my_reset = reset.asBool
 
     withClockAndReset(div_clocks.io.clocks(0).asClock, my_reset) {
-      val cdc_hs = Module(new CDCHandShakeReqResp(gen))
+      val cdc_hs = Module(new CDCHandShakeReqResp(req_type, resp_type))
       cdc_hs.io.req_clkA <> io.req_clkA
       cdc_hs.io.resp_clkA <> io.resp_clkA
       io.req_clkB <> cdc_hs.io.req_clkB
@@ -43,7 +44,7 @@ class CDCHandShakeTestWrapper[T <: Data](
       cdc_hs.io.rstB := my_reset
     }
   } else {
-    val cdc_hs = Module(new CDCHandShakeReqResp(gen))
+    val cdc_hs = Module(new CDCHandShakeReqResp(req_type, resp_type))
     cdc_hs.io.req_clkA <> io.req_clkA
     cdc_hs.io.resp_clkA <> io.resp_clkA
     io.req_clkB <> cdc_hs.io.req_clkB
@@ -51,13 +52,18 @@ class CDCHandShakeTestWrapper[T <: Data](
     cdc_hs.io.clkB := clock
     cdc_hs.io.rstB := reset.asBool
   }
-
 }
 
 class CrossDomainClockTest extends AnyFreeSpec with ChiselScalatestTester {
 
   "CDCClockTest" in {
-    test(new CDCHandShakeTestWrapper(UInt(32.W), multi_clk_en = true))
+    test(
+      new CDCHandShakeTestWrapper(
+        UInt(32.W),
+        UInt(32.W),
+        multi_clk_en = true
+      )
+    )
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
@@ -71,7 +77,9 @@ class CrossDomainClockTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 
   "CDCHandShakeReqRespOneClockTest" in {
-    test(new CDCHandShakeTestWrapper(UInt(32.W), multi_clk_en = false))
+    test(
+      new CDCHandShakeTestWrapper(UInt(32.W), UInt(32.W), multi_clk_en = false)
+    )
       .withAnnotations(
         Seq(VerilatorBackendAnnotation, WriteFstAnnotation)
       ) { dut =>
@@ -93,6 +101,7 @@ class CrossDomainClockTest extends AnyFreeSpec with ChiselScalatestTester {
   "CDCHandShakeReqRespMultiClockS2FTest" in {
     test(
       new CDCHandShakeTestWrapper(
+        UInt(32.W),
         UInt(32.W),
         multi_clk_en = true,
         slow_to_fast = true
@@ -121,6 +130,7 @@ class CrossDomainClockTest extends AnyFreeSpec with ChiselScalatestTester {
     test(
       new CDCHandShakeTestWrapper(
         UInt(32.W),
+        UInt(32.W),
         multi_clk_en = true,
         slow_to_fast = false
       )
@@ -144,10 +154,10 @@ class CrossDomainClockTest extends AnyFreeSpec with ChiselScalatestTester {
       }
   }
 
-  private def crate_req_resp_testcase(
-      dut: CDCHandShakeTestWrapper[UInt],
-      req_data_seq: Seq[UInt],
-      resp_data_seq: Seq[UInt],
+  private def crate_req_resp_testcase[T <: Data, U <: Data](
+      dut: CDCHandShakeTestWrapper[T, U],
+      req_data_seq: Seq[T],
+      resp_data_seq: Seq[U],
       delay_en: Boolean = false
   ): Unit = {
     val rand_delay = (math.random() * 50 + 10).toInt

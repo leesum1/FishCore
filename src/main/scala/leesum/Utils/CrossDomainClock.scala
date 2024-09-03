@@ -1,7 +1,7 @@
 package leesum.Utils
 
 import chisel3._
-import chisel3.util.{Decoupled, Enum, ShiftRegister, ShiftRegisters}
+import chisel3.util.{Decoupled, ShiftRegister}
 import leesum.GenVerilogHelper
 
 class CDCHandShakeMaster[T <: Data](gen: T) extends Module {
@@ -35,30 +35,41 @@ class CDCHandShakeSlave[T <: Data](gen: T) extends Module {
   io.req_out.bits := io.req_in.bits
 }
 
-/** Cross domain handshake request response. A domain: Source domain ; B domain:
-  * Destination domain
+/** Cross Domain Clock Handshake Request Response. This module has two clock
+  * domains, A and B. The request is sent from domain A to domain B. And the
+  * corresponding response is sent from domain B to domain A.
+  *
+  * @param req_type
+  *   request type
+  * @param resp_type
+  *   response type
+  * @tparam T
+  *   request type
+  * @tparam U
+  *   response type
   */
-class CDCHandShakeReqResp[T <: Data](gen: T) extends Module {
+class CDCHandShakeReqResp[T <: Data, U <: Data](req_type: T, resp_type: U)
+    extends Module {
   val io = IO(new Bundle {
 
     val clkB = Input(Clock())
     val rstB = Input(Bool())
 
-    val req_clkA = Flipped(Decoupled(gen))
-    val resp_clkA = Decoupled(gen)
+    val req_clkA = Flipped(Decoupled(req_type))
+    val resp_clkA = Decoupled(resp_type)
 
-    val req_clkB = Decoupled(gen)
-    val resp_clkB = Flipped(Decoupled(gen))
+    val req_clkB = Decoupled(req_type)
+    val resp_clkB = Flipped(Decoupled(resp_type))
   })
 
-  val Adomain_req_master = Module(new CDCHandShakeMaster(gen))
-  val Adomain_resp_slave = Module(new CDCHandShakeSlave(gen))
+  val Adomain_req_master = Module(new CDCHandShakeMaster(req_type))
+  val Adomain_resp_slave = Module(new CDCHandShakeSlave(resp_type))
 
   val Bdomain_req_slave = withClockAndReset(io.clkB, io.rstB) {
-    Module(new CDCHandShakeSlave(gen))
+    Module(new CDCHandShakeSlave(req_type))
   }
   val Bdomain_resp_master = withClockAndReset(io.clkB, io.rstB) {
-    Module(new CDCHandShakeMaster(gen))
+    Module(new CDCHandShakeMaster(resp_type))
   }
 
   Adomain_req_master.io.req_in <> io.req_clkA
@@ -70,14 +81,14 @@ class CDCHandShakeReqResp[T <: Data](gen: T) extends Module {
   Adomain_resp_slave.io.req_out <> io.resp_clkA
 }
 
-object CDCHandShakeReqRespGenVeriog extends App {
-  GenVerilogHelper(new CDCHandShakeReqResp(UInt(32.W)))
+object CDCHandShakeReqRespGenVerilog extends App {
+  GenVerilogHelper(new CDCHandShakeReqResp(UInt(8.W), UInt(8.W)))
 }
 
-object CDCHandShakeMasterGenVeriog extends App {
+object CDCHandShakeMasterGenVerilog extends App {
   GenVerilogHelper(new CDCHandShakeMaster(UInt(32.W)))
 }
 
-object CDCHandShakeSlaveGenVeriog extends App {
+object CDCHandShakeSlaveGenVerilog extends App {
   GenVerilogHelper(new CDCHandShakeSlave(UInt(32.W)))
 }
