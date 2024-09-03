@@ -5,6 +5,7 @@ import leesum.{CSRBitField, CSRMap, GenVerilogHelper}
 
 class JtagIO(as_master: Boolean) extends Bundle {
   val tck = if (as_master) Output(Bool()) else Input(Bool())
+  val rst = if (as_master) Output(Bool()) else Input(Bool())
   val tms = if (as_master) Output(Bool()) else Input(Bool())
   val tdi = if (as_master) Output(Bool()) else Input(Bool())
   val tdi_en = if (as_master) Output(Bool()) else Input(Bool())
@@ -14,6 +15,7 @@ class JtagIO(as_master: Boolean) extends Bundle {
   def clear(): Unit = {
     if (as_master) {
       tck := false.B
+      rst := false.B
       tms := false.B
       tdi := false.B
       tdi_en := false.B

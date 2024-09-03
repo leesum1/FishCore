@@ -55,21 +55,21 @@ class DebugModuleTestDut(dm_config: DebugModuleConfig) extends Module {
   io.dmi_req <> debug_module.io.dmi_req
   io.dmi_resp <> debug_module.io.dmi_resp
 
-  io.debug_halt_req <> debug_module.io.debug_halt_req
-  io.debug_resume_req <> debug_module.io.debug_resume_req
-  io.debug_reset_req <> debug_module.io.debug_reset_req
-  io.debug_clear_havereset <> debug_module.io.debug_clear_havereset
-  debug_module.io.debug_state_regs <> io.debug_state_regs
+  io.debug_halt_req <> debug_module.io.debug_core_interface.halt_req
+  io.debug_resume_req <> debug_module.io.debug_core_interface.resume_req
+  io.debug_reset_req <> debug_module.io.debug_core_interface.reset_req
+  io.debug_clear_havereset <> debug_module.io.debug_core_interface.clear_havereset
+  debug_module.io.debug_core_interface.state_regs <> io.debug_state_regs
 
-  debug_module.io.debug_gpr_write_port <> gprs.io.write_ports(0)
-  debug_module.io.debug_gpr_read_port <> gprs.io.read_ports(0)
-  debug_module.io.debug_csr_write_port <> csrs.io.write_ports(0)
-  debug_module.io.debug_csr_read_port <> csrs.io.read_ports(0)
+  debug_module.io.debug_core_interface.gpr_write_port <> gprs.io.write_ports(0)
+  debug_module.io.debug_core_interface.gpr_read_port <> gprs.io.read_ports(0)
+  debug_module.io.debug_core_interface.csr_write_port <> csrs.io.write_ports(0)
+  debug_module.io.debug_core_interface.csr_read_port <> csrs.io.read_ports(0)
 
   dummy_dcache.io.axi_mem <> axi4mem.io
 
   DCacheConnect.dcache_req_to_load_store_req(
-    debug_module.io.debug_dcache_req,
+    debug_module.io.debug_core_interface.dcache_req,
     dummy_dcache.io.load_req,
     dummy_dcache.io.store_req
   )
@@ -79,7 +79,7 @@ class DebugModuleTestDut(dm_config: DebugModuleConfig) extends Module {
     last_is_store,
     dummy_dcache.io.load_resp,
     dummy_dcache.io.store_resp,
-    debug_module.io.debug_dcache_resp
+    debug_module.io.debug_core_interface.dcache_resp
   )
 
   when(dummy_dcache.io.store_req.fire) {

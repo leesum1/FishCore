@@ -3,7 +3,6 @@ package leesum.dbg
 import chisel3._
 import chisel3.util.{DecoupledIO, _}
 import leesum.Cache.{DCacheReq, DCacheResp}
-import leesum.Utils.DecoderHelper
 import leesum._
 import leesum.axi4.AXIDef
 
@@ -26,55 +25,73 @@ class DMIReq(abits: Int) extends Bundle {
 
 class DMIResp(abits: Int) extends DMIReq(abits) {}
 
+class DebugModuleCoreInterface extends Bundle {
+  val state_regs = Input(new DbgSlaveState())
+  val halt_req = Output(ValidIO(Bool()))
+  val resume_req = Output(ValidIO(Bool()))
+  val reset_req = Output(ValidIO(Bool()))
+  val clear_havereset = Output(ValidIO(Bool()))
+  val gpr_read_port = new RegFileReadPort
+  val gpr_write_port = Flipped(new GPRsWritePort)
+  val csr_read_port = new CSRReadPort
+  val csr_write_port = new CSRWritePort
+  val dcache_req = Decoupled(new DCacheReq)
+  val dcache_resp = Flipped(Decoupled(new DCacheResp))
+
+  def clear_port_as_master(): Unit = {
+    halt_req.valid := false.B
+    resume_req.valid := false.B
+    reset_req.valid := false.B
+    clear_havereset.valid := false.B
+    halt_req.bits := false.B
+    resume_req.bits := false.B
+    reset_req.bits := false.B
+    clear_havereset.bits := false.B
+    gpr_read_port.rs1_addr := DontCare
+    gpr_read_port.rs2_addr := DontCare
+    gpr_write_port.wen := false.B
+    gpr_write_port.addr := DontCare
+    gpr_write_port.wdata := DontCare
+    csr_read_port.addr := DontCare
+    csr_read_port.read_en := false.B
+    csr_write_port.addr := DontCare
+    csr_write_port.write_data := DontCare
+    csr_write_port.write_en := false.B
+    dcache_req.noenq()
+    dcache_req.bits.id := 3.U
+    dcache_resp.nodeq()
+  }
+}
+
+/** Debug Module works in system clock domain
+  * 1.Debug Module receives DMI request from JTAG DTM And sends DMI response to
+  * JTAG DTM. 2.Debug Module communicates with core, including R/W GPRs, R/W
+  * CSRs, R/W Memory and so on
+  * @param dm_config
+  */
 class DebugModule(dm_config: DebugModuleConfig) extends Module {
   val io = IO(new Bundle {
     //  dm <> core interface
-    val debug_state_regs = Input(new DbgSlaveState())
-    val debug_halt_req = Output(ValidIO(Bool()))
-    val debug_resume_req = Output(ValidIO(Bool()))
-    val debug_reset_req = Output(ValidIO(Bool()))
-    val debug_clear_havereset = Output(ValidIO(Bool()))
-    val debug_gpr_read_port = new RegFileReadPort
-    val debug_gpr_write_port = Flipped(new GPRsWritePort)
-    val debug_csr_read_port = new CSRReadPort
-    val debug_csr_write_port = new CSRWritePort
-    val debug_dcache_req = Decoupled(new DCacheReq)
-    val debug_dcache_resp = Flipped(Decoupled(new DCacheResp))
+//    val debug_state_regs = Input(new DbgSlaveState())
+//    val debug_halt_req = Output(ValidIO(Bool()))
+//    val debug_resume_req = Output(ValidIO(Bool()))
+//    val debug_reset_req = Output(ValidIO(Bool()))
+//    val debug_core_interface.clear_havereset = Output(ValidIO(Bool()))
+//    val debug_gpr_read_port = new RegFileReadPort
+//    val debug_gpr_write_port = Flipped(new GPRsWritePort)
+//    val debug_csr_read_port = new CSRReadPort
+//    val debug_csr_write_port = new CSRWritePort
+//    val debug_dcache_req = Decoupled(new DCacheReq)
+//    val debug_dcache_resp = Flipped(Decoupled(new DCacheResp))
+
+    val debug_core_interface = new DebugModuleCoreInterface
 
     // dmi <> dm interface
     val dmi_req = Flipped(DecoupledIO(new DMIReq(dm_config.abits)))
     val dmi_resp = DecoupledIO(new DMIResp(dm_config.abits))
   })
 
-  def clear_debug_port(): Unit = {
-    io.debug_halt_req.valid := false.B
-    io.debug_resume_req.valid := false.B
-    io.debug_reset_req.valid := false.B
-    io.debug_clear_havereset.valid := false.B
-
-    io.debug_halt_req.bits := false.B
-    io.debug_resume_req.bits := false.B
-    io.debug_reset_req.bits := false.B
-    io.debug_clear_havereset.bits := false.B
-
-    io.debug_gpr_read_port.rs1_addr := DontCare
-    io.debug_gpr_read_port.rs2_addr := DontCare
-    io.debug_gpr_write_port.wen := false.B
-    io.debug_gpr_write_port.addr := DontCare
-    io.debug_gpr_write_port.wdata := DontCare
-
-    io.debug_csr_read_port.addr := DontCare
-    io.debug_csr_read_port.read_en := false.B
-    io.debug_csr_write_port.addr := DontCare
-    io.debug_csr_write_port.write_data := DontCare
-    io.debug_csr_write_port.write_en := false.B
-
-    io.debug_dcache_req.noenq()
-    io.debug_dcache_req.bits.id := 3.U
-    io.debug_dcache_resp.nodeq()
-  }
-
-  clear_debug_port();
+  io.debug_core_interface.clear_port_as_master()
   // clear_dmi_port
   io.dmi_req.nodeq();
   io.dmi_resp.noenq();
@@ -128,7 +145,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
     }
 
     when(new_dmcontrol_field.ackhavereset) {
-      io.debug_clear_havereset.valid := true.B
+      io.debug_core_interface.clear_havereset.valid := true.B
     }
 
     when(new_dmcontrol_field.haltreq) {
@@ -137,15 +154,15 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       // Writing 1 sets the halt request bit for all currently
       // selected harts. Running harts will halt whenever
       // their halt request bit is set.
-      io.debug_halt_req.valid := true.B
+      io.debug_core_interface.halt_req.valid := true.B
       printf("DM: hart haltreq\"\n")
     }.elsewhen(new_dmcontrol_field.resumereq) {
       // Writing 1 causes the currently selected harts to
-      // resume once, if they are halted when the write
+      // resume once, if they are halted when to write
       // occurs. It also clears the resume ack bit for those
       // harts.
       // resumereq is ignored if haltreq is set.
-      io.debug_resume_req.valid := true.B
+      io.debug_core_interface.resume_req.valid := true.B
       printf("DM: hart resumereq\"\n")
     }
 
@@ -154,7 +171,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       // currently selected harts. To perform a reset the
       // debugger writes 1, and then writes 0 to deassert
       // the reset signal.
-      io.debug_reset_req.valid := true.B
+      io.debug_core_interface.reset_req.valid := true.B
     }
 
     when(new_dmcontrol_field.ndmreset) {
@@ -164,7 +181,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       // including every hart, except for the DM and any
       // logic required to access the DM
       // TODO: only support reset harts
-      io.debug_reset_req.valid := true.B
+      io.debug_core_interface.reset_req.valid := true.B
     }
 
     write_result.valid := true.B
@@ -178,7 +195,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
     val read_result = Wire(Valid(UInt(32.W)))
     read_result.valid := true.B
     read_result.bits := dmcontrol_field.get_read_data(
-      io.debug_state_regs.have_reset()
+      io.debug_core_interface.state_regs.have_reset()
     )
     read_result
   }
@@ -191,7 +208,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
     val read_result = Wire(Valid(UInt(32.W)))
     read_result.valid := true.B
     read_result.bits := dmstatus_field.get_read_data(
-      io.debug_state_regs
+      io.debug_core_interface.state_regs
     )
     read_result
   }
@@ -428,7 +445,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
           )
           // let dmi state machine continue
           dmi_can_exit_side_effect_state := true.B
-        }.elsewhen(io.debug_state_regs.running()) {
+        }.elsewhen(io.debug_core_interface.state_regs.running()) {
           // The abstract command couldn’t
           // execute because the hart wasn’t in the required
           // state (running/halted), or unavailable.
@@ -501,13 +518,13 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       when(command_field.reg_field.is_gpr) {
         when(command_field.reg_field.write) {
           // 写 gpr, size 在前面已经处理过了
-          io.debug_gpr_write_port.wen := true.B
-          io.debug_gpr_write_port.addr := command_field.reg_field.get_gpr_regno
-          io.debug_gpr_write_port.wdata := w_regdata
+          io.debug_core_interface.gpr_write_port.wen := true.B
+          io.debug_core_interface.gpr_write_port.addr := command_field.reg_field.get_gpr_regno
+          io.debug_core_interface.gpr_write_port.wdata := w_regdata
         }.otherwise {
           // 读取 gpr，读取的时候不在乎 32 位还是 64 位
-          io.debug_gpr_read_port.rs1_addr := command_field.reg_field.get_gpr_regno
-          perf_abs_result_buf := io.debug_gpr_read_port.rs1_data
+          io.debug_core_interface.gpr_read_port.rs1_addr := command_field.reg_field.get_gpr_regno
+          perf_abs_result_buf := io.debug_core_interface.gpr_read_port.rs1_data
         }
       }
 
@@ -518,14 +535,14 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       when(command_field.reg_field.is_csr) {
         when(command_field.reg_field.write) {
           // 写 csr，size 在前面已经处理过了
-          io.debug_csr_write_port.addr := command_field.reg_field.get_csr_regno
-          io.debug_csr_write_port.write_en := true.B
-          io.debug_csr_write_port.write_data := w_regdata
+          io.debug_core_interface.csr_write_port.addr := command_field.reg_field.get_csr_regno
+          io.debug_core_interface.csr_write_port.write_en := true.B
+          io.debug_core_interface.csr_write_port.write_data := w_regdata
         }.otherwise {
           // 读取 csr，读取的时候不在乎 32 位还是 64 位
-          io.debug_csr_read_port.read_en := true.B
-          io.debug_csr_read_port.addr := command_field.reg_field.get_csr_regno
-          perf_abs_result_buf := io.debug_csr_read_port.read_data
+          io.debug_core_interface.csr_read_port.read_en := true.B
+          io.debug_core_interface.csr_read_port.addr := command_field.reg_field.get_csr_regno
+          perf_abs_result_buf := io.debug_core_interface.csr_read_port.read_data
         }
         // TODO: csr 不存在怎么办
       }
@@ -560,29 +577,32 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       )(1, 0)
       abs_mem_size_buf := abs_mem_size
 
-      io.debug_dcache_req.valid := true.B
-      io.debug_dcache_req.bits.is_mmio := false.B
-      io.debug_dcache_req.bits.is_store := mem_field.write
-      io.debug_dcache_req.bits.paddr := abs_mem_addr
-      io.debug_dcache_req.bits.wdata := GenAxiWdata(abs_mem_wdata, abs_mem_addr)
-      io.debug_dcache_req.bits.wstrb := GenAxiWstrb(
+      io.debug_core_interface.dcache_req.valid := true.B
+      io.debug_core_interface.dcache_req.bits.is_mmio := false.B
+      io.debug_core_interface.dcache_req.bits.is_store := mem_field.write
+      io.debug_core_interface.dcache_req.bits.paddr := abs_mem_addr
+      io.debug_core_interface.dcache_req.bits.wdata := GenAxiWdata(
+        abs_mem_wdata,
+        abs_mem_addr
+      )
+      io.debug_core_interface.dcache_req.bits.wstrb := GenAxiWstrb(
         abs_mem_addr,
         abs_mem_size
       )
-      io.debug_dcache_req.bits.size := abs_mem_size
+      io.debug_core_interface.dcache_req.bits.size := abs_mem_size
 
       // dcache req hs
-      when(io.debug_dcache_req.fire) {
+      when(io.debug_core_interface.dcache_req.fire) {
         perf_abs_state := sPerfABS_MEMResp
       }
     }
     is(sPerfABS_MEMResp) {
-      io.debug_dcache_resp.ready := true.B
-      when(io.debug_dcache_resp.fire) {
+      io.debug_core_interface.dcache_resp.ready := true.B
+      when(io.debug_core_interface.dcache_resp.fire) {
 
         val shifted_rdata =
           GetAxiRdata(
-            io.debug_dcache_resp.bits.rdata,
+            io.debug_core_interface.dcache_resp.bits.rdata,
             abs_mem_addr,
             abs_mem_size_buf,
             false.B
