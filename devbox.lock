@@ -164,83 +164,83 @@
         }
       }
     },
-    "circt@1.62.0": {
-      "last_modified": "2024-01-19T20:59:21Z",
-      "resolved": "github:NixOS/nixpkgs/e5d1c87f5813afde2dda384ac807c57a105721cc#circt",
+    "circt@1.72.0": {
+      "last_modified": "2024-04-19T21:36:04Z",
+      "resolved": "github:NixOS/nixpkgs/92d295f588631b0db2da509f381b4fb1e74173c5#circt",
       "source": "devbox-search",
-      "version": "1.62.0",
+      "version": "1.72.0",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/mdffkhc2cd1zzw2snvrn8rfxy3k0mdgk-circt-1.62.0",
+              "path": "/nix/store/rrjxbgx1l56yj9rlh6gzwl73qiqyjm2m-circt-1.72.0",
               "default": true
             },
             {
-              "name": "lib",
-              "path": "/nix/store/liwnggvjg6awdxmlw6gcy7y6r1whxmah-circt-1.62.0-lib"
+              "name": "dev",
+              "path": "/nix/store/r7rz4cc39dfxwhsliwbgfq0zpkd8wbbi-circt-1.72.0-dev"
             },
             {
-              "name": "dev",
-              "path": "/nix/store/5jb4p7860q25fkzclnlfml19m0wh7r0x-circt-1.62.0-dev"
+              "name": "lib",
+              "path": "/nix/store/g425ccgv3v84rxwlbm1mmv30sc04ibx0-circt-1.72.0-lib"
             }
           ],
-          "store_path": "/nix/store/mdffkhc2cd1zzw2snvrn8rfxy3k0mdgk-circt-1.62.0"
+          "store_path": "/nix/store/rrjxbgx1l56yj9rlh6gzwl73qiqyjm2m-circt-1.72.0"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/8hyqsf6fdhw6x8122pkghda7qd61n153-circt-1.62.0",
+              "path": "/nix/store/1l4rjvxdw94bp1jjzwxp63x1pvj7ah2k-circt-1.72.0",
               "default": true
             },
             {
-              "name": "lib",
-              "path": "/nix/store/7yhc77qn1f68i1jf6a5s24d9zkwlxg2n-circt-1.62.0-lib"
+              "name": "dev",
+              "path": "/nix/store/32883c85sffv123mq4dnrmd17z3hcli5-circt-1.72.0-dev"
             },
             {
-              "name": "dev",
-              "path": "/nix/store/i5wbhn3bwi9vww5qnd5710anriv2wfbq-circt-1.62.0-dev"
+              "name": "lib",
+              "path": "/nix/store/p97ppp9h83fli49mhcc1xdhfy451a2b6-circt-1.72.0-lib"
             }
           ],
-          "store_path": "/nix/store/8hyqsf6fdhw6x8122pkghda7qd61n153-circt-1.62.0"
+          "store_path": "/nix/store/1l4rjvxdw94bp1jjzwxp63x1pvj7ah2k-circt-1.72.0"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/7krax024zj5g7447fs9f0yfvkbp51mar-circt-1.62.0",
+              "path": "/nix/store/hrqh8dpmqyqfx31glx6q45fdjh8kprc0-circt-1.72.0",
               "default": true
             },
             {
               "name": "dev",
-              "path": "/nix/store/w09ryvinj0kf8g9m0ry5s92gpb2prcrp-circt-1.62.0-dev"
+              "path": "/nix/store/kk0qnawj3v2g9zjji3myxzn6grj3z47c-circt-1.72.0-dev"
             },
             {
               "name": "lib",
-              "path": "/nix/store/kdvagj0pp60axxhpd8hb8jcmx002yrpd-circt-1.62.0-lib"
+              "path": "/nix/store/apj5vmrzpklwx7jsp6vwsllmyb8xwnxb-circt-1.72.0-lib"
             }
           ],
-          "store_path": "/nix/store/7krax024zj5g7447fs9f0yfvkbp51mar-circt-1.62.0"
+          "store_path": "/nix/store/hrqh8dpmqyqfx31glx6q45fdjh8kprc0-circt-1.72.0"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/48hdp9c1nwxxarprqc4axyk8x3ybdhk1-circt-1.62.0",
+              "path": "/nix/store/702xij8gfz05vgbrg8q6z0lzb8gcf7sf-circt-1.72.0",
               "default": true
             },
             {
-              "name": "dev",
-              "path": "/nix/store/nyax32954cfji28r37jaljdr0wfivp95-circt-1.62.0-dev"
+              "name": "lib",
+              "path": "/nix/store/fp2w617l1h9yxzibwzxknb3bfgdi9gdl-circt-1.72.0-lib"
             },
             {
-              "name": "lib",
-              "path": "/nix/store/1cakhvp3yd98qbv7b7xca3b7abxg96d4-circt-1.62.0-lib"
+              "name": "dev",
+              "path": "/nix/store/va92yxyk6v4svqpavdg1fapiavi3cnhc-circt-1.72.0-dev"
             }
           ],
-          "store_path": "/nix/store/48hdp9c1nwxxarprqc4axyk8x3ybdhk1-circt-1.62.0"
+          "store_path": "/nix/store/702xij8gfz05vgbrg8q6z0lzb8gcf7sf-circt-1.72.0"
         }
       }
     },

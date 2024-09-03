@@ -1,6 +1,5 @@
 {
   "packages": [
-    "circt@1.62.0",
     "path:my-flakes/riscv-toolchain-flakes#riscv-gcc",
     "path:my-flakes/sbt-overlay-flakes#sbt",
     "python@3.10",
@@ -21,10 +20,12 @@
     "binutils@latest",
     "graalvm17-ce@latest",
     "gcc@latest",
+    "circt@1.72.0",
   ],
   "shell": {
     "init_hook": [
       "echo 'Welcome to devbox!' > /dev/null",
+      "export LC_ALL=C",
       // "unset -v CC CXX LD AR AS NM STRIP OBJCOPY OBJDUMP SIZE",
       // ". $VENV_DIR/bin/activate"
     ],
