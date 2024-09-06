@@ -4,8 +4,6 @@ import chisel3._
 import chiseltest._
 import chiseltest.simulator.WriteFstAnnotation
 import leesum.Cache.{DCacheNWay, DCacheReqType}
-import leesum.TestUtils.long2Ulong
-import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
 class DCacheNWayTest extends AnyFreeSpec with ChiselScalatestTester {

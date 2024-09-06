@@ -3,15 +3,9 @@ package leesum.Cache
 import chisel3._
 import chisel3.util.{Cat, Decoupled, Enum, is, switch}
 import chiseltest.ChiselScalatestTester
-import chiseltest.formal.{
-  BoundedCheck,
-  CVC4EngineAnnotation,
-  Formal,
-  past,
-  stable
-}
-import leesum.axi4.{AXIDef, AXIMasterIO, StreamFork2}
+import chiseltest.formal._
 import leesum._
+import leesum.axi4.{AXIDef, AXIMasterIO, StreamFork2}
 import leesum.moniter.PerfMonitorCounter
 import org.scalatest.flatspec.AnyFlatSpec
 

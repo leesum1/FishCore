@@ -1,6 +1,6 @@
 package leesum.Utils
 import chisel3._
-import chisel3.util.{RegEnable, ShiftRegister, ShiftRegisters}
+import chisel3.util.{RegEnable, ShiftRegister}
 import leesum.GenVerilogHelper
 
 object HoldRegister {

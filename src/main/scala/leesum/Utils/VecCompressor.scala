@@ -4,14 +4,7 @@ import chisel3._
 import chisel3.util._
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal}
-import leesum.{
-  CheckOrder,
-  Gather_Rocket,
-  Gather_LEESUM1,
-  Gather_LEESUM2,
-  GenMaskOne,
-  GenVerilogHelper
-}
+import leesum.{CheckOrder, Gather_LEESUM2, GenMaskOne, GenVerilogHelper}
 import org.scalatest.flatspec.AnyFlatSpec
 
 /** This module is used to convert a InstsItem to a stream of INSTEntry

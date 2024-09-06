@@ -2,8 +2,8 @@ package leesum.devices
 
 import chisel3._
 import chisel3.util.{Cat, Valid}
-import leesum.{GenVerilogHelper, RegMap}
 import leesum.axi4.BasicMemoryIO
+import leesum.{GenVerilogHelper, RegMap}
 
 object SifiveUartConst {
   val txdata = 0x0

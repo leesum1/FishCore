@@ -5,11 +5,7 @@ import chisel3.util.experimental.loadMemoryFromFileInline
 import chisel3.util.{Cat, RegEnable, log2Ceil}
 import leesum.Cache.DcacheConst
 import leesum.Utils.HoldRegister
-import leesum.{
-  CheckAligned,
-  GenVerilogHelper,
-  writeByteArrayToStringsToFile
-}
+import leesum.{CheckAligned, GenVerilogHelper, writeByteArrayToStringsToFile}
 
 import java.nio.file.{Files, Paths}
 

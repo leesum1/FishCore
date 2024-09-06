@@ -5,8 +5,8 @@ import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.util.Decoupled
 import chiseltest._
 import leesum.Cache.StoreDcacheResp
-import leesum.lsu.{LoadQueue, LoadQueueIn, LoadWriteBack, StoreBypassData, StoreQueue, StoreQueueIn}
-import leesum.TestUtils.{gen_axi_wstrb, gen_rand_uint, long2UInt64}
+import leesum.TestUtils.{gen_axi_wstrb, long2UInt64}
+import leesum.lsu._
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 

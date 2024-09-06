@@ -1,14 +1,10 @@
 package leesum
 
-import chisel3.util.DecoupledIO
 import chisel3._
-import chisel3.experimental.SourceInfo
-import chiseltest.formal.{past, stable}
-import leesum.axi4.AXIMasterIO
+import chisel3.util.DecoupledIO
+import chiseltest.formal.past
 
 import scala.language.experimental.macros
-import scala.reflect.macros.blackbox
-import scala.reflect.macros.blackbox.Context
 
 object FormalUtils {
 

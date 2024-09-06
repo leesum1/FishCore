@@ -2,8 +2,8 @@ package leesum.Cache
 
 import chisel3._
 import chisel3.util.{DecoupledIO, MuxLookup}
-import leesum.axi4.AXIDef
 import leesum._
+import leesum.axi4.AXIDef
 
 object DcacheConst {
   val SIZE1 = 0.U(2.W)

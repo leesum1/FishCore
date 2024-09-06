@@ -1,16 +1,7 @@
 package leesum
 
 import chisel3._
-import chisel3.util.{
-  Cat,
-  Decoupled,
-  Fill,
-  Mux1H,
-  MuxLookup,
-  PopCount,
-  Reverse,
-  log2Ceil
-}
+import chisel3.util._
 
 class AluReq extends Bundle {
   private val alu_width = 64

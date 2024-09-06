@@ -1,9 +1,7 @@
 package leesum.Cache
 
 import chisel3._
-import chisel3.util.SRAM
 import leesum.GenVerilogHelper
-import leesum.Utils.HoldRegister
 
 class DCacheTagBundle extends Bundle {
 

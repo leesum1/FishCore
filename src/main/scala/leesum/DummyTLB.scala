@@ -1,10 +1,9 @@
 package leesum
 import chisel3._
 import chisel3.util.random.LFSR
-import chisel3.util.{Decoupled, Enum, MixedVecInit, is, switch}
+import chisel3.util.{Decoupled, Enum, is, switch}
 import chiseltest.ChiselScalatestTester
-import chiseltest.experimental.observe
-import chiseltest.formal.{BoundedCheck, Formal, fell, past, rose, stable}
+import chiseltest.formal.{BoundedCheck, Formal, stable}
 import org.scalatest.flatspec.AnyFlatSpec
 
 object TLBReqType extends ChiselEnum {

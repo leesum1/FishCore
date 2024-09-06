@@ -2,7 +2,7 @@ package leesum
 
 import chisel3._
 import chiseltest._
-import leesum.axi4.{StreamFork, StreamJoin}
+import leesum.axi4.StreamJoin
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 

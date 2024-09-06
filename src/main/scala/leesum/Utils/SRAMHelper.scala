@@ -1,7 +1,7 @@
 package leesum.Utils
 
+import chisel3.util._
 import chisel3.{Module, _}
-import chisel3.util.{Mux1H, RegEnable, SRAM, UIntToOH, isPow2, log2Ceil}
 import leesum.GenVerilogHelper
 
 import scala.collection.Seq

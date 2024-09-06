@@ -2,8 +2,8 @@ package leesum.Cache
 
 import chisel3._
 import chisel3.util.Decoupled
-import leesum.axi4.{AXIDef, AXIMasterIO, StreamFork}
 import leesum._
+import leesum.axi4.{AXIDef, AXIMasterIO, StreamFork}
 
 /** DummyDCache,actually there is no cache, just convert load and store req to
   * axi memory req

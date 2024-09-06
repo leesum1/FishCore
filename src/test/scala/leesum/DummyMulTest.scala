@@ -6,6 +6,7 @@ import chiseltest.simulator.WriteFstAnnotation
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 import spire.math
+
 import java.math.BigInteger
 
 class MulRef {

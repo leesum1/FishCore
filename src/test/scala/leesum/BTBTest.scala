@@ -2,10 +2,9 @@ package leesum
 
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
-import chisel3.util.log2Ceil
 import chiseltest._
 import leesum.bpu.{BTBEntry, BTBNway, BTBPCField}
-import leesum.mmu_sv39.{SV39PageSize, TLBEntry, TLB_L1}
+import leesum.mmu_sv39.TLB_L1
 import org.scalatest.freespec.AnyFreeSpec
 
 class BTBTest extends AnyFreeSpec with ChiselScalatestTester {

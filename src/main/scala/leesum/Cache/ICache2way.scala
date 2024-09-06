@@ -1,7 +1,7 @@
 package leesum.Cache
 
 import chisel3._
-import chisel3.util.{Mux1H, PopCount, Valid, ValidIO, isPow2}
+import chisel3.util.{Mux1H, PopCount, isPow2}
 import leesum.GenVerilogHelper
 import leesum.Utils.LFSRRand
 

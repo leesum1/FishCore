@@ -1,16 +1,15 @@
 package leesum.Core
 import chisel3._
-import chisel3.util.{Valid, ValidIO}
+import chisel3.util.Valid
 import leesum.Cache.{DCacheConnect, DCacheReq, DCacheResp, ICacheTop}
 import leesum.ICache.DCacheTop
 import leesum._
 import leesum.axi4.{AXIMasterIO, AxiReadArbiter}
-import leesum.dbg.{DbgSlaveState, DebugModuleCoreInterface}
+import leesum.dbg.DebugModuleCoreInterface
 import leesum.fronten.IFUTop
 import leesum.lsu.LSUTop
 import leesum.mmu_sv39.MMU
 import leesum.moniter.{DifftestPort, MonitorTop, PerfPort}
-import chisel3.util.Decoupled
 
 class FishCore(
     muldiv_en: Boolean = true,

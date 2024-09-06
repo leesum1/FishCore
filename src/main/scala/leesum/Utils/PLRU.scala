@@ -1,7 +1,7 @@
 package leesum.Utils
 
 import chisel3._
-import chisel3.util.{BitPat, ListLookup, Lookup, isPow2, log2Ceil}
+import chisel3.util.{BitPat, Lookup, isPow2, log2Ceil}
 import leesum.GenVerilogHelper
 class TreeNode {
   var left: Option[TreeNode] = None

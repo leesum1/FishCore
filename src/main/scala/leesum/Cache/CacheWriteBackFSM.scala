@@ -1,7 +1,7 @@
 package leesum.Cache
 
 import chisel3._
-import chisel3.util.{Cat, DecoupledIO, Enum, Mux1H, is, log2Ceil, switch}
+import chisel3.util.{Cat, DecoupledIO, Enum, is, log2Ceil, switch}
 import leesum.GenVerilogHelper
 import leesum.axi4.AXIMasterIO
 

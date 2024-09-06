@@ -1,7 +1,6 @@
 package leesum
-import chisel3.util.{Cat, MuxLookup, Valid}
-import chisel3.{Reg, _}
-import chisel3.util.Mux1H
+import chisel3._
+import chisel3.util.{Cat, Mux1H, MuxLookup, Valid}
 
 class CSRMap {
   type ReadFunc = (UInt, UInt) => Valid[UInt]

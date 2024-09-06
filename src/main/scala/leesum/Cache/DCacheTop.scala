@@ -1,21 +1,11 @@
 package leesum.ICache
 
 import chisel3._
-import chisel3.util.{
-  Cat,
-  Counter,
-  Decoupled,
-  Enum,
-  PopCount,
-  Queue,
-  is,
-  log2Ceil,
-  switch
-}
+import chisel3.util.{Cat, Counter, Decoupled, Enum, PopCount, Queue, is, log2Ceil, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, CVC4EngineAnnotation, Formal, stable}
 import leesum.Cache._
-import leesum.Utils.{LFSRRand, OverrideWithMask, PLRU}
+import leesum.Utils.{LFSRRand, OverrideWithMask}
 import leesum._
 import leesum.axi4.{AXIDef, AXIMasterIO, AXIMux}
 import leesum.moniter.PerfMonitorCounter

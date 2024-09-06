@@ -4,7 +4,6 @@ import chisel3._
 import chisel3.util.Decoupled
 import chiseltest._
 import leesum.Utils.{CDCHandShakeReqResp, ClockGenerator}
-import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 
 class CDCHandShakeTestWrapper[T <: Data, U <: Data](

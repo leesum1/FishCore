@@ -1,7 +1,7 @@
 package leesum
-import chiseltest._
 import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
+import chiseltest._
 import leesum.mmu_sv39.{SV39PageSize, TLBEntry, TLB_L1}
 import org.scalatest.freespec.AnyFreeSpec
 class TLBTest extends AnyFreeSpec with ChiselScalatestTester {

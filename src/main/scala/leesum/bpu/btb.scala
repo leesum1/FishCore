@@ -1,7 +1,7 @@
 package leesum.bpu
 
 import chisel3._
-import chisel3.util.{Mux1H, OHToUInt, PopCount, isPow2, log2Ceil}
+import chisel3.util._
 import leesum.Utils.SinglePortSRAM
 import leesum.{BpType, GenVerilogHelper}
 

@@ -2,7 +2,7 @@ package leesum.axi4
 
 import chisel3._
 import chisel3.util.{ValidIO, log2Ceil}
-import leesum.{GenSizeByAddr, GenVerilogHelper, Long2UInt32, Long2UInt64}
+import leesum.{GenVerilogHelper, Long2UInt32}
 class AddrDecoder(
     addr_map: Seq[(Long, Long, Int)] // (start_addr, end_addr,id)
 ) extends Module {

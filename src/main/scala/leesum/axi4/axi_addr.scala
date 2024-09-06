@@ -1,8 +1,8 @@
 package leesum.axi4
 import chisel3._
 import chisel3.util.{HasBlackBoxResource, MuxLookup}
-import leesum.{GenMaskZero, GenVerilogHelper}
 import leesum.axi4.AXIDef._
+import leesum.{GenMaskZero, GenVerilogHelper}
 
 class axi_addr(ADDR_WIDTH: Int, DATA_WIDTH: Int)
     extends BlackBox(Map("AW" -> ADDR_WIDTH, "DW" -> DATA_WIDTH))

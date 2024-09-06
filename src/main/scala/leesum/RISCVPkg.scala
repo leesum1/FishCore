@@ -1,6 +1,6 @@
 package leesum
 
-import chisel3.util.{BitPat, Cat, Fill, Mux1H, MuxLookup, log2Ceil}
+import chisel3.util._
 import chisel3.{ChiselEnum, _}
 import leesum.Cache.DcacheConst
 import leesum.Utils.DecoderHelper

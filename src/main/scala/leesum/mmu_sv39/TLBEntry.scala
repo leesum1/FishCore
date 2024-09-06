@@ -1,17 +1,7 @@
 package leesum.mmu_sv39
 import chisel3._
-import chisel3.util.{
-  Cat,
-  Mux1H,
-  MuxLookup,
-  OHToUInt,
-  PopCount,
-  PriorityEncoder,
-  Valid,
-  isPow2,
-  log2Ceil
-}
-import leesum.Utils.{HoldRegister, LFSRRand, PLRU}
+import chisel3.util._
+import leesum.Utils.{HoldRegister, PLRU}
 import leesum.{CheckOverlap, GenVerilogHelper}
 
 class TLBEntry extends Bundle {

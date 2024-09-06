@@ -1,7 +1,7 @@
 package leesum.fronten
 
 import chisel3._
-import chisel3.util.{Cat, Decoupled, RegEnable, ValidIO}
+import chisel3.util.{Cat, Decoupled}
 import leesum.{CheckAligned, GenVerilogHelper, RedirectPC}
 
 class PCGenStage(boot_pc: Long, rvc_en: Boolean = false) extends Module {

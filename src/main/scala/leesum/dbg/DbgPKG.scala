@@ -2,7 +2,7 @@ package leesum.dbg
 
 import chisel3._
 import chisel3.util.Cat
-import leesum.{BitMaskHelper, CatReverse, GenMaskOne}
+import leesum.{BitMaskHelper, CatReverse}
 
 //#[bitfield(u32)]
 //pub struct DMStatus {

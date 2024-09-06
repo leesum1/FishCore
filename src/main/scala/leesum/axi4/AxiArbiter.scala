@@ -1,6 +1,6 @@
 package leesum.axi4
 import chisel3._
-import chisel3.util.{Arbiter, Enum, is, log2Ceil, log2Up, switch}
+import chisel3.util.{Enum, is, log2Ceil, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal, stable}
 import leesum.{BarrelShifter, FormalUtils, GenVerilogHelper, ReqRespArbiter}

@@ -3,18 +3,8 @@ import chisel3._
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chiseltest._
 import leesum.TestUtils.long2UInt64
-import leesum.dbg.DbgPKG.{DMI_OP_NOP, DMI_OP_STATUS_SUCCESS, DMI_OP_WRITE}
-import leesum.dbg.{
-  CommandMemMask,
-  CommandRegMask,
-  DMIReq,
-  DMIResp,
-  DTMDMIMask,
-  DbgPKG,
-  DebugModuleConfig,
-  JtagDTM,
-  JtagState
-}
+import leesum.dbg.DbgPKG.DMI_OP_WRITE
+import leesum.dbg._
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
 

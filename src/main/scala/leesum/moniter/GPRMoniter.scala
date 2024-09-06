@@ -1,6 +1,6 @@
 package leesum.moniter
-import chisel3.{util, _}
-import chisel3.util.{Decoupled, Enum, PopCount, PriorityMux, Valid, is, switch}
+import chisel3._
+import chisel3.util.{PopCount, PriorityMux, Valid}
 import leesum.{CSRDirectReadPorts, ExceptionEntry, FuOP, FuType}
 
 class GERMonitorPort extends Bundle {

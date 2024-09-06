@@ -1,7 +1,7 @@
 package leesum.Utils
 
 import chisel3._
-import chisel3.util.{Decoupled, Enum, ShiftRegister, is, switch}
+import chisel3.util.Decoupled
 import leesum.GenVerilogHelper
 
 class CDC2PhaseSrc[T <: Data](gen: T) extends Module {

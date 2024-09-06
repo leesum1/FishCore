@@ -1,6 +1,6 @@
 package leesum
-import chiseltest._
 import chisel3._
+import chiseltest._
 import leesum.TestUtils.gen_rand_uint
 import leesum.Utils.DummyMultiPortFIFO
 import org.scalacheck.Gen

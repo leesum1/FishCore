@@ -1,7 +1,7 @@
 package leesum.bpu
 
 import chisel3._
-import chisel3.util.{Counter, PopCount, isPow2, log2Ceil}
+import chisel3.util.{PopCount, isPow2, log2Ceil}
 import leesum.GenVerilogHelper
 
 class RAS(ras_nums: Int) extends Module {
@@ -117,9 +117,7 @@ object gen_ras_verilog extends App {
   GenVerilogHelper(new RAS(8))
 }
 
-import chisel3._
 import chisel3.experimental.requireIsChiselType
-import chisel3.reflect.DataMirror
 import chisel3.util._
 
 class IndexableMem[T <: Data](

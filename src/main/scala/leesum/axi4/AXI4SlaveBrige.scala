@@ -1,7 +1,7 @@
 package leesum.axi4
 
 import chisel3._
-import chisel3.util.{Decoupled, Enum, is, isPow2, log2Ceil, switch}
+import chisel3.util.{Decoupled, Enum, is, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal, stable}
 import leesum.FormalUtils

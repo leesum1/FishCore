@@ -5,7 +5,6 @@ import leesum.bpu.BTBEntry
 import leesum.dbg.DbgSlaveState
 import leesum.mmu_sv39.SfenceVMABundle
 import leesum.moniter.{CommitMonitorPort, PerfMonitorCounter}
-import leesum.CSRs.mstatus
 
 class RedirectPC extends Bundle {
   val valid = Bool()

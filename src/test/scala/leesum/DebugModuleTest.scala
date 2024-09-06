@@ -7,16 +7,7 @@ import chiseltest._
 import leesum.Cache.{DCacheConnect, DummyDCache}
 import leesum.axi4.AXI4Memory
 import leesum.dbg.DbgPKG._
-import leesum.dbg.{
-  CommandMemMask,
-  CommandRegMask,
-  DMIReq,
-  DMIResp,
-  DbgPKG,
-  DbgSlaveState,
-  DebugModule,
-  DebugModuleConfig
-}
+import leesum.dbg._
 import org.scalatest.freespec.AnyFreeSpec
 
 class DebugModuleTestDut(dm_config: DebugModuleConfig) extends Module {

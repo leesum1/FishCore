@@ -1,8 +1,8 @@
 package leesum.Utils
 
 import chisel3._
-import chisel3.util.{isPow2, log2Ceil}
 import chisel3.util.random.LFSR
+import chisel3.util.{isPow2, log2Ceil}
 
 object LFSRRand {
   def apply(count: Int): UInt = {

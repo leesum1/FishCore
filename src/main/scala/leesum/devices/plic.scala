@@ -1,15 +1,10 @@
 package leesum.devices
 
-import chisel3.{dontTouch, _}
-import chisel3.util.Valid
-import leesum.{GenVerilogHelper, RegMap}
-import leesum.axi4.BasicMemoryIO
-import leesum.InstType
-import chisel3.util.Cat
-import leesum.ZeroExt
-import chisel3.util.MixedVecInit
-import chisel3.util.log2Ceil
+import chisel3._
+import chisel3.util.{Cat, MixedVecInit, Valid, log2Ceil}
 import leesum.Utils.HoldRegister
+import leesum.axi4.BasicMemoryIO
+import leesum.{GenVerilogHelper, RegMap, ZeroExt}
 
 ///* ref spike plic */
 //const _PLIC_MAX_CONTEXTS: usize = 15872;
