@@ -510,80 +510,80 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
   // -----------------------
   val mstatus_val = new CSRBitField(0)
 
-  mstatus_val.setField(MStatusMask.MPP, 3) // machine mode
-  mstatus_val.setField(MStatusMask.MBE, 0)
-  mstatus_val.setField(MStatusMask.SBE, 0)
-  mstatus_val.setField(MStatusMask.UBE, 0)
+  mstatus_val.set_field(MStatusMask.MPP, 3) // machine mode
+  mstatus_val.set_field(MStatusMask.MBE, 0)
+  mstatus_val.set_field(MStatusMask.SBE, 0)
+  mstatus_val.set_field(MStatusMask.UBE, 0)
 
   if (smode_enable) {
-    mstatus_val.setField(MStatusMask.SXL, 2) // xlen = 64
+    mstatus_val.set_field(MStatusMask.SXL, 2) // xlen = 64
   }
   if (umode_enable) {
-    mstatus_val.setField(MStatusMask.UXL, 2) // xlen = 64
-    mstatus_val.setField(MStatusMask.MPRV, 0)
+    mstatus_val.set_field(MStatusMask.UXL, 2) // xlen = 64
+    mstatus_val.set_field(MStatusMask.MPRV, 0)
   }
 
-  println("mstatus_val: " + mstatus_val.getRawValue.toHexString)
+  println("mstatus_val: " + mstatus_val.get_raw.toHexString)
 
   // ---------------------
   // mstatus read func
   // ---------------------
   val mstatus_rmask = new CSRBitField(-1L)
   // only support little endian
-  mstatus_rmask.setField(MStatusMask.SBE, 0)
-  mstatus_rmask.setField(MStatusMask.MBE, 0)
-  mstatus_rmask.setField(MStatusMask.UBE, 0)
+  mstatus_rmask.set_field(MStatusMask.SBE, 0)
+  mstatus_rmask.set_field(MStatusMask.MBE, 0)
+  mstatus_rmask.set_field(MStatusMask.UBE, 0)
 
   if (!smode_enable) {
-    mstatus_rmask.setField(MStatusMask.MXR, 0)
-    mstatus_rmask.setField(MStatusMask.SUM, 0)
-    mstatus_rmask.setField(MStatusMask.TVM, 0)
-    mstatus_rmask.setField(MStatusMask.TSR, 0)
+    mstatus_rmask.set_field(MStatusMask.MXR, 0)
+    mstatus_rmask.set_field(MStatusMask.SUM, 0)
+    mstatus_rmask.set_field(MStatusMask.TVM, 0)
+    mstatus_rmask.set_field(MStatusMask.TSR, 0)
   }
 
   if (!umode_enable) {
-    mstatus_rmask.setField(MStatusMask.MPRV, 0)
+    mstatus_rmask.set_field(MStatusMask.MPRV, 0)
   }
 
   if (!umode_enable && !smode_enable) {
-    mstatus_rmask.setField(MStatusMask.TW, 0)
+    mstatus_rmask.set_field(MStatusMask.TW, 0)
   }
 
   if (!float_enable) {
-    mstatus_rmask.setField(MStatusMask.FS, 0)
-    mstatus_rmask.setField(MStatusMask.VS, 0)
-    mstatus_rmask.setField(MStatusMask.XS, 0)
-    mstatus_rmask.setField(MStatusMask.MSTATUS64_SD, 0)
+    mstatus_rmask.set_field(MStatusMask.FS, 0)
+    mstatus_rmask.set_field(MStatusMask.VS, 0)
+    mstatus_rmask.set_field(MStatusMask.XS, 0)
+    mstatus_rmask.set_field(MStatusMask.MSTATUS64_SD, 0)
     println("float_enable: " + float_enable)
   }
 
-  println("mstatus_rmask: " + mstatus_rmask.getRawValue.toHexString)
+  println("mstatus_rmask: " + mstatus_rmask.get_raw.toHexString)
 
   val mstatus_read = (addr: UInt, reg: UInt) => {
     val read_result = Wire(Valid(UInt(64.W)))
     read_result.valid := true.B
-    read_result.bits := reg & Long2UInt64(mstatus_rmask.getRawValue)
+    read_result.bits := reg & Long2UInt64(mstatus_rmask.get_raw)
     read_result
   }
 
   // --------------------
   // mstatus write fun
   // --------------------
-  val mstatus_wmask = new CSRBitField(mstatus_rmask.getRawValue)
-  mstatus_wmask.setField(MStatusMask.UXL, 0)
-  mstatus_wmask.setField(MStatusMask.SXL, 0)
+  val mstatus_wmask = new CSRBitField(mstatus_rmask.get_raw)
+  mstatus_wmask.set_field(MStatusMask.UXL, 0)
+  mstatus_wmask.set_field(MStatusMask.SXL, 0)
 
   val mstatus_write = (addr: UInt, reg: UInt, wdata: UInt) => {
     val write_result = Wire(Valid(UInt(64.W)))
     write_result.valid := true.B
     write_result.bits := wdata & Long2UInt64(
-      mstatus_wmask.getRawValue
-    ) | reg & Long2UInt64(~mstatus_wmask.getRawValue)
+      mstatus_wmask.get_raw
+    ) | reg & Long2UInt64(~mstatus_wmask.get_raw)
     reg := write_result.bits
     write_result
   }
 
-  println("mstatus_wmask: " + mstatus_wmask.getRawValue.toHexString)
+  println("mstatus_wmask: " + mstatus_wmask.get_raw.toHexString)
 
   // ---------------------
   // sstatus read func
@@ -594,20 +594,20 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
   // sstatus write func
   // ---------------------
   val sstatus_wmask_before = new CSRBitField(0L)
-  sstatus_wmask_before.setField(MStatusMask.SPP, 1)
-  sstatus_wmask_before.setField(MStatusMask.SIE, 1)
-  sstatus_wmask_before.setField(MStatusMask.SPIE, 1)
-  sstatus_wmask_before.setField(MStatusMask.UBE, 1)
-  sstatus_wmask_before.setField(MStatusMask.VS, 3)
-  sstatus_wmask_before.setField(MStatusMask.FS, 3)
-  sstatus_wmask_before.setField(MStatusMask.XS, 3)
-  sstatus_wmask_before.setField(MStatusMask.SUM, 1)
-  sstatus_wmask_before.setField(MStatusMask.MXR, 1)
-  sstatus_wmask_before.setField(MStatusMask.MSTATUS64_SD, 1)
-  sstatus_wmask_before.getRawValue
+  sstatus_wmask_before.set_field(MStatusMask.SPP, 1)
+  sstatus_wmask_before.set_field(MStatusMask.SIE, 1)
+  sstatus_wmask_before.set_field(MStatusMask.SPIE, 1)
+  sstatus_wmask_before.set_field(MStatusMask.UBE, 1)
+  sstatus_wmask_before.set_field(MStatusMask.VS, 3)
+  sstatus_wmask_before.set_field(MStatusMask.FS, 3)
+  sstatus_wmask_before.set_field(MStatusMask.XS, 3)
+  sstatus_wmask_before.set_field(MStatusMask.SUM, 1)
+  sstatus_wmask_before.set_field(MStatusMask.MXR, 1)
+  sstatus_wmask_before.set_field(MStatusMask.MSTATUS64_SD, 1)
+  sstatus_wmask_before.get_raw
 
   val sstatus_wmask =
-    sstatus_wmask_before.getRawValue & mstatus_rmask.getRawValue
+    sstatus_wmask_before.get_raw & mstatus_rmask.get_raw
 
   val sstatus_write = (addr: UInt, reg: UInt, wdata: UInt) => {
     val write_result = Wire(Valid(UInt(64.W)))
@@ -623,10 +623,10 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
   // sip & sie read write func
   // -------------------------
   val sip_sie_mask = new CSRBitField(0)
-  sip_sie_mask.setField(MipMask.seip, 1)
-  sip_sie_mask.setField(MipMask.ssip, 1)
-  sip_sie_mask.setField(MipMask.stip, 1)
-  val sip_sie_mask_raw = Long2UInt64(sip_sie_mask.getRawValue)
+  sip_sie_mask.set_field(MipMask.seip, 1)
+  sip_sie_mask.set_field(MipMask.ssip, 1)
+  sip_sie_mask.set_field(MipMask.stip, 1)
+  val sip_sie_mask_raw = Long2UInt64(sip_sie_mask.get_raw)
 
   val sip_sie_read = (addr: UInt, reg: UInt) => {
     val read_result = Wire(Valid(UInt(64.W)))
@@ -695,26 +695,25 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
   // misa register
   // -----------------
   val misa_val = new CSRBitField(0)
-  misa_val.setField(MIsaMask.I, 1)
-  misa_val.setField(MIsaMask.M, 1)
-  misa_val.setField(MIsaMask.A, 1)
-  misa_val.setField(MIsaMask.C, 1)
-  misa_val.setField(MIsaMask.M, 1)
+  misa_val.set_field(MIsaMask.I, 1)
+  misa_val.set_field(MIsaMask.M, 1)
+  misa_val.set_field(MIsaMask.A, 1)
+  misa_val.set_field(MIsaMask.C, 1)
 
   if (umode_enable) {
-    misa_val.setField(MIsaMask.U, 1)
+    misa_val.set_field(MIsaMask.U, 1)
   }
   if (smode_enable) {
-    misa_val.setField(MIsaMask.S, 1)
+    misa_val.set_field(MIsaMask.S, 1)
   }
-  misa_val.setField(MIsaMask.MXL, 2) // xlen = 64
+  misa_val.set_field(MIsaMask.MXL, 2) // xlen = 64
 
   // -----------------
   // csr register
   // -----------------
 
-  println("mstatus_val: " + mstatus_val.getRawValue.toHexString)
-  val mstatus = RegInit(Long2UInt64(mstatus_val.getRawValue))
+  println("mstatus_val: " + mstatus_val.get_raw.toHexString)
+  val mstatus = RegInit(Long2UInt64(mstatus_val.get_raw))
   val mie = RegInit(0.U(64.W))
   val mip = RegInit(0.U(64.W))
   val mcause = RegInit(0.U(64.W))
@@ -723,7 +722,7 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
   val mtval = RegInit(0.U(64.W))
   val mscratch = RegInit(0.U(64.W))
   // TODO: make misa configurable
-  val misa = RegInit(Long2UInt64(misa_val.getRawValue))
+  val misa = RegInit(Long2UInt64(misa_val.get_raw))
   val mimpid = RegInit(0.U(64.W))
   val mhartid = RegInit(0.U(64.W))
   val marchid = RegInit(0.U(64.W))

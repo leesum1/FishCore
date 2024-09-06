@@ -5,7 +5,7 @@ import leesum.Cache.{DCacheConnect, DCacheReq, DCacheResp, ICacheTop}
 import leesum.ICache.DCacheTop
 import leesum._
 import leesum.axi4.{AXIMasterIO, AxiReadArbiter}
-import leesum.dbg.DbgSlaveState
+import leesum.dbg.{DbgSlaveState, DebugModuleCoreInterface}
 import leesum.fronten.IFUTop
 import leesum.lsu.LSUTop
 import leesum.mmu_sv39.MMU
@@ -37,17 +37,19 @@ class FishCore(
     val sext_int = Input(Bool())
 
     // debug
-    val debug_state_regs = Output(new DbgSlaveState())
-    val debug_halt_req = Input(ValidIO(Bool()))
-    val debug_resume_req = Input(ValidIO(Bool()))
+//    val debug_state_regs = Output(new DbgSlaveState())
+//    val debug_halt_req = Input(ValidIO(Bool()))
+//    val debug_resume_req = Input(ValidIO(Bool()))
+//
+//    val debug_gpr_read_port = Flipped(new RegFileReadPort)
+//    val debug_gpr_write_port = new GPRsWritePort
+//    val debug_csr_read_port = Flipped(new CSRReadPort)
+//    val debug_csr_write_port = Flipped(new CSRWritePort)
+//
+//    val debug_dcache_req = Flipped(Decoupled(new DCacheReq))
+//    val debug_dcache_resp = Decoupled(new DCacheResp)
 
-    val debug_gpr_read_port = Flipped(new RegFileReadPort)
-    val debug_gpr_write_port = new GPRsWritePort
-    val debug_csr_read_port = Flipped(new CSRReadPort)
-    val debug_csr_write_port = Flipped(new CSRWritePort)
-
-    val debug_dcache_req = Flipped(Decoupled(new DCacheReq))
-    val debug_dcache_resp = Decoupled(new DCacheResp)
+    val debug_core_interface = Flipped(new DebugModuleCoreInterface)
   })
 
   // monitor
@@ -298,19 +300,18 @@ class FishCore(
   )
 
   // debug port
-  io.debug_state_regs := commit_stage.io.debug_state_regs
-  commit_stage.io.debug_halt_req := io.debug_halt_req
-  commit_stage.io.debug_resume_req := io.debug_resume_req
+  io.debug_core_interface.state_regs := commit_stage.io.debug_state_regs
+  commit_stage.io.debug_halt_req := io.debug_core_interface.halt_req
+  commit_stage.io.debug_resume_req := io.debug_core_interface.resume_req
 
   ifu.io.halted := commit_stage.io.debug_state_regs.is_halted
 
-  io.debug_gpr_read_port <> reg_file.io.read_ports.last
-  io.debug_gpr_write_port <> reg_file.io.write_ports.last
-  io.debug_csr_read_port <> csr_regs.io.read_ports.last
-  io.debug_csr_write_port <> csr_regs.io.write_ports.last
-
-  io.debug_dcache_req <> dcache_arb.io.req_vec(3)
-  io.debug_dcache_resp <> dcache_arb.io.resp_vec(3)
+  io.debug_core_interface.gpr_read_port <> reg_file.io.read_ports.last
+  io.debug_core_interface.gpr_write_port <> reg_file.io.write_ports.last
+  io.debug_core_interface.csr_read_port <> csr_regs.io.read_ports.last
+  io.debug_core_interface.csr_write_port <> csr_regs.io.write_ports.last
+  io.debug_core_interface.dcache_req <> dcache_arb.io.req_vec(3)
+  io.debug_core_interface.dcache_resp <> dcache_arb.io.resp_vec(3)
 }
 
 object gen_FishCore_verilog extends App {

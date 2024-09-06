@@ -1,25 +1,12 @@
 package leesum.Core
 
 import chisel3._
-import chisel3.util.{Valid, ValidIO, log2Ceil}
-import leesum.{GenVerilogHelper, MSBDivFreq}
-import leesum.axi4.{
-  AXI4SlaveBridge,
-  AXIDeMux,
-  AddrDecoder,
-  BasicMemoryIO,
-  MemoryIO64to32
-}
-import leesum.dbg.DbgSlaveState
+import chisel3.util.{Valid, log2Ceil}
+import leesum.axi4._
+import leesum.dbg.{DebugModuleConfig, DebugTop, JtagIO}
 import leesum.devices.{SifiveUart, clint, plic}
 import leesum.moniter.{DifftestPort, PerfPort}
-import leesum.RegFileReadPort
-import leesum.GPRsWritePort
-import leesum.CSRReadPort
-import leesum.CSRWritePort
-import chisel3.util.Decoupled
-import leesum.Cache.DCacheReq
-import leesum.Cache.DCacheResp
+import leesum.{GenVerilogHelper, MSBDivFreq}
 
 class FishSoc(
     muldiv_en: Boolean = true,
@@ -31,17 +18,8 @@ class FishSoc(
     val perf_monitor = Output(new PerfPort)
     val mem_port = Flipped(new BasicMemoryIO(32, 64))
     // debug
-    val debug_state_regs = Output(new DbgSlaveState())
-    val debug_halt_req = Input(ValidIO(Bool()))
-    val debug_resume_req = Input(ValidIO(Bool()))
-
-    val debug_gpr_read_port = Flipped(new RegFileReadPort)
-    val debug_gpr_write_port = new GPRsWritePort
-    val debug_csr_read_port = Flipped(new CSRReadPort)
-    val debug_csr_write_port = Flipped(new CSRWritePort)
-
-    val debug_dcache_req = Flipped(Decoupled(new DCacheReq))
-    val debug_dcache_resp = Decoupled(new DCacheResp)
+    val jtag_io = new JtagIO(as_master = false)
+    val is_halted = Output(Bool())
   })
 
   val boot_pc = 0x80000000L
@@ -109,17 +87,18 @@ class FishSoc(
     new FishCore(muldiv_en, rvc_en, monitor_en, boot_pc, addr_map)
   )
 
+  val dm_config = new DebugModuleConfig
+  val debug_top = Module(
+    new DebugTop(dm_config)
+  )
+
   core.io.difftest <> io.difftest
   core.io.perf_monitor <> io.perf_monitor
-  core.io.debug_state_regs <> io.debug_state_regs
-  core.io.debug_halt_req <> io.debug_halt_req
-  core.io.debug_resume_req <> io.debug_resume_req
-  core.io.debug_gpr_read_port <> io.debug_gpr_read_port
-  core.io.debug_gpr_write_port <> io.debug_gpr_write_port
-  core.io.debug_csr_read_port <> io.debug_csr_read_port
-  core.io.debug_csr_write_port <> io.debug_csr_write_port
-  core.io.debug_dcache_req <> io.debug_dcache_req
-  core.io.debug_dcache_resp <> io.debug_dcache_resp
+
+  debug_top.io.jtag_io <> io.jtag_io
+  debug_top.io.debug_core_interface <> core.io.debug_core_interface
+
+  io.is_halted := core.io.debug_core_interface.state_regs.is_halted
 
   val axi_demux = Module(
     new AXIDeMux(4, 32, 64)

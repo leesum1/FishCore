@@ -62,6 +62,15 @@ class MultiPortFIFOBase[T <: Data](
   val full = occupied_entries(ptr_width) === 1.U
   val empty = occupied_entries === 0.U
 
+  def adjust_ptr_width(old_ptr: UInt): UInt = {
+    require(
+      old_ptr.getWidth >= ptr_width,
+      "old_ptr width must greater than ptr_width"
+    )
+    val new_ptr = old_ptr(ptr_width - 1, 0)
+    new_ptr
+  }
+
   def push_ptr_inc(size: UInt): Unit = {
     assert(size <= num_push_ports.U, "size must less than num_push_ports")
     push_ptrs.foreach({ ptr =>
@@ -126,7 +135,8 @@ class MultiPortFIFOBase[T <: Data](
       with_valid && !use_mem,
       "write only support with_valid and not use_mem"
     )
-    ram(addr)
+    assert(addr < size.U, "ptr must less than size")
+    ram(adjust_ptr_width(addr))
   }
 
   def content_valid(addr: UInt) = {
@@ -134,7 +144,8 @@ class MultiPortFIFOBase[T <: Data](
       with_valid && !use_mem,
       "write only support with_valid and not use_mem"
     )
-    ram_valid(addr)
+    assert(addr < size.U, "addr must less than size")
+    ram_valid(adjust_ptr_width(addr))
   }
 
   def push_pop_flush_cond(

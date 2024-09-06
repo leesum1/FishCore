@@ -26,7 +26,12 @@ object GenVerilogHelper {
 
     val x = ChiselStage.emitSystemVerilog(
       gen = gen,
-      args = Array("--firtool-binary-path", "firtool"),
+      args = Array(
+        "--firtool-binary-path",
+        "firtool"
+//        "--warnings-as-errors"
+//        "--throw-on-first-error"
+      ),
       firtoolOpts = Array(
         "--disable-all-randomization",
         "--strip-debug-info",
@@ -1251,13 +1256,19 @@ object gather_scala_test extends App {
 
 }
 
+
+
 class BitMaskHelper {
   def gen_mask(left: Int, right: Int): Long = {
     require(right >= 0 && right < 64, "right must be in the range [0, 63]")
-    require(left > right && left < 64, "left must be in the range [right, 63]")
+    require(left >= right && left < 64, "left must be in the range [right, 63]")
 
     val mask = (1L << (left - right + 1)) - 1
     mask << right
+  }
+
+  def gen_mask(pos: Int): Long = {
+    gen_mask(pos, pos)
   }
 
   def all = gen_mask(63, 0)

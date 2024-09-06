@@ -1,60 +1,69 @@
 package leesum.dbg
 import chisel3._
-import chisel3.util.{Decoupled, ValidIO}
-import leesum.Cache.{DCacheReq, DCacheResp}
-import leesum.{
-  CSRReadPort,
-  CSRWritePort,
-  GPRsWritePort,
-  GenVerilogHelper,
-  RegFileReadPort
-}
+import leesum.GenVerilogHelper
+import leesum.Utils.CDCHandShakeReqResp
 
 class DebugTop(dm_config: DebugModuleConfig) extends Module {
   val io = IO(new Bundle {
     val jtag_io = new JtagIO(as_master = false)
 
     //  dm <> core interface
-    val debug_state_regs = Input(new DbgSlaveState())
-    val debug_halt_req = Output(ValidIO(Bool()))
-    val debug_resume_req = Output(ValidIO(Bool()))
-    val debug_reset_req = Output(ValidIO(Bool()))
-    val debug_clear_havereset = Output(ValidIO(Bool()))
-    val debug_gpr_read_port = new RegFileReadPort
-    val debug_gpr_write_port = Flipped(new GPRsWritePort)
-    val debug_csr_read_port = new CSRReadPort
-    val debug_csr_write_port = new CSRWritePort
-    val debug_dcache_req = Decoupled(new DCacheReq)
-    val debug_dcache_resp = Flipped(Decoupled(new DCacheResp))
+    val debug_core_interface = new DebugModuleCoreInterface
   })
 
-  val jtag_clk = WireInit((io.jtag_io.tck).asClock)
-
-  val jtag_dtm = withClock(jtag_clk) {
-    Module(new JtagDTM(dm_config))
-  }
-
+  // ----------------- RISCV Debug Module -----------------
+  // Debug Module works in system clock domain
+  // 1. Debug Module receives DMI request from JTAG DTM
+  //    And sends DMI response to JTAG DTM
+  // 2. Debug Module communicates with core, including
+  //    R/W GPRs, R/W CSRs, R/W Memory and so on
+  // -----------------------------------------------------
   val debug_module = Module(new DebugModule(dm_config))
 
-  //  dm <> core interface
-  debug_module.io.debug_state_regs <> io.debug_state_regs
-  debug_module.io.debug_halt_req <> io.debug_halt_req
-  debug_module.io.debug_resume_req <> io.debug_resume_req
-  debug_module.io.debug_reset_req <> io.debug_reset_req
-  debug_module.io.debug_clear_havereset <> io.debug_clear_havereset
-  debug_module.io.debug_gpr_read_port <> io.debug_gpr_read_port
-  debug_module.io.debug_gpr_write_port <> io.debug_gpr_write_port
-  debug_module.io.debug_csr_read_port <> io.debug_csr_read_port
-  debug_module.io.debug_csr_write_port <> io.debug_csr_write_port
-  debug_module.io.debug_dcache_req <> io.debug_dcache_req
-  debug_module.io.debug_dcache_resp <> io.debug_dcache_resp
+  //  debug module <> core interface
 
-  //  jtag dmi master <> dm dmi slave
-  jtag_dtm.io.dmi_req <> debug_module.io.dmi_req
-  jtag_dtm.io.dmi_resp <> debug_module.io.dmi_resp
+  io.debug_core_interface <> debug_module.io.debug_core_interface
 
-  // jtagDTM <> jtagIO
+  // ----------------- JTAG DTM -----------------
+  // JTAG DTM works in JTAG clock domain
+  // 1. JTAG DTM was controlled by JTAG Raw port
+  //    And communicates with Debug Module
+  // 2. JTAG DTM will send DMI request to Debug Module
+  //    And receive DMI response from Debug Module
+  // TODO: when should we reset JTAG DTM?
+  // -------------------------------------------
+  val jtag_clk = WireInit((io.jtag_io.tck).asClock)
+  val jtag_rst = WireInit(io.jtag_io.rst || reset.asBool)
+  val jtag_dtm = withClockAndReset(jtag_clk, jtag_rst) {
+    Module(new JtagDTM(dm_config))
+  }
+  // jtag raw port
   jtag_dtm.io.jtag <> io.jtag_io
+
+  // ----------------- CDC Handshake -----------------
+  // CDC Handshake between JTAG DTM and Debug Module
+  // JTAG DTM <--clkA_domain(jtag clk)--> CDC Handshake <----clkB_domain(system clk)---> DM
+  // 1. A(src) domain: JTAG DTM, JTAG clk
+  // 2. B(dst) domain: DM, system clk
+  // -------------------------------------------------
+  val jtag2dm_cdc_hs = withClockAndReset(jtag_clk, jtag_rst) {
+    Module(
+      new CDCHandShakeReqResp(
+        new DMIReq(dm_config.abits),
+        new DMIResp(dm_config.abits)
+      )
+    )
+  }
+  jtag2dm_cdc_hs.io.clkB := clock
+  jtag2dm_cdc_hs.io.rstB := reset.asBool
+
+  // A domain: JTAG DTM
+  jtag_dtm.io.dmi_req <> jtag2dm_cdc_hs.io.req_clkA
+  jtag_dtm.io.dmi_resp <> jtag2dm_cdc_hs.io.resp_clkA
+
+  // B domain: DM
+  jtag2dm_cdc_hs.io.req_clkB <> debug_module.io.dmi_req
+  jtag2dm_cdc_hs.io.resp_clkB <> debug_module.io.dmi_resp
 }
 
 object GenDebugTopVerilog extends App {

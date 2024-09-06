@@ -81,13 +81,39 @@ class DMStatusFiled(data: UInt) {
       debug_state.have_reset(), // allhavereset,
       zero0,
       impebreak,
-      false.B, //  stickyunavail,
+      false.B, // TODO:  check implement stickyunavail
       ndmresetpending,
       zero1
     )
     require(r_dmstatus.getWidth == 32)
     r_dmstatus
   }
+}
+
+object DMStatusMask extends BitMaskHelper {
+  def version = gen_mask(3, 0)
+  def confstrptrvalid = gen_mask(4)
+  def hasresethaltreq = gen_mask(5)
+  def authbusy = gen_mask(6)
+  def authenticated = gen_mask(7)
+  def anyhalted = gen_mask(8)
+  def allhalted = gen_mask(9)
+  def anyrunning = gen_mask(10)
+  def allrunning = gen_mask(11)
+  def anyunavail = gen_mask(12)
+  def allunavail = gen_mask(13)
+  def anynonexistent = gen_mask(14)
+  def allnonexistent = gen_mask(15)
+  def anyresumeack = gen_mask(16)
+  def allresumeack = gen_mask(17)
+  def anyhavereset = gen_mask(18)
+  def allhavereset = gen_mask(19)
+  def zero0 = gen_mask(21, 20)
+  def impebreak = gen_mask(22)
+  def stickyunavail = gen_mask(23)
+  def ndmresetpending = gen_mask(24)
+  def zero1 = gen_mask(31, 25)
+
 }
 
 //#[bitfield(u32)]
@@ -272,6 +298,17 @@ class AbstractcsFiled(data: UInt) {
     require(w_abstractcs.getWidth == 32)
     w_abstractcs
   }
+}
+
+object AbstractcsMask extends BitMaskHelper {
+  def datacount: Long = gen_mask(3, 0)
+  def zero0: Long = gen_mask(7, 4)
+  def cmderr: Long = gen_mask(10, 8)
+  def relaxedpriv: Long = gen_mask(11)
+  def busy: Long = gen_mask(12)
+  def zero1: Long = gen_mask(23, 13)
+  def progbufsize: Long = gen_mask(28, 24)
+  def zero2: Long = gen_mask(31, 29)
 }
 
 class CommandRegFiled(data: UInt) {
@@ -600,7 +637,7 @@ class DTMDMIFiled(data_reg: UInt) {
   def get_read_data(new_op: UInt): UInt = {
     require(new_op.getWidth == 2)
     val r_dmi = CatReverse(
-      op,
+      new_op,
       data,
       address
     )
@@ -638,6 +675,8 @@ object DbgPKG {
   val COMMAND_ADDR = 0x17
   val ABSTRACTAUTO_ADDR = 0x18
   val PROGBUF_BASE = 0x20
+
+  val SBCS_ADDR = 0x38
 
 //  pub const DMSTATUS_VERSION_NONE: usize = 0;
 //  pub const DMSTATUS_VERSION0_11: usize = 1;

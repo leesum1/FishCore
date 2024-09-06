@@ -146,21 +146,21 @@ class DebugModuleTest extends AnyFreeSpec with ChiselScalatestTester {
       "aarsize should be 32, 64"
     )
     val reg_cmd = new CSRBitField(0)
-    reg_cmd.setField(CommandRegMask.write, if (write) 1 else 0)
-    reg_cmd.setField(CommandRegMask.regno, regno)
-    reg_cmd.setField(CommandRegMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_REG)
-    reg_cmd.setField(CommandRegMask.aarsize, aarsize)
+    reg_cmd.set_field(CommandRegMask.write, if (write) 1 else 0)
+    reg_cmd.set_field(CommandRegMask.regno, regno)
+    reg_cmd.set_field(CommandRegMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_REG)
+    reg_cmd.set_field(CommandRegMask.aarsize, aarsize)
 
     val command_dmi_req =
       gen_dmi_req(
         DbgPKG.COMMAND_ADDR.U,
-        reg_cmd.getRawValue.U(32.W),
+        reg_cmd.get_raw.U(32.W),
         DMI_OP_WRITE.U
       )
     val command_dmi_resp =
       gen_dmi_resp(
         DbgPKG.COMMAND_ADDR.U,
-        reg_cmd.getRawValue.U(32.W),
+        reg_cmd.get_raw.U(32.W),
         DMI_OP_STATUS_SUCCESS.U
       )
     (command_dmi_req, command_dmi_resp)
@@ -182,20 +182,20 @@ class DebugModuleTest extends AnyFreeSpec with ChiselScalatestTester {
       "aamsize should be 8, 16, 32, 64"
     )
     val mem_cmd = new CSRBitField(0)
-    mem_cmd.setField(CommandMemMask.write, if (write) 1 else 0)
-    mem_cmd.setField(CommandMemMask.aamvirtual, 0) // physical address
-    mem_cmd.setField(CommandMemMask.aamsize, aamsize)
-    mem_cmd.setField(CommandMemMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_MEM)
+    mem_cmd.set_field(CommandMemMask.write, if (write) 1 else 0)
+    mem_cmd.set_field(CommandMemMask.aamvirtual, 0) // physical address
+    mem_cmd.set_field(CommandMemMask.aamsize, aamsize)
+    mem_cmd.set_field(CommandMemMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_MEM)
 
     val command_dmi_req =
       gen_dmi_req(
         DbgPKG.COMMAND_ADDR.U,
-        mem_cmd.getRawValue.U(32.W),
+        mem_cmd.get_raw.U(32.W),
         DMI_OP_WRITE.U
       )
     val command_dmi_resp = gen_dmi_resp(
       DbgPKG.COMMAND_ADDR.U,
-      mem_cmd.getRawValue.U(32.W),
+      mem_cmd.get_raw.U(32.W),
       DMI_OP_STATUS_SUCCESS.U
     )
     (command_dmi_req, command_dmi_resp)

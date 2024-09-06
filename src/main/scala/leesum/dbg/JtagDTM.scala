@@ -27,9 +27,22 @@ class JtagIO(as_master: Boolean) extends Bundle {
 }
 
 object JtagState extends ChiselEnum {
-  val TestLogicReset, RunTestIdle, SelectDrScan, CaptureDr, ShiftDr, Exit1Dr,
-      PauseDr, Exit2Dr, UpdateDr, SelectIrScan, CaptureIr, ShiftIr, Exit1Ir,
-      PauseIr, Exit2Ir, UpdateIr = Value
+  val TestLogicReset = Value(0.U)
+  val RunTestIdle = Value(1.U)
+  val SelectDrScan = Value(2.U)
+  val CaptureDr = Value(3.U)
+  val ShiftDr = Value(4.U)
+  val Exit1Dr = Value(5.U)
+  val PauseDr = Value(6.U)
+  val Exit2Dr = Value(7.U)
+  val UpdateDr = Value(8.U)
+  val SelectIrScan = Value(9.U)
+  val CaptureIr = Value(10.U)
+  val ShiftIr = Value(11.U)
+  val Exit1Ir = Value(12.U)
+  val PauseIr = Value(13.U)
+  val Exit2Ir = Value(14.U)
+  val UpdateIr = Value(15.U)
 
   def is_update_dr(): Bool = {
     this.Value === UpdateDr
@@ -182,6 +195,8 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   jtag_state := JtagState.get_next_state(jtag_state, io.jtag.tms)
   io.jtag_state := jtag_state
 
+  val jtag_tap_reset = jtag_state === JtagState.TestLogicReset || reset.asBool
+  dontTouch(jtag_tap_reset)
   val ir_reg = RegInit(DbgPKG.JtagDTM_IDCODE.U(dm_config.ir_length.W))
   io.jtag_ir := ir_reg
   // shift register
@@ -199,29 +214,45 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   // --------------------
 
   val dtm_dtmcs_init_value = new CSRBitField(0)
-  dtm_dtmcs_init_value.setField(DTMCSMask.abits, dm_config.abits)
-  dtm_dtmcs_init_value.setField(DTMCSMask.version, 1) // 0.13 and 1.0
-  dtm_dtmcs_init_value.setField(DTMCSMask.idle, 5)
+  dtm_dtmcs_init_value.set_field(DTMCSMask.abits, dm_config.abits)
+  dtm_dtmcs_init_value.set_field(DTMCSMask.version, 1) // 0.13 and 1.0
+  dtm_dtmcs_init_value.set_field(DTMCSMask.idle, 5)
 
   val dtm_idcode = RegInit("xdeadbeef".U(dtm_reg_max_width.W))
-  val dtm_dtmcs = RegInit(
-    dtm_dtmcs_init_value.getRawValue.U(dtm_reg_max_width.W)
+
+  println(
+    "dtm_dtmcs_init_value.getRawValue: " + dtm_dtmcs_init_value.get_raw
   )
-  val dtm_dmi = RegInit(0.U(dtm_reg_max_width.W))
-  val dtm_bypass0 = RegInit(0.U(dtm_reg_max_width.W))
-  val dtm_bypass1 = RegInit(0.U(dtm_reg_max_width.W))
-  val dmt_custom = RegInit(0.U(dtm_reg_max_width.W))
+  val dtm_dtmcs = withReset(jtag_tap_reset) {
+    RegInit(
+      dtm_dtmcs_init_value.get_raw.U(dtm_reg_max_width.W)
+    )
+  }
+
+  dontTouch(dtm_dtmcs)
+
+  val dtm_dmi = withReset(jtag_tap_reset) { RegInit(0.U(dtm_reg_max_width.W)) }
+  val dtm_bypass0 = withReset(jtag_tap_reset) {
+    RegInit(0.U(dtm_reg_max_width.W))
+  }
+  val dtm_bypass1 = withReset(jtag_tap_reset) {
+    RegInit(0.U(dtm_reg_max_width.W))
+  }
+  val dmt_custom = withReset(jtag_tap_reset) {
+    RegInit(0.U(dtm_reg_max_width.W))
+  }
 
   val dtm_csrs = new CSRMap()
   val dtm_dmi_filed = new DTMDMIFiled(dtm_dmi)
   // -------------------------
   // Flags
   // -------------------------
-  val dmi_busy = RegInit(false.B)
-  val dmi_sticky_error = RegInit(false.B)
-  val in_dmi_error = dmi_sticky_error || dmi_busy
+  val dmi_busy = withReset(jtag_tap_reset) { RegInit(false.B) }
+  val dmi_req_op_is_read = withReset(jtag_tap_reset) { RegInit(false.B) }
+  val dmi_sticky_error = withReset(jtag_tap_reset) { RegInit(false.B) }
+  val can_dmi_send_req = withReset(jtag_tap_reset) { RegInit(false.B) }
 
-  val can_dmi_send_req = RegInit(false.B)
+  val in_dmi_error = dmi_sticky_error || dmi_busy
 
   // -------------------------
   // map normal read write func define
@@ -263,7 +294,10 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
     val write_result = Wire(Valid(UInt(dtm_reg_max_width.W)))
     write_result.valid := true.B
     write_result.bits := wdata
-    reg := write_result.bits
+
+    when(!in_dmi_error) {
+      reg := write_result.bits
+    }
     //  In Update-DR, the DTM starts the operation specified in op unless the current status reported in
     //  op is sticky
     can_dmi_send_req := !in_dmi_error
@@ -396,7 +430,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
     // if capture_dr goes high while we are in the read state
     // or in the corresponding wait state we are not giving back a valid word
     // -> throw an error
-    when(dmi_busy) {
+    when(dmi_busy && dmi_req_op_is_read) {
       dmi_sticky_error := true.B
     }
 
@@ -454,19 +488,32 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
 
   val sDMIIdle :: sDMIReq :: sDMIResp :: Nil = Enum(3)
 
-  val dmi_state = RegInit(sDMIIdle)
+  val dmi_state = withReset(jtag_tap_reset) { RegInit(sDMIIdle) }
+  val dmi_req_buf = withReset(jtag_tap_reset) {
+    RegInit(0.U.asTypeOf(new DMIReq(dm_config.abits)))
+  }
 
-  val dmi_req_buf = RegInit(0.U.asTypeOf(new DMIReq(dm_config.abits)))
+  when(jtag_tap_reset) {
+    assert(
+      dmi_state === sDMIIdle,
+      "dmi_state should be sDMIIdle when jtag_tap_reset"
+    )
+  }
 
   switch(dmi_state) {
     is(sDMIIdle) {
+      val is_dmi_nop = dtm_dmi_filed.op === DbgPKG.DMI_OP_NOP.U
+      dontTouch(is_dmi_nop)
       when(can_dmi_send_req) {
-        dmi_state := sDMIReq
-        dmi_busy := true.B
         can_dmi_send_req := false.B
-        dmi_req_buf.op := dtm_dmi_filed.op
-        dmi_req_buf.addr := dtm_dmi_filed.address
-        dmi_req_buf.data := dtm_dmi_filed.data
+        when(!is_dmi_nop) {
+          dmi_state := sDMIReq
+          dmi_busy := true.B
+          dmi_req_buf.op := dtm_dmi_filed.op
+          dmi_req_buf.addr := dtm_dmi_filed.address
+          dmi_req_buf.data := dtm_dmi_filed.data
+          dmi_req_op_is_read := dtm_dmi_filed.op === DbgPKG.DMI_OP_READ.U
+        }
       }
     }
     is(sDMIReq) {

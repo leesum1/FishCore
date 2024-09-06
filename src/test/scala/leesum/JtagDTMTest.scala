@@ -196,11 +196,11 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
       "aarsize should be 32, 64"
     )
     val reg_cmd = new CSRBitField(0)
-    reg_cmd.setField(CommandRegMask.write, if (write) 1 else 0)
-    reg_cmd.setField(CommandRegMask.regno, regno)
-    reg_cmd.setField(CommandRegMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_REG)
-    reg_cmd.setField(CommandRegMask.aarsize, aarsize)
-    reg_cmd.getRawValue
+    reg_cmd.set_field(CommandRegMask.write, if (write) 1 else 0)
+    reg_cmd.set_field(CommandRegMask.regno, regno)
+    reg_cmd.set_field(CommandRegMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_REG)
+    reg_cmd.set_field(CommandRegMask.aarsize, aarsize)
+    reg_cmd.get_raw
   }
 
   /** Generate DMI command for memory access. Shall write this command to DMI
@@ -227,11 +227,11 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
       "aamsize should be 8, 16, 32, 64"
     )
     val mem_cmd = new CSRBitField(0)
-    mem_cmd.setField(CommandMemMask.write, if (write) 1 else 0)
-    mem_cmd.setField(CommandMemMask.aamvirtual, 0) // physical address
-    mem_cmd.setField(CommandMemMask.aamsize, aamsize)
-    mem_cmd.setField(CommandMemMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_MEM)
-    mem_cmd.getRawValue
+    mem_cmd.set_field(CommandMemMask.write, if (write) 1 else 0)
+    mem_cmd.set_field(CommandMemMask.aamvirtual, 0) // physical address
+    mem_cmd.set_field(CommandMemMask.aamsize, aamsize)
+    mem_cmd.set_field(CommandMemMask.cmdtype, DbgPKG.COMDTYPE_ACCESS_MEM)
+    mem_cmd.get_raw
   }
 
   /** Generate DTM_DMI register data
@@ -255,10 +255,10 @@ class JtagDTMTest extends AnyFreeSpec with ChiselScalatestTester {
     )
 
     val dmi_reg_value = new CSRBitField(0)
-    dmi_reg_value.setField(DTMDMIMask.op, op)
-    dmi_reg_value.setField(DTMDMIMask.data, data)
-    dmi_reg_value.setField(DTMDMIMask.addr, addr)
-    dmi_reg_value.getRawValue
+    dmi_reg_value.set_field(DTMDMIMask.op, op)
+    dmi_reg_value.set_field(DTMDMIMask.data, data)
+    dmi_reg_value.set_field(DTMDMIMask.addr, addr)
+    dmi_reg_value.get_raw
   }
 
   "JtagStateLogicResetTest" in {

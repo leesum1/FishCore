@@ -227,17 +227,17 @@ class CSRBitField(private var value: Long) {
     }
     i
   }
-  def setField(mask: Long, fieldValue: Long): Unit = {
+  def set_field(mask: Long, fieldValue: Long): Unit = {
     val offset = TrailingZeros(mask)
     value = (value & ~mask) | ((fieldValue << offset) & mask)
   }
 
-  def getField(mask: Long) = {
+  def get_field(mask: Long) = {
     val offset = TrailingZeros(mask)
     (value & mask) >> offset
   }
 
-  def getRawValue = value
+  def get_raw = value
 }
 
 object MipMask {

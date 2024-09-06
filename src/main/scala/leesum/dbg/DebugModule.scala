@@ -7,7 +7,7 @@ import leesum._
 import leesum.axi4.AXIDef
 
 class DebugModuleConfig {
-  val progbuf_num = 4
+  val progbuf_num = 0
   val abstract_data_num = 6
   val abits = 6
   val ir_length = 5
@@ -96,16 +96,39 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
   io.dmi_req.nodeq();
   io.dmi_resp.noenq();
 
-//  // debug module registers
-  val progbuf = RegInit(VecInit(Seq.fill(dm_config.progbuf_num)(0.U(32.W))))
+  // ------------------------------
+  // debug module registers
+  // 1. dmstatus should have a init value
+  // 2. abstractcs should have a init value
+  // ------------------------------
+  val dmstatus_init_val = new CSRBitField(0)
+  val abstractcs_init_val = new CSRBitField(0)
+
+  // There is a Debug Module and it conforms toversion 0.13 of this specification.
+  dmstatus_init_val.set_field(DMStatusMask.version, 2)
+  // On components that don’t implement authentication, this bit must be preset as 1.
+  dmstatus_init_val.set_field(DMStatusMask.authenticated, 1)
+  dmstatus_init_val.set_field(DMStatusMask.impebreak, 0)
+
+  abstractcs_init_val.set_field(
+    AbstractcsMask.datacount,
+    dm_config.abstract_data_num
+  )
+  // Don’t support program buffer access
+  abstractcs_init_val.set_field(AbstractcsMask.progbufsize, 0)
+
+  val progbuf = RegInit(
+    VecInit(Seq.fill(math.max(1, dm_config.progbuf_num))(0.U(32.W)))
+  )
   val abstract_data = RegInit(
     VecInit(Seq.fill(dm_config.abstract_data_num)(0.U(32.W)))
   )
   val dmcontrol = RegInit(0.U(32.W))
-  val dmstatus = RegInit(0.U(32.W))
+  val dmstatus = RegInit(dmstatus_init_val.get_raw.U(32.W))
   val hartinfo = RegInit(0.U(32.W))
-  val abstractcs = RegInit(0.U(32.W))
+  val abstractcs = RegInit(abstractcs_init_val.get_raw.U(32.W))
   val command = RegInit(0.U(32.W))
+  val sbcs = RegInit(0.U(32.W)) // not support sbcs, always 0
 
   def arg_read32(idx: Int): UInt = {
     require(idx < dm_config.abstract_data_num)
@@ -148,13 +171,16 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       io.debug_core_interface.clear_havereset.valid := true.B
     }
 
+    // Writing 0 clears the halt request bit for all currently selected harts.
+    // This may cancel outstanding halt requests for those harts.
+    // Writing 1 sets the halt request bit for all currently
+    // selected harts. Running harts will halt whenever
+    // their halt request bit is set.
+    io.debug_core_interface.halt_req.valid := true.B
+    io.debug_core_interface.halt_req.bits := new_dmcontrol_field.haltreq
+
     when(new_dmcontrol_field.haltreq) {
-      // Writing 0 clears the halt request bit for all currently selected harts.
-      // This may cancel outstanding halt requests for those harts.
-      // Writing 1 sets the halt request bit for all currently
-      // selected harts. Running harts will halt whenever
-      // their halt request bit is set.
-      io.debug_core_interface.halt_req.valid := true.B
+
       printf("DM: hart haltreq\"\n")
     }.elsewhen(new_dmcontrol_field.resumereq) {
       // Writing 1 causes the currently selected harts to
@@ -298,7 +324,8 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       (DbgPKG.HALTSUM1_ADDR, 0.U, empty_read, empty_write),
       (DbgPKG.HAWINDOWSEL_ADDR, 0.U, empty_read, empty_write),
       (DbgPKG.HAWINDOW, 0.U, empty_read, empty_write),
-      (DbgPKG.ABSTRACTAUTO_ADDR, 0.U, empty_read, empty_write)
+      (DbgPKG.ABSTRACTAUTO_ADDR, 0.U, empty_read, empty_write),
+      (DbgPKG.SBCS_ADDR, sbcs, empty_read, empty_write)
     )
 
   for ((addr, reg, read_func, write_func) <- m_map) {
@@ -337,10 +364,9 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
         }
         is(DbgPKG.DMI_OP_WRITE.U) {
           // 写操作，写操作可能会有副作用
-          // 1. 写 dmcontrol 寄存器 (控制 hart 状态)
-          // 2. 写 command 寄存器 （执行 perform_abstract_command）
+          // 1. 写 command 寄存器 （执行 perform_abstract_command）
           val side_effect_dm_regs = VecInit(
-            DbgPKG.DMCONTROL_ADDR.asUInt,
+//            DbgPKG.DMCONTROL_ADDR.asUInt,
             DbgPKG.COMMAND_ADDR.asUInt
           )
 
@@ -380,6 +406,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       }
     }
     is(sDMI_SideEff) {
+      // Wait for the side effect(abstract command) to complete
       when(dmi_can_exit_side_effect_state) {
         dmi_state := sDMI_SenResp
       }
@@ -456,6 +483,10 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
           // appear to be hung (busy never goes low).
           printf("Do not perform command when hart is running\n")
 
+          assert(
+            io.debug_core_interface.state_regs.is_halted,
+            "Do not perform command when hart is running"
+          )
           cmderr_buf := DbgPKG.CMDERR_HALT_RESUME.U
           perf_abs_state := sPerfABS_ERR
 
