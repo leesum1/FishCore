@@ -131,8 +131,9 @@ class DCacheTopIn(formal: Boolean = false) extends Module {
   mmio_fsm.io.axi_mem <> io.mmio_master
 
   val select_refill_way = RegInit(0.U(log2Ceil(dcache_way).W))
-  val rlen_buf = RegInit(0.U(8.W))
   val refill_data_buf = RegInit(0.U.asTypeOf(Vec(2, UInt(64.W))))
+  val rlen_buf = RegInit(0.U(log2Ceil(2).W))
+
   val dcache_resp_buf = RegInit(0.U.asTypeOf(new DCacheResp))
 
   val fencei_way = Counter(4)

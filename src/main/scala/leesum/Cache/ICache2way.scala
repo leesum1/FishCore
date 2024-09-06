@@ -12,7 +12,7 @@ class LookupField(x: UInt) {
   val offset = x(3, 0) // 4
 
   // aligned by 8 bytes
-  val aligned_offset = x(3)
+  val aligned_offset = x(3) // TODO: bugs here!!! width should by way_count
 }
 
 class ICache2way(way_count: Int = 2) extends Module {
@@ -32,6 +32,7 @@ class ICache2way(way_count: Int = 2) extends Module {
     val clear_en = Input(Bool())
   })
   require(isPow2(way_count), "way_count should be power of 2")
+  require(way_count == 2, "only support 2 way cache")
 
   val vlookup_field = new LookupField(io.addr)
 

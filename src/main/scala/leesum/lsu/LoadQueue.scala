@@ -87,7 +87,7 @@ class LoadQueue extends Module {
   }
 
   def compose_write_back_data(rdata: UInt, load_info: LoadQueueIn): UInt = {
-    val rdata_vec = rdata.asTypeOf(Vec(8, UInt(8.W)))
+    val rdata_vec = WireInit(rdata.asTypeOf(Vec(8, UInt(8.W))))
     val wstrb_vec = load_info.store_bypass.wstrb.asBools
     val wdata_vec = load_info.store_bypass.wdata.asTypeOf(Vec(8, UInt(8.W)))
 

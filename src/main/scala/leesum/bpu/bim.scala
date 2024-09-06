@@ -32,13 +32,13 @@ class BIM(nums: Int) extends Module {
   bim_datas.io.wdata := io.refill_data
 
   val bim_rdata = bim_datas.io.rdata
-  val bim_rdata_valid = RegNext(bim_valids(io.lookup_pc(3 + log2Ceil(nums), 3)))
+  val bim_rdata_valid = RegNext(bim_valids(io.lookup_pc(2 + log2Ceil(nums), 3)))
 
   io.bim_value := bim_rdata
   io.bim_valid := HoldRegister(io.lookup_en, bim_rdata_valid, 1)
 
   when(io.refill_en) {
-    bim_valids(io.refill_pc(3 + log2Ceil(nums), 3)) := true.B
+    bim_valids(io.refill_pc(2 + log2Ceil(nums), 3)) := true.B
   }
 
   when(io.clear_en) {

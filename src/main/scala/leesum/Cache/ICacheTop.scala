@@ -46,7 +46,7 @@ class ICacheTop(formal: Boolean = false) extends Module {
   val refill_buf_idx = RegInit(0.U(1.W))
   val icache_rdata_buf = RegInit(0.U(64.W))
   // icache should keep the last rdata until the next read
-  val icache2way = Module(new ICache2way(4))
+  val icache2way = Module(new ICache2way(2)) // TODO: only 2 way now
   icache2way.io.clear_en := io.fencei // fencei will clear the icache
   icache2way.io.addr := io.req.bits.va(38, 0)
   icache2way.io.lookup_en := io.req.fire

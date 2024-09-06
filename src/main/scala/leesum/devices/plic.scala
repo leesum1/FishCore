@@ -261,9 +261,16 @@ class plic(
     )
 
     when(read_result.bits =/= 0.U) {
-      assert(claimed_bits(read_result.bits) === false.B, "claim error")
+      assert(
+        claimed_bits(
+          read_result.bits(log2Ceil(io.irq_pendings.length) - 1, 0)
+        ) === false.B,
+        "claim error"
+      )
       // set claimed bit
-      claimed_bits(read_result.bits) := true.B
+      claimed_bits(
+        read_result.bits(log2Ceil(io.irq_pendings.length) - 1, 0)
+      ) := true.B
     }
     read_result
   }
@@ -278,7 +285,7 @@ class plic(
     write_result.bits := wdata
 
     assert(wdata < num_ints.U, "complete error")
-    claimed_bits(wdata) := false.B
+    claimed_bits(wdata(log2Ceil(io.irq_pendings.length) - 1, 0)) := false.B
 
     write_result
   }

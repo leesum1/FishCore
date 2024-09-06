@@ -1,7 +1,7 @@
 package leesum.Cache
 
 import chisel3._
-import chisel3.util.{Cat, DecoupledIO, Enum, Mux1H, is, switch}
+import chisel3.util.{Cat, DecoupledIO, Enum, Mux1H, is, log2Ceil, switch}
 import leesum.GenVerilogHelper
 import leesum.axi4.AXIMasterIO
 
@@ -20,7 +20,7 @@ class CacheWBbundle extends Bundle {
 
     val cacheline_by8byte =
       cacheline.asTypeOf(Vec(cacheline_size_by8byte, UInt(64.W)))
-    cacheline_by8byte(offset_by8byte)
+    cacheline_by8byte(offset_by8byte(log2Ceil(cacheline_size_by8byte) - 1, 0))
   }
 }
 
