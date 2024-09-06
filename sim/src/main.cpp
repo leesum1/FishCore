@@ -4,20 +4,19 @@
 #include "AMVGADev.h"
 #include "CLI/CLI.hpp"
 #include "DeviceMange.h"
+#include "RemoteBitBang.hpp"
 #include "SimBase.h"
 #include "difftest.hpp"
 #include "include/Itrace.h"
 #include "include/SramMemoryDev.h"
 #include "spdlog/async.h"
 #include "spdlog/sinks/basic_file_sink.h"
-#include "spdlog/sinks/rotating_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
-#include "spdlog/spdlog.h"
 #include <PerfMonitor.h>
+#include <csignal>
 #include <cstdint>
 #include <cstdio>
-#include <ranges>
-#include <sys/types.h>
+
 constexpr auto MEM_BASE = 0x80000000L;
 constexpr auto MEM_SIZE = 0x8000000L;
 constexpr auto DEVICE_BASE = 0xa0000000L;
@@ -28,7 +27,25 @@ constexpr auto VGACTL_ADDR = DEVICE_BASE + 0x0000100L;
 constexpr auto FB_ADDR = DEVICE_BASE + 0x1000000L;
 constexpr auto BOOT_PC = 0x80000000L;
 
+static bool is_exit = false;
+
+void signal_handler(int signal) {
+  if (signal == SIGINT) {
+    std::cout << "Ctrl+C detected. Exiting gracefully..." << std::endl;
+    // 在这里执行清理操作
+    // ...
+    is_exit = true;
+  }
+}
+
 int main(int argc, char **argv) {
+
+  // 注册信号处理函数
+  if (signal(SIGINT, signal_handler) == SIG_ERR) {
+    std::cerr << "Error setting up signal handler" << std::endl;
+    return EXIT_FAILURE;
+  }
+
   std::string image_name;
   bool wave_en = false;
   uint64_t wave_stime = 0;
@@ -38,8 +55,11 @@ int main(int argc, char **argv) {
   bool difftest_log_en = false;
   bool am_en = false;
   bool vga_en = false;
+  bool rbb_en = false;
+  bool to_host_check = false;
 
   long max_cycles = 50000;
+  int rbb_port = 23456;
   std::optional<std::string> dump_signature_file;
 
   CLI::App app{"Simulator for RISC-V"};
@@ -64,6 +84,15 @@ int main(int argc, char **argv) {
       ->default_val(false);
   // device options
   app.add_flag("--vga", vga_en, "enable am vga")->default_val(false);
+
+  // remote bitbang options
+  app.add_flag("--rbb", rbb_en, "enable remote bitbang")->default_val(false);
+  app.add_option("--rbb_port", rbb_port, "remote bitbang port")
+      ->default_val(23456);
+
+  // tohost check
+  app.add_flag("--to_host_check", to_host_check, "enable to_host check")
+      ->default_val(false);
 
   CLI11_PARSE(app, argc, argv)
 
@@ -188,24 +217,32 @@ int main(int argc, char **argv) {
   // Exit Condtion Detect
   // -----------------------
 
-  // for riscof and riscv-tests, use to_host to communicate with simulation
-  // environment
-  sim_base.add_after_clk_rise_task(
-      {[&] {
-         sim_mem.check_to_host([&] {
-           sim_base.set_state(SimBase::sim_stop);
-           console->info("Write tohost at pc: 0x{:016x}\n", sim_base.get_pc());
-         });
-       },
-       "to_host_check", 1024});
+  if (to_host_check) {
+    // for riscof and riscv-tests, use to_host to communicate with simulation
+    // environment
+    sim_base.add_after_clk_rise_task({[&] {
+                                        sim_mem.check_to_host([&] {
+                                          sim_base.set_state(SimBase::sim_stop);
+                                          console->info(
+                                              "Write tohost at pc: 0x{:016x}\n",
+                                              sim_base.get_pc());
+                                        });
+                                      },
+                                      "to_host_check", 1024});
+  }
 
   sim_base.add_after_clk_rise_task(
       {[&] {
          if (sim_base.not_commit_num > 4096) {
-           console->critical(
-               "no commit for {} cycles, dead lock at pc: 0x{:016x}\n", 4096,
-               sim_base.get_pc());
-           sim_base.set_state(SimBase::sim_abort);
+           if (sim_base.top->io_is_halted != 0) {
+             // not check on halt
+             sim_base.not_commit_num = 0;
+           } else {
+             console->critical(
+                 "no commit for {} cycles, dead lock at pc: 0x{:016x}\n", 4096,
+                 sim_base.get_pc());
+             sim_base.set_state(SimBase::sim_abort);
+           }
          }
        },
        "dead_lock_check", 4096});
@@ -355,6 +392,45 @@ int main(int argc, char **argv) {
            }
          },
          "Inst Trace", 0});
+  }
+
+  // -----------------------
+  // SimJtag(remote bitbang)
+  // -----------------------
+
+  auto rbb_simjtag = std::optional<RemoteBitBang>();
+  if (rbb_en) {
+    rbb_simjtag.emplace(rbb_port);
+
+    sim_base.add_after_clk_rise_task(
+        {[&] {
+           const auto top = sim_base.top;
+
+           unsigned char *jtag_tck_ptr =
+               static_cast<unsigned char *>(&(top->io_jtag_io_tck));
+           unsigned char *jtag_tms_ptr =
+               static_cast<unsigned char *>(&(top->io_jtag_io_tms));
+           unsigned char *jtag_tdi_ptr =
+               static_cast<unsigned char *>(&(top->io_jtag_io_tdi));
+           unsigned char *jtag_tdo_ptr =
+               static_cast<unsigned char *>(&(top->io_jtag_io_tdo));
+
+           top->io_jtag_io_tdi_en = 1;
+           static unsigned char last_tclk = *jtag_tck_ptr;
+           rbb_simjtag->tick(jtag_tck_ptr, jtag_tms_ptr, jtag_tdi_ptr,
+                             *jtag_tdo_ptr);
+
+           //  // last != now
+           //  if (last_tclk != *jtag_tck_ptr) {
+           //    std::cout << "tck: " << (int)*jtag_tck_ptr
+           //              << " tms: " << (int)*jtag_tms_ptr
+           //              << " tdi: " << (int)*jtag_tdi_ptr
+           //              << " tdo: " << (int)*jtag_tdo_ptr << std::endl;
+           //  }
+
+           // TODO: add simjtag
+         },
+         "simjtag", 5});
   }
 
   // --------------------------
@@ -526,7 +602,7 @@ int main(int argc, char **argv) {
   auto start_time = std::chrono::utc_clock::now();
 
   // simulator loop
-  while (!sim_base.finished() && sim_base.cycle_num < max_cycles) {
+  while (!sim_base.finished() && !is_exit && sim_base.cycle_num < max_cycles) {
     sim_base.step();
   }
 

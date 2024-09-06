@@ -6,6 +6,8 @@ if is_mode("release") then
 	--     set_policy("build.sanitizer.address", true)
 end
 
+
+
 if is_mode("debug") then
 	set_symbols("debug")
 	set_optimize("none")
@@ -35,7 +37,7 @@ set_policy("build.warning", true)
 -- set_warnings("all", "extra")
 
 -- 设置 C++20 标准
-set_languages("cxx20")
+set_languages("cxx23")
 
 add_rules("plugin.compile_commands.autoupdate", { outputdir = "." })
 
@@ -61,7 +63,7 @@ target("Vtop")
 	set_toolchains("@verilator")
 	add_files("src/*.cpp")
 	add_files("vsrc/*.sv")
-	add_values("verilator.flags", "--top", "FishSoc", "--Wno-WIDTHEXPAND")
+	add_values("verilator.flags", "--top", "FishSoc")
 
 
 	-- 根据 enable_trace 选项添加 --trace 标志
@@ -70,7 +72,7 @@ target("Vtop")
 	end
 
 	if has_config("enable_multithread") then
-		add_values("verilator.flags", "--threads", "3")
+		add_values("verilator.flags", "--threads", "2")
 	end
 
 	-- add_values("verilator.flags", "--trace-max-array","256")
@@ -95,6 +97,23 @@ task("wave")
         os.exec("gtkwave " .. waveform_file)
     end)
 task_end()
+
+
+
+task("surfer")
+    set_menu {
+        usage = "xmake surfer",
+        description = "Open the waveform file with surfer",
+    }
+    on_run(function ()
+        local waveform_file = "build/linux/x86_64/release/wave.fst"
+        os.exec("surfer " .. waveform_file)
+    end)
+task_end()
+
+
+
+
 
 task("update_cc")
 	set_menu {

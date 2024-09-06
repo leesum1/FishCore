@@ -1,0 +1,239 @@
+[*]
+[*] GTKWave Analyzer v3.3.120 (w)1999-2024 BSI
+[*] Fri Sep  6 09:10:17 2024
+[*]
+[dumpfile] "/home/leesum/workhome/chisel-fish/sim/build/linux/x86_64/release/wave.fst"
+[dumpfile_mtime] "Fri Sep  6 09:09:32 2024"
+[dumpfile_size] 50399768
+[savefile] "/home/leesum/workhome/chisel-fish/sim/gtkwave_config/debug_module.gtkw"
+[timestart] 15023000
+[size] 2194 1127
+[pos] -1 -1
+*-20.700001 193319 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.FishSoc.
+[treeopen] TOP.FishSoc.core.
+[treeopen] TOP.FishSoc.core.commit_stage.
+[treeopen] TOP.FishSoc.debug_top.jtag2dm_cdc_hs.
+[treeopen] TOP.FishSoc.debug_top.jtag_dtm.
+[sst_width] 858
+[signals_width] 458
+[sst_expanded] 1
+[sst_vpaned_height] 607
+@800200
+-clock
+@80000024
+[color] 7
+TOP.clock
+@28
+TOP.FishSoc.io_jtag_io_tck
+@1000200
+-clock
+@c00200
+-jtag_dtm
+@2022
+^1 /home/leesum/workhome/chisel-fish/sim/gtkwave_config/dtm_regs.gtkw
+TOP.FishSoc.debug_top.jtag_dtm.ir_reg[4:0]
+@2024
+^2 /home/leesum/workhome/chisel-fish/sim/gtkwave_config/jtag_stage.gtkw
+TOP.FishSoc.debug_top.jtag_dtm.jtag_state[3:0]
+^3 /home/leesum/workhome/chisel-fish/sim/gtkwave_config/dmi_stage.gtkw
+TOP.FishSoc.debug_top.jtag_dtm.dmi_state[1:0]
+@800200
+-dr_shift
+@28
+TOP.FishSoc.debug_top.jtag_dtm.dr_shift_reg.io_update_valid
+@22
+TOP.FishSoc.debug_top.jtag_dtm.dr_shift_reg.io_update_data_len[5:0]
+TOP.FishSoc.debug_top.jtag_dtm.dr_shift_reg.io_update_data[39:0]
+@28
+TOP.FishSoc.debug_top.jtag_dtm.dr_shift_reg.io_shift_valid
+@22
+TOP.FishSoc.debug_top.jtag_dtm.dr_shift_reg.io_shift_reg_out[39:0]
+@1000200
+-dr_shift
+@c00200
+-ir_shift
+@28
+TOP.FishSoc.debug_top.jtag_dtm.ir_shift_reg.io_update_valid
+TOP.FishSoc.debug_top.jtag_dtm.ir_shift_reg.io_update_data_len[2:0]
+@22
+TOP.FishSoc.debug_top.jtag_dtm.ir_shift_reg.io_update_data[4:0]
+TOP.FishSoc.debug_top.jtag_dtm.ir_shift_reg.io_shift_reg_out[4:0]
+@28
+TOP.FishSoc.debug_top.jtag_dtm.ir_shift_reg.io_shift_valid
+@1401200
+-ir_shift
+@800200
+-dmi_req
+@2022
+^4 /home/leesum/workhome/chisel-fish/sim/gtkwave_config/dm_regs.gtkw
+TOP.FishSoc.debug_top.jtag_dtm.io_dmi_req_bits_addr[5:0]
+@22
+TOP.FishSoc.debug_top.jtag_dtm.io_dmi_req_bits_data[31:0]
+@28
+TOP.FishSoc.debug_top.jtag_dtm.io_dmi_req_bits_op[1:0]
+TOP.FishSoc.debug_top.jtag_dtm.io_dmi_req_ready
+TOP.FishSoc.debug_top.jtag_dtm.io_dmi_req_valid
+@1000200
+-dmi_req
+@800200
+-dmi_resp
+@2022
+^4 /home/leesum/workhome/chisel-fish/sim/gtkwave_config/dm_regs.gtkw
+TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_bits_addr[5:0]
+@22
+TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_bits_data[31:0]
+@28
+TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_bits_op[1:0]
+TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_ready
+TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_valid
+@1000200
+-dmi_resp
+@1401200
+-jtag_dtm
+@22
+TOP.FishSoc.debug_top.jtag_dtm.dtm_dmi[39:0]
+TOP.FishSoc.debug_top.jtag_dtm.dtm_dtmcs[39:0]
+@28
+TOP.FishSoc.debug_top.jtag_dtm.dmi_busy
+TOP.FishSoc.debug_top.jtag_dtm.in_dmi_error
+@c00200
+-dache_reqresp
+@28
+TOP.FishSoc.debug_top.io_debug_core_interface_dcache_req_valid
+TOP.FishSoc.debug_top.io_debug_core_interface_dcache_req_ready
+TOP.FishSoc.debug_top.io_debug_core_interface_dcache_req_bits_is_store
+TOP.FishSoc.debug_top.io_debug_core_interface_dcache_req_bits_size[1:0]
+@22
+TOP.FishSoc.debug_top.io_debug_core_interface_dcache_req_bits_wstrb[7:0]
+TOP.FishSoc.debug_top.io_debug_core_interface_dcache_req_bits_paddr[63:0]
+TOP.FishSoc.debug_top.io_debug_core_interface_dcache_req_bits_wdata[63:0]
+@200
+-
+@22
+TOP.FishSoc.debug_top.io_debug_core_interface_dcache_resp_bits_rdata[63:0]
+@28
+TOP.FishSoc.debug_top.io_debug_core_interface_dcache_resp_ready
+TOP.FishSoc.debug_top.io_debug_core_interface_dcache_resp_valid
+@1401200
+-dache_reqresp
+@c00200
+-debug_gpr
+@22
+TOP.FishSoc.debug_top.io_debug_core_interface_gpr_read_port_rs1_addr[4:0]
+TOP.FishSoc.debug_top.io_debug_core_interface_gpr_read_port_rs1_data[63:0]
+TOP.FishSoc.debug_top.io_debug_core_interface_gpr_write_port_addr[4:0]
+TOP.FishSoc.debug_top.io_debug_core_interface_gpr_write_port_wdata[63:0]
+@28
+TOP.FishSoc.debug_top.io_debug_core_interface_gpr_write_port_wen
+@1401200
+-debug_gpr
+@c00200
+-debug_csr
+@22
+TOP.FishSoc.debug_top.io_debug_core_interface_csr_read_port_addr[11:0]
+TOP.FishSoc.debug_top.io_debug_core_interface_csr_read_port_read_data[63:0]
+@28
+TOP.FishSoc.debug_top.io_debug_core_interface_csr_read_port_read_en
+@22
+TOP.FishSoc.debug_top.io_debug_core_interface_csr_write_port_addr[11:0]
+TOP.FishSoc.debug_top.io_debug_core_interface_csr_write_port_write_data[63:0]
+@28
+TOP.FishSoc.debug_top.io_debug_core_interface_csr_write_port_write_en
+@1401200
+-debug_csr
+@c00200
+-asb_data_arr
+@c00022
+TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+@28
+(0)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(1)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(2)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(3)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(4)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(5)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(6)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(7)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(8)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(9)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(10)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(11)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(12)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(13)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(14)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(15)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(16)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(17)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(18)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(19)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(20)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(21)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(22)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(23)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(24)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(25)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(26)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(27)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(28)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(29)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(30)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+(31)TOP.FishSoc.debug_top.debug_module.abstract_data_0[31:0]
+@1401200
+-group_end
+@22
+TOP.FishSoc.debug_top.debug_module.abstract_data_1[31:0]
+TOP.FishSoc.debug_top.debug_module.abstract_data_2[31:0]
+TOP.FishSoc.debug_top.debug_module.abstract_data_3[31:0]
+@1401200
+-asb_data_arr
+@c00200
+-dm
+@2024
+^5 /home/leesum/workhome/chisel-fish/sim/gtkwave_config/dm_dmi_stage.gtkw
+TOP.FishSoc.debug_top.debug_module.dmi_state[1:0]
+^6 /home/leesum/workhome/chisel-fish/sim/gtkwave_config/perf_abs_state.gtkw
+TOP.FishSoc.debug_top.debug_module.perf_abs_state[2:0]
+@c00200
+-dmi_req
+@28
+TOP.FishSoc.debug_top.debug_module.io_dmi_req_valid
+TOP.FishSoc.debug_top.debug_module.io_dmi_req_ready
+@22
+TOP.FishSoc.debug_top.debug_module.io_dmi_req_bits_addr[5:0]
+TOP.FishSoc.debug_top.debug_module.io_dmi_req_bits_data[31:0]
+@28
+TOP.FishSoc.debug_top.debug_module.io_dmi_req_bits_op[1:0]
+@1401200
+-dmi_req
+@c00200
+-dmi_resp
+@28
+TOP.FishSoc.debug_top.debug_module.io_dmi_resp_valid
+TOP.FishSoc.debug_top.debug_module.io_dmi_resp_ready
+@22
+TOP.FishSoc.debug_top.debug_module.io_dmi_resp_bits_addr[5:0]
+TOP.FishSoc.debug_top.debug_module.io_dmi_resp_bits_data[31:0]
+@28
+TOP.FishSoc.debug_top.debug_module.io_dmi_resp_bits_op[1:0]
+@22
+TOP.FishSoc.debug_top.debug_module.dmcontrol[31:0]
+@1401200
+-dmi_resp
+-dm
+@28
+TOP.FishSoc.debug_top.jtag2dm_cdc_hs.io_resp_clkB_valid
+TOP.FishSoc.debug_top.jtag2dm_cdc_hs.io_resp_clkB_ready
+TOP.FishSoc.debug_top.jtag2dm_cdc_hs.io_resp_clkA_valid
+TOP.FishSoc.debug_top.jtag2dm_cdc_hs.io_resp_clkA_ready
+TOP.FishSoc.io_jtag_io_tck
+TOP.FishSoc.core.io_debug_core_interface_halt_req_valid
+TOP.FishSoc.core.io_debug_core_interface_state_regs_is_halted
+TOP.FishSoc.core.io_debug_core_interface_resume_req_valid
+TOP.FishSoc.core.io_debug_core_interface_state_regs_resumeack_signal
+@22
+TOP.FishSoc.io_difftest_bits_commited_num[7:0]
+TOP.FishSoc.io_difftest_bits_inst_info_0_pc[63:0]
+[pattern_trace] 1
+[pattern_trace] 0

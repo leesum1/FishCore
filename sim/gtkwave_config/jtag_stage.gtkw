@@ -1,0 +1,16 @@
+0  TestLogicReset
+1  RunTestIdle
+2  SelectDrScan
+3  CaptureDr
+4  ShiftDr
+5  Exit1Dr
+6  PauseDr
+7  Exit2Dr
+8  UpdateDr
+9  SelectIrScan
+10  CaptureIr
+11  ShiftIr
+12  Exit1Ir
+13  PauseIr
+14  Exit2Ir
+15  UpdateIr

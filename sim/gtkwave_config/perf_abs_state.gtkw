@@ -1,0 +1,6 @@
+0 IDLE
+1 REGReq
+2 REGResp
+3 MEMReq
+4 MEMResp
+5 ERR
