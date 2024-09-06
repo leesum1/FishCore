@@ -1,6 +1,7 @@
 package leesum
 import chisel3._
 import chisel3.util._
+import leesum.Utils.SimLog
 import leesum.bpu.BTBEntry
 import leesum.dbg.DbgSlaveState
 import leesum.mmu_sv39.SfenceVMABundle
@@ -107,10 +108,12 @@ class CommitStage(
   io.debug_state_regs := debug_state_regs
 
   when(io.debug_halt_req.valid) {
+    SimLog(desiredName, "halt req %d\n", io.debug_halt_req.bits)
     debug_state_regs.set_haltreq(io.debug_halt_req.bits)
   }
 
   when(io.debug_resume_req.valid) {
+    SimLog(desiredName, "resume req\n")
     debug_state_regs.set_resumereq()
   }
 
@@ -726,6 +729,7 @@ class CommitStage(
 
     switch(debug_state) {
       is(sDebugIdle) {
+        SimLog(desiredName, "will enter debug mode\n")
 
         debug_state := sEnterDebug
         debug_cause_buf := debug_cause
@@ -778,6 +782,8 @@ class CommitStage(
       has_interrupt === false.B,
       "csr side effect and interrupt should not happen at the same time"
     )
+    SimLog(desiredName, "csr side effect flush at %x\n", rob_data_seq.head.pc)
+
     // if csr side effect is true, we should flush the pipeline
     // and rerun the current inst
     csr_side_effect := false.B
@@ -810,6 +816,7 @@ class CommitStage(
     switch(resume_state) {
       is(sResumeIdle) {
         resume_state := sResumeExitDebug
+        SimLog(desiredName, "will exit debug mode\n")
       }
       is(sResumeExitDebug) {
         // clear dcsr
@@ -853,6 +860,7 @@ class CommitStage(
           // 5. check step, and set single step flag
           // use resume bits for step for test
           when(dcsr.step || io.debug_resume_req.bits) {
+            SimLog(desiredName, "Entry step mode\n")
             debug_state_regs.set_step()
           }
 
@@ -1053,7 +1061,12 @@ class CommitStage(
         privilege_mode
       )
 
-//      printf("mmode interrupt at %x, cause: %x\n", new_pc, cause.asUInt)
+      SimLog(
+        desiredName,
+        "mmode interrupt at %x, cause: %x\n",
+        new_pc,
+        cause.asUInt
+      )
 
     }.elsewhen(interrupt_smode && smode_has_interrupt) {
       val cause = smode_pending.get_priority_interupt
@@ -1081,7 +1094,12 @@ class CommitStage(
       io.direct_write_ports.mstatus.bits := mstatus.get_smode_exception_mstatus(
         privilege_mode
       )
-//      printf("smode interrupt at %x, cause: %x\n", new_pc, cause.asUInt)
+      SimLog(
+        desiredName,
+        "smode interrupt at %x, cause: %x\n",
+        new_pc,
+        cause.asUInt
+      )
     }
   }
 

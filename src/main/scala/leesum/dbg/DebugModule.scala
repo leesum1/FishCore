@@ -3,6 +3,7 @@ package leesum.dbg
 import chisel3._
 import chisel3.util.{DecoupledIO, _}
 import leesum.Cache.{DCacheReq, DCacheResp}
+import leesum.Utils.SimLog
 import leesum._
 import leesum.axi4.AXIDef
 
@@ -71,19 +72,8 @@ class DebugModuleCoreInterface extends Bundle {
   */
 class DebugModule(dm_config: DebugModuleConfig) extends Module {
   val io = IO(new Bundle {
-    //  dm <> core interface
-//    val debug_state_regs = Input(new DbgSlaveState())
-//    val debug_halt_req = Output(ValidIO(Bool()))
-//    val debug_resume_req = Output(ValidIO(Bool()))
-//    val debug_reset_req = Output(ValidIO(Bool()))
-//    val debug_core_interface.clear_havereset = Output(ValidIO(Bool()))
-//    val debug_gpr_read_port = new RegFileReadPort
-//    val debug_gpr_write_port = Flipped(new GPRsWritePort)
-//    val debug_csr_read_port = new CSRReadPort
-//    val debug_csr_write_port = new CSRWritePort
-//    val debug_dcache_req = Decoupled(new DCacheReq)
-//    val debug_dcache_resp = Flipped(Decoupled(new DCacheResp))
 
+    //  dm <> core interface
     val debug_core_interface = new DebugModuleCoreInterface
 
     // dmi <> dm interface
@@ -92,19 +82,18 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
   })
 
   io.debug_core_interface.clear_port_as_master()
-  // clear_dmi_port
   io.dmi_req.nodeq();
   io.dmi_resp.noenq();
 
   // ------------------------------
   // debug module registers
-  // 1. dmstatus should have a init value
-  // 2. abstractcs should have a init value
+  // 1. dmstatus should have an init value
+  // 2. abstractcs should have an init value
   // ------------------------------
   val dmstatus_init_val = new CSRBitField(0)
   val abstractcs_init_val = new CSRBitField(0)
 
-  // There is a Debug Module and it conforms toversion 0.13 of this specification.
+  // There is a Debug Module, and it conforms to version 0.13 of this specification.
   dmstatus_init_val.set_field(DMStatusMask.version, 2)
   // On components that don’t implement authentication, this bit must be preset as 1.
   dmstatus_init_val.set_field(DMStatusMask.authenticated, 1)
@@ -164,7 +153,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
     val new_dmcontrol_field = new DMControlFiled(wdata)
 
     when(new_dmcontrol_field.dmactive && !old_dmcontrol_field.dmactive) {
-      printf("dmactive is set to 1, reset debug module\n")
+      SimLog.custom("DM", "dmactive is set to 1, reset debug module \n")
     }
 
     when(new_dmcontrol_field.ackhavereset) {
@@ -181,7 +170,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
     when(new_dmcontrol_field.haltreq) {
 
-      printf("DM: hart haltreq\"\n")
+      SimLog.custom(desiredName, "DM: hart haltreq\n")
     }.elsewhen(new_dmcontrol_field.resumereq) {
       // Writing 1 causes the currently selected harts to
       // resume once, if they are halted when to write
@@ -189,7 +178,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       // harts.
       // resumereq is ignored if haltreq is set.
       io.debug_core_interface.resume_req.valid := true.B
-      printf("DM: hart resumereq\"\n")
+      SimLog.custom(desiredName, "DM: hart resumereq\"\n")
     }
 
     when(new_dmcontrol_field.hartreset) {
@@ -466,7 +455,8 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
         when(abstractcs_field.cmderr =/= DbgPKG.CMDERR_NONE.U) {
           // No abstract command is started until the value is reset to 0.
           // If cmderr is non-zero, writes to this register are ignored.
-          printf(
+          SimLog.custom(
+            desiredName,
             "Do not perform command when cmderr is not NONE, cmderr: %d\n",
             abstractcs_field.cmderr
           )
@@ -481,7 +471,10 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
           // unavailable while executing an abstract command, then the Debug Module may terminate the abstract
           // command, setting busy low, and cmderr to 4 (halt/resume). Alternatively, the command could just
           // appear to be hung (busy never goes low).
-          printf("Do not perform command when hart is running\n")
+          SimLog(
+            desiredName,
+            "Do not perform command when hart is running\n"
+          )
 
           assert(
             io.debug_core_interface.state_regs.is_halted,
@@ -492,7 +485,11 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
         }.elsewhen(not_supported_cmd_inst) {
           // not support cmd
-          printf("Do not support cmdtype: %d\n", command_field.cmdtype)
+          SimLog(
+            desiredName,
+            "Do not support cmdtype: %d\n",
+            command_field.cmdtype
+          )
 
           cmderr_buf := DbgPKG.CMDERR_NOTSUP.U
           perf_abs_state := sPerfABS_ERR
@@ -552,11 +549,27 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
           io.debug_core_interface.gpr_write_port.wen := true.B
           io.debug_core_interface.gpr_write_port.addr := command_field.reg_field.get_gpr_regno
           io.debug_core_interface.gpr_write_port.wdata := w_regdata
+
+          SimLog(
+            desiredName,
+            "write gpr: %x, data: %x\n",
+            command_field.reg_field.get_gpr_regno,
+            w_regdata
+          )
+
         }.otherwise {
           // 读取 gpr，读取的时候不在乎 32 位还是 64 位
           io.debug_core_interface.gpr_read_port.rs1_addr := command_field.reg_field.get_gpr_regno
           perf_abs_result_buf := io.debug_core_interface.gpr_read_port.rs1_data
+
+          SimLog(
+            desiredName,
+            "read gpr: %x, data: %x\n",
+            command_field.reg_field.get_gpr_regno,
+            perf_abs_result_buf
+          )
         }
+
       }
 
       // -------------------
@@ -569,12 +582,27 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
           io.debug_core_interface.csr_write_port.addr := command_field.reg_field.get_csr_regno
           io.debug_core_interface.csr_write_port.write_en := true.B
           io.debug_core_interface.csr_write_port.write_data := w_regdata
+          SimLog(
+            desiredName,
+            "write csr: %x, data: %x, exception:%d\n",
+            command_field.reg_field.get_csr_regno,
+            w_regdata,
+            io.debug_core_interface.csr_write_port.write_ex_resp
+          )
         }.otherwise {
           // 读取 csr，读取的时候不在乎 32 位还是 64 位
           io.debug_core_interface.csr_read_port.read_en := true.B
           io.debug_core_interface.csr_read_port.addr := command_field.reg_field.get_csr_regno
           perf_abs_result_buf := io.debug_core_interface.csr_read_port.read_data
+          SimLog(
+            desiredName,
+            "read csr: %x, data: %x, exception:%d\n",
+            command_field.reg_field.get_csr_regno,
+            perf_abs_result_buf,
+            io.debug_core_interface.csr_read_port.read_ex_resp
+          )
         }
+
         // TODO: csr 不存在怎么办
       }
 
@@ -588,6 +616,8 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
         // dmi 读取的时候会自动选择
         arg_write64(0, perf_abs_result_buf)
       }
+
+      // clear busy and cmderr on abstractcs
       set_abstractcs_busy_cmderr(DbgPKG.CMDERR_NONE.U(3.W), false.B)
       perf_abs_state := sPerfABS_IDLE
       // let dmi state machine continue
@@ -624,6 +654,15 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
       // dcache req hs
       when(io.debug_core_interface.dcache_req.fire) {
+
+        SimLog(
+          desiredName,
+          "mem req: addr: %x, wdata: %x, size: %d\n",
+          abs_mem_addr,
+          abs_mem_wdata,
+          abs_mem_size
+        )
+
         perf_abs_state := sPerfABS_MEMResp
       }
     }
