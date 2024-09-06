@@ -1,53 +1,71 @@
 package leesum.Utils
 
 import chisel3._
-import chisel3.util.{Decoupled, ShiftRegister}
+import chisel3.util.{Decoupled, Enum, ShiftRegister, is, switch}
 import leesum.GenVerilogHelper
 
-class CDCHandShakeMaster[T <: Data](gen: T) extends Module {
+class CDC2PhaseSrc[T <: Data](gen: T) extends Module {
   val io = IO(new Bundle {
-    val req_in = Flipped(Decoupled(gen))
-    val req_out = Decoupled(gen)
+    val sync_in = Flipped(Decoupled(gen))
+    val async_out = Decoupled(gen)
   })
 
-  // sync req_out_ready to the same domain as req_in
-  val req_out_ready_stable =
-    ShiftRegister(io.req_out.ready, 2, false.B, true.B)
+  // Registers with reset
+  val req_src_q = RegInit(false.B)
+  val ack_src_q = RegInit(false.B)
+  val ack_q = RegInit(false.B)
+  val data_src_q = RegInit(0.U.asTypeOf(gen))
 
-  val req_out_valid = RegNext(io.req_in.valid, init = false.B)
-//  val req_out_data = RegInit(0.U.asTypeOf(gen))
+  // The req_src and data_src registers change when a new data item is accepted.
+  when(io.sync_in.fire) {
+    req_src_q := ~req_src_q
+    data_src_q := io.sync_in.bits
+  }
 
-  io.req_out.valid := req_out_valid
-  io.req_out.bits := io.req_in.bits
-  io.req_in.ready := req_out_ready_stable
+  // The ack_src and ack registers act as synchronization stages.
+  ack_src_q := io.async_out.ready
+  ack_q := ack_src_q
+
+  // Output assignments.
+  io.sync_in.ready := (req_src_q === ack_q)
+  io.async_out.valid := req_src_q
+  io.async_out.bits := data_src_q
 }
 
-class CDCHandShakeSlave[T <: Data](gen: T) extends Module {
+class CDC2PhaseDst[T <: Data](gen: T) extends Module {
   val io = IO(new Bundle {
-    val req_in = Flipped(Decoupled(gen))
-    val req_out = Decoupled(gen)
+    val sync_out = Decoupled(gen)
+    val async_in = Flipped(Decoupled(gen))
   })
-  val req_in_valid_stable = ShiftRegister(io.req_in.valid, 2, false.B, true.B)
-  val req_in_ready = RegNext(io.req_out.ready, init = false.B)
 
-  io.req_out.valid := req_in_valid_stable
-  io.req_in.ready := req_in_ready
-  io.req_out.bits := io.req_in.bits
+  // Registers with reset
+  val req_dst_q = RegInit(false.B)
+  val req_q0 = RegInit(false.B)
+  val req_q1 = RegInit(false.B)
+  val ack_dst_q = RegInit(false.B)
+  val data_dst_q = RegInit(0.U.asTypeOf(gen))
+
+  // The ack_dst register changes when a new data item is accepted.
+  when(io.sync_out.fire) {
+    ack_dst_q := ~ack_dst_q
+  }
+
+  // The data_dst register changes when a new data item is presented.
+  when(req_q0 =/= req_q1 && !io.sync_out.valid) {
+    data_dst_q := io.async_in.bits
+  }
+
+  // The req_dst and req registers act as synchronization stages.
+  req_dst_q := io.async_in.valid
+  req_q0 := req_dst_q
+  req_q1 := req_q0
+
+  // Output assignments.
+  io.sync_out.valid := (ack_dst_q =/= req_q1)
+  io.sync_out.bits := data_dst_q
+  io.async_in.ready := ack_dst_q
 }
 
-/** Cross Domain Clock Handshake Request Response. This module has two clock
-  * domains, A and B. The request is sent from domain A to domain B. And the
-  * corresponding response is sent from domain B to domain A.
-  *
-  * @param req_type
-  *   request type
-  * @param resp_type
-  *   response type
-  * @tparam T
-  *   request type
-  * @tparam U
-  *   response type
-  */
 class CDCHandShakeReqResp[T <: Data, U <: Data](req_type: T, resp_type: U)
     extends Module {
   val io = IO(new Bundle {
@@ -62,33 +80,26 @@ class CDCHandShakeReqResp[T <: Data, U <: Data](req_type: T, resp_type: U)
     val resp_clkB = Flipped(Decoupled(resp_type))
   })
 
-  val Adomain_req_master = Module(new CDCHandShakeMaster(req_type))
-  val Adomain_resp_slave = Module(new CDCHandShakeSlave(resp_type))
+  val Adomain_req_master = Module(new CDC2PhaseSrc(req_type))
+  val Adomain_resp_slave = Module(new CDC2PhaseDst(resp_type))
 
   val Bdomain_req_slave = withClockAndReset(io.clkB, io.rstB) {
-    Module(new CDCHandShakeSlave(req_type))
+    Module(new CDC2PhaseDst(req_type))
   }
   val Bdomain_resp_master = withClockAndReset(io.clkB, io.rstB) {
-    Module(new CDCHandShakeMaster(resp_type))
+    Module(new CDC2PhaseSrc(resp_type))
   }
 
-  Adomain_req_master.io.req_in <> io.req_clkA
-  Adomain_req_master.io.req_out <> Bdomain_req_slave.io.req_in
-  Bdomain_req_slave.io.req_out <> io.req_clkB
+  Adomain_req_master.io.sync_in <> io.req_clkA
 
-  Bdomain_resp_master.io.req_in <> io.resp_clkB
-  Bdomain_resp_master.io.req_out <> Adomain_resp_slave.io.req_in
-  Adomain_resp_slave.io.req_out <> io.resp_clkA
+  Adomain_req_master.io.async_out <> Bdomain_req_slave.io.async_in
+  Bdomain_req_slave.io.sync_out <> io.req_clkB
+
+  Bdomain_resp_master.io.sync_in <> io.resp_clkB
+  Bdomain_resp_master.io.async_out <> Adomain_resp_slave.io.async_in
+  Adomain_resp_slave.io.sync_out <> io.resp_clkA
 }
 
 object CDCHandShakeReqRespGenVerilog extends App {
   GenVerilogHelper(new CDCHandShakeReqResp(UInt(8.W), UInt(8.W)))
-}
-
-object CDCHandShakeMasterGenVerilog extends App {
-  GenVerilogHelper(new CDCHandShakeMaster(UInt(32.W)))
-}
-
-object CDCHandShakeSlaveGenVerilog extends App {
-  GenVerilogHelper(new CDCHandShakeSlave(UInt(32.W)))
 }
