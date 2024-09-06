@@ -15,12 +15,30 @@ object SifiveUartConst {
   val div = 0x18
 }
 
+class UartIO extends Bundle {
+  val tx_data = Output(Valid(UInt(8.W)))
+  val rx_data = Input((Valid(UInt(8.W))))
+
+  def as_master(): UartIO = {
+    this
+  }
+
+  def as_slave(): UartIO = {
+    Flipped(this)
+  }
+
+}
+
 class SifiveUart(base_addr: Int) extends Module {
 
   val io = IO(new Bundle {
     val mem = new BasicMemoryIO(32, 32)
     val irq_out = Output(Bool())
+    val uart_io = (new UartIO).as_master()
   })
+
+  io.uart_io.tx_data.valid := false.B
+  io.uart_io.tx_data.bits := DontCare
 
   io.irq_out := false.B
 
@@ -49,8 +67,8 @@ class SifiveUart(base_addr: Int) extends Module {
   val txdata_write = (addr: UInt, reg: UInt, wdata: UInt) => {
     val write_result = Wire(Valid(UInt(reg.getWidth.W)))
 
-    // TODO: use printf to print txdata
-    printf("%c", wdata(7, 0))
+    io.uart_io.tx_data.valid := true.B
+    io.uart_io.tx_data.bits := wdata(7, 0)
 
     write_result.valid := true.B
     write_result.bits := wdata

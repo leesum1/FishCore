@@ -4,11 +4,12 @@ import chisel3._
 import chisel3.util.{Valid, log2Ceil}
 import leesum.axi4._
 import leesum.dbg.{DebugModuleConfig, DebugTop, JtagIO}
-import leesum.devices.{SifiveUart, clint, plic}
+import leesum.devices.{SifiveUart, UartIO, clint, plic}
 import leesum.moniter.{DifftestPort, PerfPort}
 import leesum.{GenVerilogHelper, MSBDivFreq}
 
 class FishSoc(
+    // TODO: add config struct
     muldiv_en: Boolean = true,
     rvc_en: Boolean = false
 ) extends Module {
@@ -17,6 +18,10 @@ class FishSoc(
     val difftest = Output(Valid(new DifftestPort(2)))
     val perf_monitor = Output(new PerfPort)
     val mem_port = Flipped(new BasicMemoryIO(32, 64))
+
+    // uart port
+    val uart_io = (new UartIO).as_master()
+
     // debug
     val jtag_io = new JtagIO(as_master = false)
     val is_halted = Output(Bool())
@@ -176,8 +181,13 @@ class FishSoc(
   plic_axi_bridge.io.mem_port <> plic32to64.io.before
   plic_axi_bridge.io.axi_slave <> axi_demux.io.out(2)
 
+  // ---------------------------------------------------------------------
+  // SifiveUart module
   // sifive_uart32 <> 32to64 <> sifive_uart_axi_bridge <> axi_demux(3)
+  // ---------------------------------------------------------------------
   val sifive_uart32 = Module(new SifiveUart(SIFIVE_UART_BASE.toInt))
+  sifive_uart32.io.uart_io.rx_data := io.uart_io.rx_data
+  io.uart_io.tx_data := sifive_uart32.io.uart_io.tx_data
 
   val sifive_uart32to64 = Module(
     new MemoryIO64to32(

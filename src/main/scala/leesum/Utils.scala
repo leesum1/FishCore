@@ -904,7 +904,7 @@ class RegMap {
     * @return
     *   Valid(UInt): bits is the read result
     */
-  def read(raddr: UInt): Valid[UInt] = {
+  def read(raddr: UInt, enable_1h: Boolean = true): Valid[UInt] = {
     val raddr_map = csr_map.map({ case (addr, (reg, read_func, _)) =>
       val addr_u = Long2UInt32(addr)
       val read_result = read_func(addr_u, reg)
@@ -913,15 +913,30 @@ class RegMap {
 
     val reg_width = csr_map.head._2._1.getWidth
 
-    val default = Wire(Valid(UInt(reg_width.W)))
-    default.valid := false.B
-    default.bits := 0.U
+    val default_read = Wire(Valid(UInt(reg_width.W)))
+    default_read.valid := false.B
+    default_read.bits := 0.U
 
-    // TODO: use reduceTree lookup?
-    val rdata = MuxLookup(raddr, default)(
+    val raddr_map_1h = csr_map
+      .map({ case (addr, (reg, read_func, _)) =>
+        val addr_u = Long2UInt32(addr)
+        val read_result = read_func(addr_u, reg)
+        (addr_u === raddr, read_result)
+      })
+      .toSeq
+    // at least one csr read result is valid
+    val oneH_valid = raddr_map_1h.map(_._1).reduce(_ || _)
+    val rdata_1h = Mux(oneH_valid, Mux1H(raddr_map_1h), default_read)
+
+    val rdata = MuxLookup(raddr, default_read)(
       raddr_map.toSeq
     )
-    rdata
+
+    if (enable_1h) {
+      rdata_1h
+    } else {
+      rdata
+    }
   }
 
   /** This function is used to write csr register, if success, return a valid
@@ -945,7 +960,6 @@ class RegMap {
     })
     write_result
   }
-
 }
 
 object CatReverse {
@@ -1255,8 +1269,6 @@ object gather_scala_test extends App {
   println(gathered_seq)
 
 }
-
-
 
 class BitMaskHelper {
   def gen_mask(left: Int, right: Int): Long = {

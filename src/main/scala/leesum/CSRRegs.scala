@@ -57,10 +57,9 @@ class CSRMap {
       .toSeq
     // at least one csr read result is valid
     val oneH_valid = raddr_map_1h.map(_._1).reduce(_ || _)
-
-    val rdata = MuxLookup(raddr, default_read)(raddr_map)
     val rdata_1h = Mux(oneH_valid, Mux1H(raddr_map_1h), default_read)
 
+    val rdata = MuxLookup(raddr, default_read)(raddr_map)
     if (use_one_hot) rdata_1h else rdata
   }
 

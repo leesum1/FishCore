@@ -4,7 +4,7 @@
 #include "AMVGADev.h"
 #include "CLI/CLI.hpp"
 #include "DeviceMange.h"
-#include "RemoteBitBang.hpp"
+#include "RemoteBitBang.h"
 #include "SimBase.h"
 #include "difftest.hpp"
 #include "include/Itrace.h"
@@ -12,6 +12,7 @@
 #include "spdlog/async.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
+#include "verilated.h"
 #include <PerfMonitor.h>
 #include <csignal>
 #include <cstdint>
@@ -177,6 +178,20 @@ int main(int argc, char **argv) {
          top->io_mem_port_o_rdata = rdata;
        },
        "update devices", 0});
+
+  // -----------------------
+  // SOC UART IO
+  // -----------------------
+
+  sim_base.add_after_clk_rise_task({[&] {
+                                      const auto top = sim_base.top;
+                                      if (top->io_uart_io_tx_data_valid) {
+                                        char c = static_cast<char>(
+                                            top->io_uart_io_tx_data_bits);
+                                        printf("%c", c);
+                                      }
+                                    },
+                                    "uart io", 0});
 
   // -----------------------
   // Perf Monitor
