@@ -1,5 +1,6 @@
 {
   "packages": [
+    "path:my-flakes/riscv-toolchain-flakes#riscv-gdb",
     "path:my-flakes/riscv-toolchain-flakes#riscv-gcc",
     "path:my-flakes/sbt-overlay-flakes#sbt",
     "python@3.10",

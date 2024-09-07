@@ -355,27 +355,299 @@ object TVECMask {
 //  pub debugver: u8,
 //}
 
-object DCSRMask {
-  final val PRV = 0x3L
-  final val STEP = 0x4L
-  final val NMIP = 0x8L
-  final val MPRVEN = 0x10L
-  final val V = 0x20L
-  final val CAUSE = 0x1c0L
-  final val STOPTIME = 0x200L
-  final val STOPCOUNT = 0x400L
-  final val STEPIE = 0x800L
-  final val EBREAKU = 0x1000L
-  final val EBREAKS = 0x2000L
-  final val ZERO0 = 0x4000L
-  final val EBREAKM = 0x8000L
-  final val EBREAKVU = 0x10000L
-  final val EBREAKVS = 0x20000L
-  final val ZERO1 = 0xfffc0000L
-  final val DEBUGVER = 0xf00000000L
+object DCSRMask extends BitMaskHelper {
+  def prv = gen_mask(1, 0)
+  def step = gen_mask(2)
+  def nmip = gen_mask(3)
+  def mprven = gen_mask(4)
+  def v = gen_mask(5)
+  def cause = gen_mask(8, 6)
+  def stoptime = gen_mask(9)
+  def stopcount = gen_mask(10)
+  def stepie = gen_mask(11)
+  def ebreaku = gen_mask(12)
+  def ebreaks = gen_mask(13)
+  def zero0 = gen_mask(14)
+  def ebreakm = gen_mask(15)
+  def ebreakvu = gen_mask(16)
+  def ebreakvs = gen_mask(17)
+  def zero1 = gen_mask(27, 18)
+  def debugver = gen_mask(31, 28)
 }
 
 object PTEMask {}
+
+class DCSRFiled(data: UInt) {
+  require(data.getWidth == 32)
+  def prv = data(1, 0)
+  def step = data(2)
+  def nmip = data(3)
+  def mprven = data(4)
+  def v = data(5)
+  def cause = data(8, 6)
+  def stoptime = data(9)
+  def stopcount = data(10)
+  def stepie = data(11)
+  def ebreaku = data(12)
+  def ebreaks = data(13)
+  def zero0 = data(14)
+  def ebreakm = data(15)
+  def ebreakvu = data(16)
+  def ebreakvs = data(17)
+  def zero1 = data(27, 18)
+  def debugver = data(31, 28)
+
+  def get_debug_dcsr(cause: UInt, cur_priv: UInt) = {
+    require(cause.getWidth == 3)
+    require(cur_priv.getWidth == 2)
+
+    val new_dcsr = Cat(
+      data(31, 9),
+      cause,
+      false.B, // not support v
+      data(4, 2),
+      cur_priv
+    )
+    require(new_dcsr.getWidth == 32)
+    new_dcsr
+  }
+
+  def get_wirte_dcsr(new_write: UInt) = {
+    val new_dcsr_field = (new DCSRFiled(new_write))
+
+    val supported_mode = VecInit(
+      Privilegelevel.M.U(2.W),
+      Privilegelevel.S.U(2.W),
+      Privilegelevel.U.U(2.W)
+    )
+
+    CatReverse(
+      Mux(
+        supported_mode.contains(new_dcsr_field.prv),
+        new_dcsr_field.prv,
+        Privilegelevel.M.U(2.W)
+      ), // WARL
+      new_dcsr_field.step, // R/W
+      nmip, // R
+      mprven, // WARL
+      v, // WARL
+      cause, // R
+      stoptime, // WARL
+      stopcount, // WARL
+      stepie, // WARL
+      new_dcsr_field.ebreaku, //  WARL
+      new_dcsr_field.ebreaks,
+      false.B, // 0
+      new_dcsr_field.ebreakm,
+      false.B, // ebreakvu   does not support v
+      false.B, // ebreakvs   does not support v
+      0.U(10.W), // 0
+      debugver // R
+    )
+  }
+
+}
+
+class MstatusFiled(data: UInt) {
+  require(data.getWidth == 64)
+
+  def sie = data(1)
+  def mie = data(3)
+
+  def spie = data(5)
+  def mpie = data(7)
+  def spp = data(8)
+  def vs = data(10, 9)
+  def mpp = data(12, 11)
+  def fs = data(14, 13)
+  def xs = data(16, 15)
+  def mprv = data(17)
+  def sum = data(18)
+  def mxr = data(19)
+  def tvm = data(20)
+  def tw = data(21)
+  def tsr = data(22)
+  def uxl = data(33, 32)
+  def sxl = data(35, 34)
+  def sbe = data(36)
+  def mbe = data(37)
+  def sb = data(63)
+
+  def get_mmode_exception_mstatus(cur_privilege: UInt) = {
+    require(cur_privilege.getWidth == 2)
+
+    val new_cause = Cat(
+      data(63, 13),
+      cur_privilege, // mpp
+      data(10, 8),
+      this.mie, // mpie
+      data(6, 4),
+      false.B, // mie
+      data(2, 0)
+    )
+    require(new_cause.getWidth == 64)
+    new_cause
+  }
+
+  def get_smode_exception_mstatus(cur_privilege: UInt) = {
+    require(cur_privilege.getWidth == 2)
+
+    val new_cause = Cat(
+      data(63, 9),
+      // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise.
+      Mux(cur_privilege === Privilegelevel.U.U, false.B, true.B), // spp
+      data(7, 6),
+      // When a trap is taken into supervisor mode, SPIE is set to SIE
+      this.sie, // spie
+      data(4, 2),
+      // and SIE is set to 0
+      false.B, // sie
+      data(0)
+    )
+    require(new_cause.getWidth == 64)
+    new_cause
+  }
+
+  def get_mret_mstatus(clear_mprv: Bool) = {
+    val new_mstatus = Cat(
+      data(63, 18),
+      Mux(clear_mprv, false.B, this.mprv), // mprv
+      data(16, 13),
+      // mpp , xPP is set to the least-privileged supported mode (U if U-mode is implemented, else M).
+      Privilegelevel.U.U(2.W),
+      data(10, 8),
+      true.B, // mpie // xPIE is set to 1;
+      data(6, 4),
+      this.mpie, // mie // xIE is set to xPIE
+      data(2, 0)
+    )
+
+    require(new_mstatus.getWidth == 64)
+    new_mstatus
+  }
+  def get_sret_mstatus(clear_mprv: Bool) = {
+    val new_mstatus = Cat(
+      data(63, 18),
+      Mux(clear_mprv, false.B, this.mprv), // mprv
+      data(16, 9),
+      // spp , xPP is set to the least-privileged supported mode (U if U-mode is implemented, else M).
+      false.B,
+      data(7, 6),
+      true.B, // spie // xPIE is set to 1;
+      data(4, 2),
+      this.spie, // sie // xIE is set to xPIE
+      data(0)
+    )
+    require(new_mstatus.getWidth == 64)
+    new_mstatus
+  }
+
+  def get_clear_mprv_mstatus() = {
+    val new_mstatus = Cat(
+      data(63, 18),
+      false.B, // mprv
+      data(16, 0)
+    )
+    require(new_mstatus.getWidth == 64)
+    new_mstatus
+  }
+
+}
+
+class MtvecFiled(data: UInt) {
+  require(data.getWidth == 64)
+  def base: UInt = data(63, 2)
+  def mode: UInt = data(1, 0)
+
+  def get_exception_pc: UInt = {
+    val base = Cat(this.base, 0.U(2.W))
+    require(base.getWidth == 64)
+    base
+  }
+
+  def get_interrupt_pc(cause: UInt): UInt = {
+    val mode = this.mode
+    val base = Cat(this.base, 0.U(2.W))
+
+    val pc = Wire(UInt(64.W))
+    assert(mode < 2.U, "mode should be 0 or 1")
+    pc := 0.U
+    when(mode === 0.U) {
+      pc := base
+    }.otherwise {
+      // TODO: dn not use shift
+      pc := base + (cause << 2.U)
+    }
+    pc
+  }
+
+}
+
+class McauseFiled(data: UInt) {
+  require(data.getWidth == 64)
+  def code: UInt = data(62, 0)
+  def interrupt: Bool = data(63)
+}
+
+class MieFiled(data: UInt) {
+  require(data.getWidth == 64)
+  def ssie: Bool = data(1)
+  def msie: Bool = data(3)
+  def stie: Bool = data(5)
+  def mtie: Bool = data(7)
+  def seie: Bool = data(9)
+  def meie: Bool = data(11)
+
+  def raw: UInt = data
+}
+
+class MipFiled(data: UInt) {
+  require(data.getWidth == 64)
+  def ssip: Bool = data(1)
+  def msip: Bool = data(3)
+  def stip: Bool = data(5)
+  def mtip: Bool = data(7)
+  def seip: Bool = data(9)
+  def meip: Bool = data(11)
+
+  def any_interrupt: Bool = {
+    ssip || msip || stip || mtip || seip || meip
+  }
+
+  def get_priority_interupt: ExceptionCause.Type = {
+    val priority_int = WireInit(ExceptionCause.unknown)
+    when(meip) {
+      priority_int := ExceptionCause.machine_external_interrupt
+    }.elsewhen(msip) {
+      priority_int := ExceptionCause.machine_software_interrupt
+    }.elsewhen(mtip) {
+      priority_int := ExceptionCause.machine_timer_interrupt
+    }.elsewhen(seip) {
+      priority_int := ExceptionCause.supervisor_external_interrupt
+    }.elsewhen(ssip) {
+      priority_int := ExceptionCause.supervisor_software_interrupt
+    }.elsewhen(stip) {
+      priority_int := ExceptionCause.supervisor_timer_interrupt
+    }
+    priority_int
+  }
+
+  def raw = data
+}
+
+class SatpFiled(data: UInt) {
+  require(data.getWidth == 64)
+  def mode: UInt = data(63, 60)
+  def asid: UInt = data(59, 44)
+  def ppn: UInt = data(43, 0)
+
+  def mode_is_sv39: Bool = mode === 8.U
+  def mode_is_bare: Bool = mode === 0.U
+
+  def mode_is_unsupported: Bool = !mode_is_sv39 && !mode_is_bare
+}
+
+class MidelegFiled(data: UInt) extends MipFiled(data)
 
 object CSRs {
   val fflags = 0x1

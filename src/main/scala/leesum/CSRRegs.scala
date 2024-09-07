@@ -84,48 +84,6 @@ class CSRMap {
     write_result
   }
 }
-//
-//object CSRMap {
-//
-//  def empty_write_func(reg_width: Int) = {
-//    val empty_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-//      val write_result = Wire(Valid(UInt(reg_width.W)))
-//      write_result.valid := true.B
-//      write_result.bits := 0.U
-//      write_result
-//    }
-//
-//    empty_write
-//  }
-//  def zero_read_func(reg_width: Int) = {
-//    val empty_read = (addr: UInt, reg: UInt) => {
-//      val read_result = Wire(Valid(UInt(reg_width.W)))
-//      read_result.valid := true.B
-//      read_result.bits := 0.U
-//      read_result
-//    }
-//    empty_read
-//  }
-//  def normal_read_func(reg_width: Int) = {
-//    val normal_read = (addr: UInt, reg: UInt) => {
-//      val read_result = Wire(Valid(UInt(reg_width.W)))
-//      read_result.valid := true.B
-//      read_result.bits := reg
-//      read_result
-//    }
-//    normal_read
-//  }
-//  def normal_write_func(reg_width: Int) = {
-//    val normal_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-//      val write_result = Wire(Valid(UInt(reg_width.W)))
-//      write_result.valid := true.B
-//      write_result.bits := wdata
-//      reg := write_result.bits
-//      write_result
-//    }
-//    normal_write
-//  }
-//}
 
 class CSRReadPort extends Bundle {
   val addr = Output(UInt(12.W))
@@ -167,244 +125,6 @@ class CSRDirectReadPorts extends Bundle {
 
   val satp = UInt(64.W)
 }
-
-class DcsrFiled(data: UInt) {
-  require(data.getWidth == 32)
-  def prv = data(1, 0)
-  def step = data(2)
-  def nmip = data(3)
-  def mprven = data(4)
-  def v = data(5)
-  def cause = data(8, 6)
-  def stoptime = data(9)
-  def stopcount = data(10)
-  def stepie = data(11)
-  def ebreaku = data(12)
-  def ebreaks = data(13)
-  def zero0 = data(14)
-  def ebreakm = data(15)
-  def ebreakvu = data(16)
-  def ebreakvs = data(17)
-  def zero1 = data(27, 18)
-  def debugver = data(31, 28)
-
-  def get_debug_dcsr(cause: UInt, cur_priv: UInt) = {
-    require(cause.getWidth == 3)
-    require(cur_priv.getWidth == 2)
-    val new_dcsr = Cat(
-      data(31, 9),
-      cause,
-      false.B, // not support v
-      data(4, 2),
-      cur_priv
-    )
-    require(new_dcsr.getWidth == 32)
-    new_dcsr
-  }
-
-}
-
-class MstatusFiled(data: UInt) {
-  require(data.getWidth == 64)
-
-  def sie = data(1)
-  def mie = data(3)
-
-  def spie = data(5)
-  def mpie = data(7)
-  def spp = data(8)
-  def vs = data(10, 9)
-  def mpp = data(12, 11)
-  def fs = data(14, 13)
-  def xs = data(16, 15)
-  def mprv = data(17)
-  def sum = data(18)
-  def mxr = data(19)
-  def tvm = data(20)
-  def tw = data(21)
-  def tsr = data(22)
-  def uxl = data(33, 32)
-  def sxl = data(35, 34)
-  def sbe = data(36)
-  def mbe = data(37)
-  def sb = data(63)
-
-  def get_mmode_exception_mstatus(cur_privilege: UInt) = {
-    require(cur_privilege.getWidth == 2)
-
-    val new_cause = Cat(
-      data(63, 13),
-      cur_privilege, // mpp
-      data(10, 8),
-      this.mie, // mpie
-      data(6, 4),
-      false.B, // mie
-      data(2, 0)
-    )
-    require(new_cause.getWidth == 64)
-    new_cause
-  }
-
-  def get_smode_exception_mstatus(cur_privilege: UInt) = {
-    require(cur_privilege.getWidth == 2)
-
-    val new_cause = Cat(
-      data(63, 9),
-      // When a trap is taken, SPP is set to 0 if the trap originated from user mode, or 1 otherwise.
-      Mux(cur_privilege === Privilegelevel.U.U, false.B, true.B), // spp
-      data(7, 6),
-      // When a trap is taken into supervisor mode, SPIE is set to SIE
-      this.sie, // spie
-      data(4, 2),
-      // and SIE is set to 0
-      false.B, // sie
-      data(0)
-    )
-    require(new_cause.getWidth == 64)
-    new_cause
-  }
-
-  def get_mret_mstatus(clear_mprv: Bool) = {
-    val new_mstatus = Cat(
-      data(63, 18),
-      Mux(clear_mprv, false.B, this.mprv), // mprv
-      data(16, 13),
-      // mpp , xPP is set to the least-privileged supported mode (U if U-mode is implemented, else M).
-      Privilegelevel.U.U(2.W),
-      data(10, 8),
-      true.B, // mpie // xPIE is set to 1;
-      data(6, 4),
-      this.mpie, // mie // xIE is set to xPIE
-      data(2, 0)
-    )
-
-    require(new_mstatus.getWidth == 64)
-    new_mstatus
-  }
-  def get_sret_mstatus(clear_mprv: Bool) = {
-    val new_mstatus = Cat(
-      data(63, 18),
-      Mux(clear_mprv, false.B, this.mprv), // mprv
-      data(16, 9),
-      // spp , xPP is set to the least-privileged supported mode (U if U-mode is implemented, else M).
-      false.B,
-      data(7, 6),
-      true.B, // spie // xPIE is set to 1;
-      data(4, 2),
-      this.spie, // sie // xIE is set to xPIE
-      data(0)
-    )
-    require(new_mstatus.getWidth == 64)
-    new_mstatus
-  }
-
-  def get_exit_debug_mstatus(cur_priv: UInt) = {
-    require(cur_priv.getWidth == 2)
-    val new_mstatus = Cat(
-      data(63, 18),
-      Mux(cur_priv < Privilegelevel.M.U, false.B, this.mprv), // mpr
-      data(16, 0)
-    )
-    require(new_mstatus.getWidth == 64)
-    new_mstatus
-  }
-
-}
-
-class MtvecFiled(data: UInt) {
-  require(data.getWidth == 64)
-  def base: UInt = data(63, 2)
-  def mode: UInt = data(1, 0)
-
-  def get_exception_pc: UInt = {
-    val base = Cat(this.base, 0.U(2.W))
-    require(base.getWidth == 64)
-    base
-  }
-
-  def get_interrupt_pc(cause: UInt): UInt = {
-    val mode = this.mode
-    val base = Cat(this.base, 0.U(2.W))
-
-    val pc = Wire(UInt(64.W))
-    assert(mode < 2.U, "mode should be 0 or 1")
-    pc := 0.U
-    when(mode === 0.U) {
-      pc := base
-    }.otherwise {
-      // TODO: dn not use shift
-      pc := base + (cause << 2.U)
-    }
-    pc
-  }
-
-}
-
-class McauseFiled(data: UInt) {
-  require(data.getWidth == 64)
-  def code: UInt = data(62, 0)
-  def interrupt: Bool = data(63)
-}
-
-class MieFiled(data: UInt) {
-  require(data.getWidth == 64)
-  def ssie: Bool = data(1)
-  def msie: Bool = data(3)
-  def stie: Bool = data(5)
-  def mtie: Bool = data(7)
-  def seie: Bool = data(9)
-  def meie: Bool = data(11)
-
-  def raw: UInt = data
-}
-
-class MipFiled(data: UInt) {
-  require(data.getWidth == 64)
-  def ssip: Bool = data(1)
-  def msip: Bool = data(3)
-  def stip: Bool = data(5)
-  def mtip: Bool = data(7)
-  def seip: Bool = data(9)
-  def meip: Bool = data(11)
-
-  def any_interrupt: Bool = {
-    ssip || msip || stip || mtip || seip || meip
-  }
-
-  def get_priority_interupt: ExceptionCause.Type = {
-    val priority_int = WireInit(ExceptionCause.unknown)
-    when(meip) {
-      priority_int := ExceptionCause.machine_external_interrupt
-    }.elsewhen(msip) {
-      priority_int := ExceptionCause.machine_software_interrupt
-    }.elsewhen(mtip) {
-      priority_int := ExceptionCause.machine_timer_interrupt
-    }.elsewhen(seip) {
-      priority_int := ExceptionCause.supervisor_external_interrupt
-    }.elsewhen(ssip) {
-      priority_int := ExceptionCause.supervisor_software_interrupt
-    }.elsewhen(stip) {
-      priority_int := ExceptionCause.supervisor_timer_interrupt
-    }
-    priority_int
-  }
-
-  def raw = data
-}
-
-class SatpFiled(data: UInt) {
-  require(data.getWidth == 64)
-  def mode: UInt = data(63, 60)
-  def asid: UInt = data(59, 44)
-  def ppn: UInt = data(43, 0)
-
-  def mode_is_sv39: Bool = mode === 8.U
-  def mode_is_bare: Bool = mode === 0.U
-
-  def mode_is_unsupported: Bool = !mode_is_sv39 && !mode_is_bare
-}
-
-class MidelegFiled(data: UInt) extends MipFiled(data)
 
 class CSRDirectWritePorts extends Bundle {
   val mstatus = Valid(UInt(64.W))
@@ -689,8 +409,22 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
     read_result
   }
 
+  // ---------------------
+  // dcsr write func
+  // ---------------------
+
+  val dcsr_write_func = (addr: UInt, reg: UInt, wdata: UInt) => {
+    val dcsr_field = new DCSRFiled(reg(31, 0))
+    val write_result = Wire(Valid(UInt(64.W)))
+    val new_dcsr = dcsr_field.get_wirte_dcsr(wdata(31, 0))
+    write_result.valid := true.B
+    write_result.bits := Cat(0.U(32.W), new_dcsr)
+    reg := write_result.bits
+    write_result
+  }
+
   // -----------------
-  // misa register
+  // misa Init value
   // -----------------
   val misa_val = new CSRBitField(0)
   misa_val.set_field(MIsaMask.I, 1)
@@ -705,6 +439,23 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
     misa_val.set_field(MIsaMask.S, 1)
   }
   misa_val.set_field(MIsaMask.MXL, 2) // xlen = 64
+
+  println("misa_val: " + misa_val.get_raw.toHexString)
+
+  // -----------------
+  // dcsr Init value
+  // -----------------
+  val dcsr_val = new CSRBitField(0)
+  dcsr_val.set_field(DCSRMask.debugver, 4) // has debug module
+  dcsr_val.set_field(DCSRMask.stopcount, 0) // Increment counters as usual.
+  // Interrupts (includingNMI) are disabled during single stepping.
+  dcsr_val.set_field(DCSRMask.stepie, 0)
+  dcsr_val.set_field(DCSRMask.stoptime, 0) // time continues to reflect mtime.
+  dcsr_val.set_field(DCSRMask.prv, 3) // machine mode
+
+  dcsr_val.set_field(DCSRMask.mprven, 1)
+
+  println("dcsr_val: " + dcsr_val.get_raw.toHexString)
 
   // -----------------
   // csr register
@@ -736,8 +487,10 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
 
   // Debug mode
 
-  val dcsr = RegInit(0.U(64.W))
+  val dcsr = RegInit(Long2UInt64(dcsr_val.get_raw))
   val dpc = RegInit(0.U(64.W))
+  val dscratch0 = RegInit(0.U(64.W))
+  val dscratch1 = RegInit(0.U(64.W))
 
   // counters
   val mcounteren = RegInit(0.U(64.W))
@@ -806,8 +559,10 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
       (CSRs.sie, mie, sip_sie_read, sip_sie_write),
 
       // Debug mode
-      (CSRs.dcsr, dcsr, normal_read, normal_write),
+      (CSRs.dcsr, dcsr, normal_read, dcsr_write_func),
       (CSRs.dpc, dpc, normal_read, normal_write),
+      (CSRs.dscratch0, dscratch0, normal_read, normal_write),
+      (CSRs.dscratch1, dscratch1, normal_read, normal_write),
 
       // read only
       (CSRs.misa, misa, normal_read, empty_write),

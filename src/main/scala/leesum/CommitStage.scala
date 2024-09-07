@@ -413,6 +413,14 @@ class CommitStage(
       io.direct_write_ports.stval.valid := true.B
       io.direct_write_ports.stval.bits := entry.exception.tval
 
+      SimLog(
+        desiredName,
+        "S Mode Exception at %x, cause:%d, tval:%x\n",
+        entry.pc,
+        exception_cause.asUInt,
+        entry.exception.tval
+      )
+
     }.otherwise {
       // m mode
       val mtvec = new MtvecFiled(io.direct_read_ports.mtvec)
@@ -433,6 +441,14 @@ class CommitStage(
         .get_mmode_exception_mstatus(
           privilege_mode
         )
+
+      SimLog(
+        desiredName,
+        "M Mode Exception at %x, cause:%d, tval:%x\n",
+        entry.pc,
+        exception_cause.asUInt,
+        entry.exception.tval
+      )
     }
 
     // ------------------
@@ -595,70 +611,6 @@ class CommitStage(
     }
   }
 
-  // def enter_debug_mode(
-  //     debug_cause: DebugCause.Type,
-  //     debug_newpc: UInt
-  // ): Unit = {
-  //   val sIdle :: sEnterDebug :: sFlushCache :: Nil = Enum(3)
-  //   val debug_state = RegInit(sIdle)
-
-  //   val dcsr = new DcsrFiled(io.direct_read_ports.dcsr)
-
-  //   val debug_cause_buf = RegInit(DebugCause.no_debug)
-  //   val debug_newpc_buf = RegInit(0.U(64.W))
-
-  //   switch(debug_state) {
-  //     is(sIdle) {
-  //       printf("enter debug mode at %x\n", rob_data_seq.head.pc)
-
-  //       debug_state := sEnterDebug
-  //       debug_cause_buf := debug_cause
-  //       debug_newpc_buf := debug_newpc
-  //     }
-  //     is(sEnterDebug) {
-  //       // when enter debug mode, we should flush the pipeline
-  //       flush_next := true.B
-
-  //       // set dcsr
-  //       io.direct_write_ports.dcsr.valid := true.B
-  //       io.direct_write_ports.dcsr.bits := dcsr.get_debug_dcsr(
-  //         debug_cause_buf.asUInt,
-  //         privilege_mode
-  //       )
-
-  //       // set dpc
-  //       io.direct_write_ports.dpc.valid := true.B
-  //       io.direct_write_ports.dpc.bits := debug_newpc_buf
-
-  //       debug_state := sFlushCache
-  //     }
-  //     is(sFlushCache) {
-  //       dfencei_next := io.store_queue_empty
-
-  //       when(dfencei_next) {
-  //         assert(io.store_queue_empty, "store queue must be empty when fencei")
-  //       }
-
-  //       // clear icache after clear dcache
-  //       when(io.dcache_fencei_ack && io.dcache_fencei) {
-  //         flush_next := true.B
-  //         // icache only need one cycle to flush
-  //         ifencei_next := true.B
-  //         dfencei_next := false.B
-
-  //         // The hart enters Debug Mode.
-  //         debug_state_regs.is_halted := true.B
-
-  //         debug_state_regs.haltreq_signal := false.B
-
-  //         // debug mode is always performed in M mode
-  //         privilege_mode := Privilegelevel.M.U
-  //         debug_state := sIdle
-  //       }
-  //     }
-  //   }
-  // }
-
   io.mmio_commit.noenq()
   io.store_commit.noenq()
   io.amo_commit.noenq()
@@ -685,17 +637,17 @@ class CommitStage(
   val debug_lock = RegInit(false.B)
   debug_lock := false.B
 
-  val dcsr = new DcsrFiled(io.direct_read_ports.dcsr)
+  val dcsr_field = new DCSRFiled(io.direct_read_ports.dcsr)
   val is_haltreq = debug_state_regs.haltreq_signal
   // 只有单步执行的指令执行完毕后，才能重新进入 debug 模式
   val is_stepreq =
     debug_state_regs.stepi_redebug_flag && !debug_state_regs.stepi_exec_flag
   val is_ebreakreq =
     rob_data_seq.head.fu_op === FuOP.Ebreak && rob_valid_seq.head && Seq(
-      dcsr.ebreakm && privilege_mode === Privilegelevel.M.U,
-      dcsr.ebreaks && privilege_mode === Privilegelevel.S.U,
-      dcsr.ebreaku && privilege_mode === Privilegelevel.U.U
-    ).reduce(_ || _)
+      dcsr_field.ebreakm && privilege_mode === Privilegelevel.M.U,
+      dcsr_field.ebreaks && privilege_mode === Privilegelevel.S.U,
+      dcsr_field.ebreaku && privilege_mode === Privilegelevel.U.U
+    ).reduce((_: Bool) || (_: Bool))
 
   val debug_cause = MuxCase(
     DebugCause.no_debug,
@@ -729,7 +681,12 @@ class CommitStage(
 
     switch(debug_state) {
       is(sDebugIdle) {
-        SimLog(desiredName, "will enter debug mode\n")
+        SimLog(
+          desiredName,
+          "Will enter DebugMode at PC:%x, Cause:%d\n",
+          debug_newpc,
+          debug_cause.asUInt
+        )
 
         debug_state := sEnterDebug
         debug_cause_buf := debug_cause
@@ -739,7 +696,7 @@ class CommitStage(
 
         // set dcsr
         io.direct_write_ports.dcsr.valid := true.B
-        io.direct_write_ports.dcsr.bits := dcsr.get_debug_dcsr(
+        io.direct_write_ports.dcsr.bits := dcsr_field.get_debug_dcsr(
           debug_cause_buf.asUInt,
           privilege_mode
         )
@@ -800,7 +757,7 @@ class CommitStage(
   // -------------- exit debug mode start----------------
   val will_exit_debug_mode =
     debug_state_regs.halted() && debug_state_regs.resumereq_flag
-  val sResumeIdle :: sResumeExitDebug :: sResumeFlush :: Nil = Enum(3)
+  val sResumeIdle :: sResumeFlush :: Nil = Enum(2)
   val resume_state = RegInit(sResumeIdle)
 
   when(will_exit_debug_mode) {
@@ -815,12 +772,6 @@ class CommitStage(
 
     switch(resume_state) {
       is(sResumeIdle) {
-        resume_state := sResumeExitDebug
-        SimLog(desiredName, "will exit debug mode\n")
-      }
-      is(sResumeExitDebug) {
-        // clear dcsr
-
         resume_state := sResumeFlush
       }
       is(sResumeFlush) {
@@ -843,24 +794,37 @@ class CommitStage(
 
           // 2. The current privilege mode and virtualization mode are changed to that specified by prv and v.
           // NOT support virtualization now
-          privilege_mode := dcsr.prv
+          val new_priv = dcsr_field.prv
+
+          privilege_mode := new_priv
 
           // 3. When resuming from debug mode, clear mstatus.MPRV if the new privilege mode is less than M-mode
-          val mstatus = new MstatusFiled(io.direct_read_ports.mstatus)
-          io.direct_write_ports.mstatus.valid := privilege_mode < Privilegelevel.M.U
-          io.direct_write_ports.mstatus.bits := mstatus.get_exit_debug_mstatus(
-            privilege_mode
-          )
+          val mstatus_field = new MstatusFiled(io.direct_read_ports.mstatus)
+          io.direct_write_ports.mstatus.valid := new_priv < Privilegelevel.M.U
+          io.direct_write_ports.mstatus.bits := mstatus_field
+            .get_clear_mprv_mstatus()
 
           // 4. The debug mode is cleared.
           debug_state_regs.is_halted := false.B
           debug_state_regs.resumereq_flag := false.B
-          debug_state_regs.resumeack_signal := (true.B)
+          debug_state_regs.resumeack_signal := true.B
+
+          SimLog(
+            desiredName,
+            "Will exit debug mode at PC:%x ,back to priv:%d, clear mprv:%d\n",
+            io.direct_read_ports.dpc,
+            dcsr_field.prv,
+            new_priv < Privilegelevel.M.U
+          )
 
           // 5. check step, and set single step flag
           // use resume bits for step for test
-          when(dcsr.step || io.debug_resume_req.bits) {
-            SimLog(desiredName, "Entry step mode\n")
+          when(dcsr_field.step) {
+            SimLog(
+              desiredName,
+              "Entry StepMode at %x\n",
+              io.direct_read_ports.dpc
+            )
             debug_state_regs.set_step()
           }
 
@@ -1044,10 +1008,12 @@ class CommitStage(
       val mtvec = new MtvecFiled(io.direct_read_ports.mtvec)
       privilege_mode := Privilegelevel.M.U
 
-      redirect_next.valid := true.B
-      redirect_next.target := mtvec.get_interrupt_pc(
+      val interrupt_redirect_pc = mtvec.get_interrupt_pc(
         cause.asUInt(3, 0) //  0-11
       )
+
+      redirect_next.valid := true.B
+      redirect_next.target := interrupt_redirect_pc
 
       io.direct_write_ports.mepc.valid := true.B
       io.direct_write_ports.mepc.bits := new_pc
@@ -1063,9 +1029,10 @@ class CommitStage(
 
       SimLog(
         desiredName,
-        "mmode interrupt at %x, cause: %x\n",
+        "M mode interrupt Cause: %x at PC:%x, to PC:%x\n",
         new_pc,
-        cause.asUInt
+        cause.asUInt,
+        interrupt_redirect_pc
       )
 
     }.elsewhen(interrupt_smode && smode_has_interrupt) {
@@ -1079,11 +1046,12 @@ class CommitStage(
       flush_next := true.B
       privilege_mode := Privilegelevel.S.U
 
-      redirect_next.valid := true.B
-      redirect_next.target := stvec.get_interrupt_pc(
+      val interrupt_redirect_pc = stvec.get_interrupt_pc(
         cause.asUInt(3, 0) //  0-11
       )
 
+      redirect_next.valid := true.B
+      redirect_next.target := interrupt_redirect_pc
       io.direct_write_ports.sepc.valid := true.B
       io.direct_write_ports.sepc.bits := new_pc
 
@@ -1096,9 +1064,10 @@ class CommitStage(
       )
       SimLog(
         desiredName,
-        "smode interrupt at %x, cause: %x\n",
+        "M mode interrupt Cause: %x at PC:%x, to PC:%x\n",
         new_pc,
-        cause.asUInt
+        cause.asUInt,
+        interrupt_redirect_pc
       )
     }
   }
