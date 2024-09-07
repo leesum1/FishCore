@@ -21,6 +21,8 @@
     "graalvm17-ce@latest",
     "gcc@latest",
     "circt@1.72.0",
+    "openocd@latest",
+    "spike@latest",
   ],
   "shell": {
     "init_hook": [
