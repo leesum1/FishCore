@@ -1,12 +1,13 @@
 #pragma once
 
 #include <arpa/inet.h>
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>
 #include <optional>
+#include <sys/types.h>
 #include <unistd.h>
-
 
 // RemoteBitBang 拥有以下几个功能
 // 1. 维护一个 tcp server，服务器的端口可以进行配置, 并且同时只能有一个 client
@@ -48,14 +49,21 @@ public:
 private:
   void setup_server();
 
+  std::optional<char> get_next_command();
+
+  // remote bitbang server
   int server_fd;
   int client_fd;
   int port;
 
+  char cmd_recv_buf[4096];
+  ssize_t cmd_recv_buf_cur_size;
+  ssize_t cmd_recv_buf_cur_pos;
+
+  // JTAG pins
   unsigned char tclk;
   unsigned char tms;
   unsigned char tdi;
-
   std::optional<unsigned char> tdo;
   char trst;
 };

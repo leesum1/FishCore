@@ -7,6 +7,7 @@
 #include "RemoteBitBang.h"
 #include "SimBase.h"
 #include "difftest.hpp"
+#include "include/AllTask.h"
 #include "include/Itrace.h"
 #include "include/SramMemoryDev.h"
 #include "spdlog/async.h"
@@ -14,6 +15,7 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "verilated.h"
 #include <PerfMonitor.h>
+#include <cassert>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
@@ -39,13 +41,55 @@ void signal_handler(int signal) {
   }
 }
 
+void read_from_pipe(int pipefd, std::ofstream &file) {
+  char buffer[1024];
+  ssize_t bytesRead;
+  while ((bytesRead = read(pipefd, buffer, sizeof(buffer) - 1)) > 0) {
+    buffer[bytesRead] = '\0';
+    file << buffer;
+    file.flush(); // 手动刷新文件流
+  }
+}
+
 int main(int argc, char **argv) {
+
+  // // 将 stderr 重定向到文件, 以便将 verilator 的打印信息写入文件
+  // FILE *err_file = freopen("error_output.txt", "a", stderr);
+
+  // 打开一个文件用于写入
+  std::ofstream file("error_output.txt", std::ios::trunc);
+
+  if (!file.is_open()) {
+    std::cerr << "Failed to open the file for writing." << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  // 创建管道
+  int pipefd[2];
+  if (pipe(pipefd) == -1) {
+    std::cerr << "Failed to create pipe." << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  // 备份原始的 stderr
+  int original_stderr = dup(STDERR_FILENO);
+
+  // 将 stderr 重定向到管道
+  dup2(pipefd[1], STDERR_FILENO);
+  close(pipefd[1]);
+
+  // 启动一个线程从管道读取数据并写入文件
+  std::thread pipeReaderThread(read_from_pipe, pipefd[0], std::ref(file));
+
+  pipeReaderThread.detach();
 
   // 注册信号处理函数
   if (signal(SIGINT, signal_handler) == SIG_ERR) {
-    std::cerr << "Error setting up signal handler" << std::endl;
+    std::printf("Error setting up signal handler");
     return EXIT_FAILURE;
   }
+
+  std::cerr << "This is a test message." << std::endl;
 
   std::string image_name;
   bool wave_en = false;
@@ -57,7 +101,7 @@ int main(int argc, char **argv) {
   bool am_en = false;
   bool vga_en = false;
   bool rbb_en = false;
-  bool to_host_check = false;
+  bool to_host_check_en = false;
 
   long max_cycles = 50000;
   int rbb_port = 23456;
@@ -92,7 +136,7 @@ int main(int argc, char **argv) {
       ->default_val(23456);
 
   // tohost check
-  app.add_flag("--to_host_check", to_host_check, "enable to_host check")
+  app.add_flag("--to_host_check", to_host_check_en, "enable to_host check")
       ->default_val(false);
 
   CLI11_PARSE(app, argc, argv)
@@ -183,270 +227,42 @@ int main(int argc, char **argv) {
   // SOC UART IO
   // -----------------------
 
-  sim_base.add_after_clk_rise_task({[&] {
-                                      const auto top = sim_base.top;
-                                      if (top->io_uart_io_tx_data_valid) {
-                                        char c = static_cast<char>(
-                                            top->io_uart_io_tx_data_bits);
-                                        printf("%c", c);
-                                      }
-                                    },
-                                    "uart io", 0});
+  task_uart_io(sim_base);
 
   // -----------------------
   // Perf Monitor
   // -----------------------
 
   auto perf_monitor = PerfMonitor();
-  perf_monitor.add_perf_counter(
-      {"bp_f1", &sim_base.top->io_perf_monitor_bp_f1_hit_counter,
-       &sim_base.top->io_perf_monitor_bp_f1_num_counter});
-  perf_monitor.add_perf_counter(
-      {"bp", &sim_base.top->io_perf_monitor_bp_hit_counter,
-       &sim_base.top->io_perf_monitor_bp_num_counter});
-  perf_monitor.add_perf_counter(
-      {"icache", &sim_base.top->io_perf_monitor_icache_hit_counter,
-       &sim_base.top->io_perf_monitor_icache_num_counter});
-  perf_monitor.add_perf_counter(
-      {"dcache", &sim_base.top->io_perf_monitor_dcache_hit_counter,
-       &sim_base.top->io_perf_monitor_dcache_num_counter});
-  perf_monitor.add_perf_counter(
-      {"itlb", &sim_base.top->io_perf_monitor_itlb_hit_counter,
-       &sim_base.top->io_perf_monitor_itlb_num_counter});
-  perf_monitor.add_perf_counter(
-      {"dtlb", &sim_base.top->io_perf_monitor_dtlb_hit_counter,
-       &sim_base.top->io_perf_monitor_dtlb_num_counter});
-
-  perf_monitor.add_perf_counter(
-      {"IPC", &sim_base.commit_num, &sim_base.cycle_num});
-  perf_monitor.add_perf_counter(
-      {"CPI", &sim_base.cycle_num, &sim_base.commit_num});
-
-  if (perf_trace_log_en) {
-    sim_base.add_after_clk_rise_task(
-        {[&] { perf_monitor.print_perf_counter(false); }, "perf_monitor",
-         8192});
-  }
+  task_perfmonitor(sim_base, perf_monitor, perf_trace_log_en);
 
   // -----------------------
   // Exit Condtion Detect
   // -----------------------
 
-  if (to_host_check) {
-    // for riscof and riscv-tests, use to_host to communicate with simulation
-    // environment
-    sim_base.add_after_clk_rise_task({[&] {
-                                        sim_mem.check_to_host([&] {
-                                          sim_base.set_state(SimBase::sim_stop);
-                                          console->info(
-                                              "Write tohost at pc: 0x{:016x}\n",
-                                              sim_base.get_pc());
-                                        });
-                                      },
-                                      "to_host_check", 1024});
-  }
-
-  sim_base.add_after_clk_rise_task(
-      {[&] {
-         if (sim_base.not_commit_num > 4096) {
-           if (sim_base.top->io_is_halted != 0) {
-             // not check on halt
-             sim_base.not_commit_num = 0;
-           } else {
-             console->critical(
-                 "no commit for {} cycles, dead lock at pc: 0x{:016x}\n", 4096,
-                 sim_base.get_pc());
-             sim_base.set_state(SimBase::sim_abort);
-           }
-         }
-       },
-       "dead_lock_check", 4096});
-
-  if (am_en) {
-
-    sim_base.add_after_clk_rise_task(
-        {[&] {
-           const auto top = sim_base.top;
-           if (top->io_difftest_bits_exception_valid &&
-               top->io_difftest_valid) {
-             const auto cause = top->io_difftest_bits_exception_cause;
-             if (cause == 3) {
-               // ebreak
-               console->info("AM exit(ebreak) at pc: 0x{:016x}\n",
-                             sim_base.get_pc());
-               sim_base.set_state(SimBase::sim_finish);
-             }
-           }
-         },
-         "am exit(ebreak) check", 0});
-  }
+  task_tohost_check(sim_base, sim_mem, to_host_check_en);
+  task_deadlock_check(sim_base);
+  task_am_ebreak_check(sim_base, am_en);
 
   // -----------------------
   // Difftest
   // -----------------------
   auto diff_ref = std::optional<DiffTest>();
-  if (difftest_en) {
-    diff_ref.emplace(BOOT_PC, MEM_SIZE, MEM_BASE);
-    diff_ref->load_file(image_name.c_str());
-
-    sim_base.add_after_clk_rise_task(
-        {[&] {
-           const auto top = sim_base.top;
-           // diff test
-           if (top->io_difftest_valid) {
-             const auto step_num = top->io_difftest_bits_commited_num;
-             const auto has_exception = top->io_difftest_bits_exception_valid;
-             const auto has_interrupt = top->io_difftest_bits_has_interrupt;
-             const auto cause = top->io_difftest_bits_exception_cause;
-             const auto has_mmio = top->io_difftest_bits_contain_mmio;
-             const auto has_csr_skip = top->io_difftest_bits_csr_skip;
-             const auto is_rvc = top->io_difftest_bits_last_is_rvc;
-             const auto pc = top->io_difftest_bits_last_pc;
-             const auto next_pc = pc + (is_rvc ? 2 : 4); // for diff skip
-
-             if (has_interrupt & has_exception || has_exception & has_mmio ||
-                 has_exception & has_csr_skip || has_mmio & has_csr_skip ||
-                 has_interrupt & has_mmio || has_interrupt & has_csr_skip) {
-               console->critical(
-                   "exception and interrupt and mmio at the same time");
-               console->critical(
-                   "has_interrupt: {}, has_exception: {}, has_mmio: {}, "
-                   "has_csr_skip: {}\n",
-                   has_interrupt, has_exception, has_mmio, has_csr_skip);
-               sim_base.set_state(SimBase::sim_abort);
-             }
-
-             if (has_mmio || has_csr_skip) {
-               diff_trace->info(
-                   "skip mmio or csr at pc: 0x{:016x},next pc: 0x{:016x}",
-                   sim_base.get_pc(), next_pc);
-               diff_ref->ref_skip(
-                   [&](const size_t idx) { return sim_base.get_reg(idx); },
-                   next_pc);
-             } else {
-               diff_ref->step(step_num);
-
-               diff_trace->info(
-                   "Commit {} inst at pc: 0x{:016x},next pc: 0x{:016x}",
-                   step_num, sim_base.get_pc(), next_pc);
-
-               if (has_interrupt) {
-                 diff_trace->info(
-                     "has_interrupt at pc: 0x{:016x},cause: 0x{:8x}",
-                     sim_base.get_pc(), cause);
-                 diff_ref->raise_intr(cause & 0xffff);
-               }
-               const bool pc_mismatch =
-                   diff_ref->check_pc(diff_ref->get_pc(), sim_base.get_pc());
-               const bool gpr_mismatch = diff_ref->check_gprs(
-                   [&](const size_t idx) { return sim_base.get_reg(idx); },
-                   [&](const size_t idx) { return diff_ref->get_reg(idx); });
-               const bool csr_mismatch = diff_ref->check_csrs(
-                   [&](const size_t idx) { return sim_base.get_csr(idx); });
-               const bool mismatch = pc_mismatch | gpr_mismatch | csr_mismatch;
-
-               if (mismatch) {
-                 console->critical("DiffTest mismatch");
-                 console->critical("pc mismatch: ref: 0x{:08x}, dut: "
-                                   "0x{:08x}\n\n",
-                                   diff_ref->get_pc(), sim_base.get_pc());
-                 sim_base.set_state(SimBase::sim_abort);
-               }
-               diff_trace->info("--------------------End DiffTest at pc: "
-                                "0x{:016x}----------------------\n",
-                                sim_base.get_pc());
-             }
-           }
-         },
-         "difftest", 0});
-  }
+  task_difftest(sim_base, diff_ref, image_name, difftest_en);
 
   // -----------------------
   // Itrace
   // -----------------------
 
   auto itrace = std::optional<Itrace>();
-
-  if (itrace_log_en) {
-    itrace.emplace();
-    sim_base.add_after_clk_rise_task(
-        {[&] {
-           const auto top = sim_base.top;
-           if (top->io_difftest_valid) {
-             const auto has_exception = top->io_difftest_bits_exception_valid;
-             const auto has_interrupt = top->io_difftest_bits_has_interrupt;
-             const auto cause = top->io_difftest_bits_exception_cause;
-             const auto pc = top->io_difftest_bits_last_pc;
-
-             if (has_exception) {
-               itrace->riscv_disasm(top->io_difftest_bits_inst_info_0_inst,
-                                    top->io_difftest_bits_last_pc);
-               itrace_log->info("⬆️ pc 0x{:08x},exception cause 0x{:x}\n", pc,
-                                cause);
-             } else if (has_interrupt) {
-               itrace->riscv_disasm(top->io_difftest_bits_inst_info_0_inst,
-                                    top->io_difftest_bits_last_pc);
-               itrace_log->info("⬆️ pc 0x{:08x},interrupt cause 0x{:x}\n", pc,
-                                cause);
-             } else {
-               const auto pc_list = std::array{
-                   static_cast<uint64_t>(top->io_difftest_bits_inst_info_0_pc),
-                   static_cast<uint64_t>(top->io_difftest_bits_inst_info_1_pc),
-               };
-               const auto inst_list = std::array{
-                   static_cast<uint32_t>(
-                       top->io_difftest_bits_inst_info_0_inst),
-                   static_cast<uint32_t>(
-                       top->io_difftest_bits_inst_info_1_inst),
-               };
-
-               for (int i = 0; i < top->io_difftest_bits_commited_num; i++) {
-                 itrace->riscv_disasm(inst_list[i], pc_list[i]);
-               }
-             }
-           }
-         },
-         "Inst Trace", 0});
-  }
+  task_itrace(sim_base, itrace, itrace_log_en);
 
   // -----------------------
   // SimJtag(remote bitbang)
   // -----------------------
 
   auto rbb_simjtag = std::optional<RemoteBitBang>();
-  if (rbb_en) {
-    rbb_simjtag.emplace(rbb_port);
-
-    sim_base.add_after_clk_rise_task(
-        {[&] {
-           const auto top = sim_base.top;
-
-           unsigned char *jtag_tck_ptr =
-               static_cast<unsigned char *>(&(top->io_jtag_io_tck));
-           unsigned char *jtag_tms_ptr =
-               static_cast<unsigned char *>(&(top->io_jtag_io_tms));
-           unsigned char *jtag_tdi_ptr =
-               static_cast<unsigned char *>(&(top->io_jtag_io_tdi));
-           unsigned char *jtag_tdo_ptr =
-               static_cast<unsigned char *>(&(top->io_jtag_io_tdo));
-
-           top->io_jtag_io_tdi_en = 1;
-           static unsigned char last_tclk = *jtag_tck_ptr;
-           rbb_simjtag->tick(jtag_tck_ptr, jtag_tms_ptr, jtag_tdi_ptr,
-                             *jtag_tdo_ptr);
-
-           //  // last != now
-           //  if (last_tclk != *jtag_tck_ptr) {
-           //    std::cout << "tck: " << (int)*jtag_tck_ptr
-           //              << " tms: " << (int)*jtag_tms_ptr
-           //              << " tdi: " << (int)*jtag_tdi_ptr
-           //              << " tdo: " << (int)*jtag_tdo_ptr << std::endl;
-           //  }
-
-           // TODO: add simjtag
-         },
-         "simjtag", 5});
-  }
+  task_simjtag(rbb_en, rbb_port, sim_base, rbb_simjtag);
 
   // --------------------------
   // Simulator Start Excuting
@@ -603,8 +419,6 @@ int main(int argc, char **argv) {
   //     0,
   // });
 
-  console->info("Simulator init finished");
-
   if (wave_en) {
     const auto wave_name = "wave.fst";
     sim_base.enable_wave_trace(wave_name, wave_stime);
@@ -612,10 +426,12 @@ int main(int argc, char **argv) {
   }
   sim_mem.load_file(image_name.c_str());
   sim_base.reset();
+
+  sim_base.print_tasks();
+
   console->info("Simulator start");
 
   auto start_time = std::chrono::utc_clock::now();
-
   // simulator loop
   while (!sim_base.finished() && !is_exit && sim_base.cycle_num < max_cycles) {
     sim_base.step();
@@ -641,5 +457,7 @@ int main(int argc, char **argv) {
   // zero means success
   bool return_code = !(success && sim_base.get_state() != SimBase::sim_abort);
 
+  // close the file
+  // fclose(err_file);
   return return_code;
 }

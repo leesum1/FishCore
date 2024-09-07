@@ -11,7 +11,7 @@ end
 if is_mode("debug") then
 	set_symbols("debug")
 	set_optimize("none")
-	set_policy("build.sanitizer.address", true)
+	-- set_policy("build.sanitizer.address", true)
 end
 
 package("capstone_my")
@@ -62,6 +62,7 @@ target("Vtop")
 	add_rules("verilator.binary")
 	set_toolchains("@verilator")
 	add_files("src/*.cpp")
+	add_files("src/tasks/*.cpp")
 	add_files("vsrc/*.sv")
 	add_values("verilator.flags", "--top", "FishSoc")
 

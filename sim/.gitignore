@@ -8,6 +8,14 @@ build/
 scripts/__pycache__/
 vsrc/
 
+
+*.log
+*.txt
+flamegraph.svg
+*.data
+.vscode-ctags
+*.fst
+*.vcd
 # MacOS Cache
 .DS_Store
 

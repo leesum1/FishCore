@@ -1,5 +1,7 @@
 #include "include/RemoteBitBang.h"
+#include <cstdio>
 #include <iostream>
+#include <optional>
 #include <ostream>
 
 RemoteBitBang::RemoteBitBang(int port)
@@ -62,6 +64,29 @@ bool RemoteBitBang::try_recv(char *data) {
   return received == 1;
 }
 
+// bool RemoteBitBang::try_recv(char *data) {
+//   if (client_fd == -1) {
+//     return false;
+//   }
+//   const auto next_cmd = get_next_command();
+//   if (next_cmd.has_value()) {
+//     *data = next_cmd.value();
+//     return true;
+//   }
+
+//   cmd_recv_buf_cur_size = recv(client_fd, &cmd_recv_buf, 4096, MSG_DONTWAIT);
+//   cmd_recv_buf_cur_pos = 0;
+
+//   // std::printf("Received %ld bytes\n", cmd_recv_buf_cur_size);
+
+//   const auto next_cmd2 = get_next_command();
+//   if (next_cmd2.has_value()) {
+//     *data = next_cmd2.value();
+//     return true;
+//   }
+//   return false;
+// }
+
 void RemoteBitBang::tick(unsigned char *jtag_tck, unsigned char *jtag_tms,
                          unsigned char *jtag_tdi,
                          const unsigned char jtag_tdo) {
@@ -74,11 +99,9 @@ void RemoteBitBang::tick(unsigned char *jtag_tck, unsigned char *jtag_tms,
   if (try_recv(&cmd)) {
     execute_command(cmd, jtag_tdo);
   }
-  // std::cout << "Sending data: C" << std::endl;
 
   if (tdo.has_value()) {
     char send_c = tdo.value() ? '1' : '0';
-
     send(send_c);
     tdo.reset();
   }
@@ -203,4 +226,14 @@ void RemoteBitBang::setup_server() {
   }
 
   std::cout << "RemoteBitBang  Listening on port " << port << std::endl;
+}
+
+std::optional<char> RemoteBitBang::get_next_command() {
+  if (cmd_recv_buf_cur_size <= 0) {
+    return std::nullopt;
+  }
+  char cmd = cmd_recv_buf[cmd_recv_buf_cur_pos];
+  cmd_recv_buf_cur_pos++;
+  cmd_recv_buf_cur_size--;
+  return cmd;
 }

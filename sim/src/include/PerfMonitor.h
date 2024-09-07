@@ -2,28 +2,23 @@
 
 #include "spdlog/spdlog.h"
 
-
 class PerfMonitor {
-    struct CounterInfo {
-        std::string name;
-        uint64_t* hit;
-        uint64_t* total;
-    };
+  struct CounterInfo {
+    std::string name;
+    uint64_t *hit;
+    uint64_t *total;
+  };
 
-
-    std::shared_ptr<spdlog::logger> logger;
-    std::shared_ptr<spdlog::logger> perf_trace;
-    std::vector<CounterInfo> perf_counters = {};
+  std::shared_ptr<spdlog::logger> logger;
+  std::shared_ptr<spdlog::logger> perf_trace;
+  std::vector<CounterInfo> perf_counters = {};
 
 public:
-    PerfMonitor();
-    ~PerfMonitor();
+  PerfMonitor();
+  ~PerfMonitor();
 
-    // pair.first: hit
-    // pair.second: total
-    void add_perf_counter(CounterInfo perf_counter);
-    void print_perf_counter(bool use_log) const;
+  // pair.first: hit
+  // pair.second: total
+  void add_perf_counter(CounterInfo perf_counter);
+  void print_perf_counter(bool use_log) const;
 };
-
-
-

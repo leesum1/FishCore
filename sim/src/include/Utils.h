@@ -1,20 +1,18 @@
 #pragma once
 
-#include <cstdint>
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 
 namespace Utils {
 
+#define MY_ASSERT(expr, ...)                                                   \
+  if (!(expr)) {                                                               \
+    printf(__VA_ARGS__);                                                       \
+    assert(0);                                                                 \
+  }
 
-#define MY_ASSERT(expr, ...)  \
-    if (!(expr)) {             \
-        printf(__VA_ARGS__);   \
-        assert(0);             \
-    }
+bool check_aligned(uint64_t addr, uint64_t size);
 
-    bool check_aligned(uint64_t addr, uint64_t size);
-
-    uint64_t aligned_addr(uint64_t addr);
-}
-
+uint64_t aligned_addr(uint64_t addr);
+} // namespace Utils

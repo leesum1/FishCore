@@ -1,0 +1,41 @@
+
+release_bin := "build/linux/x86_64/release/Vtop"
+debug_bin := "build/linux/x86_64/debug/Vtop"
+load_fie := "ready_to_run/rv64ui-v-beq"
+
+
+
+
+menuconfig:
+    xmake f --menu
+
+
+build_release:
+    xmake f -m release
+    xmake
+
+build_debug:
+    xmake f -m debug
+    xmake
+
+
+perf_release: build_release
+    perf record  -g -a -F 99  --call-graph dwarf {{release_bin}} --file {{load_fie}}  --clk 5000000000  --rbb
+
+
+perf_debug: build_debug
+    perf record  -g --call-graph dwarf {{debug_bin}} --file {{load_fie}}  --clk 5000000000  --rbb
+    perf script | stackcollapse-perf.pl | flamegraph.pl > flamegraph.svg
+    rm -f perf.data  
+
+flamegraph:
+    perf script | stackcollapse-perf.pl | flamegraph.pl > flamegraph.svg
+    rm -f perf.data
+
+
+rbb: build_release
+    {{release_bin}} --file {{load_fie}}  --clk 5000000000  --rbb
+
+clean_all:
+    rm -rf build
+
