@@ -25,12 +25,27 @@ class DbgSlaveState extends Bundle {
 
   // 接口辅助函数
 
-  def set_step(): Unit = {
+  def set_stepi(): Unit = {
+    // 下一次需要单步执行
     stepi_exec_flag := true.B
     stepi_redebug_flag := false.B
   }
 
+  def clear_stepi(): Unit = {
+    // 清零单步执行标志, 和进入单步执行后进入 debug 的状态标志
+    stepi_exec_flag := false.B
+    stepi_redebug_flag := false.B
+  }
 
+  def exec_stepi(): Unit = {
+    // 单步执行完毕，需要重新进入 debug 状态
+    stepi_exec_flag := false.B
+    stepi_redebug_flag := true.B
+  }
+
+  def is_stepi_req(): Bool = {
+    stepi_exec_flag && !stepi_redebug_flag
+  }
 
   def set_haltreq(new_value: Bool): Unit = {
     haltreq_signal := new_value

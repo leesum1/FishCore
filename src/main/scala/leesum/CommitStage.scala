@@ -640,8 +640,8 @@ class CommitStage(
   val dcsr_field = new DCSRFiled(io.direct_read_ports.dcsr)
   val is_haltreq = debug_state_regs.haltreq_signal
   // 只有单步执行的指令执行完毕后，才能重新进入 debug 模式
-  val is_stepreq =
-    debug_state_regs.stepi_redebug_flag && !debug_state_regs.stepi_exec_flag
+  val is_stepreq = debug_state_regs.is_stepi_req()
+
   val is_ebreakreq =
     rob_data_seq.head.fu_op === FuOP.Ebreak && rob_valid_seq.head && Seq(
       dcsr_field.ebreakm && privilege_mode === Privilegelevel.M.U,
@@ -675,6 +675,7 @@ class CommitStage(
   val debug_newpc_buf = RegInit(0.U(64.W))
 
   when(will_enter_debug_mode) {
+
     // 1. 首先检测是否需要进入 debug 模式
     // 如果上一条指令有 csr side effect，那么需要 flush (进入 debug 模式就已经 flush 了)
 //    enter_debug_mode(debug_cause, debug_newpc)
@@ -729,6 +730,9 @@ class CommitStage(
           // debug mode is always performed in M mode
           privilege_mode := Privilegelevel.M.U
           debug_state := sDebugIdle
+
+          // clear step
+          debug_state_regs.clear_stepi()
         }
       }
     }
@@ -825,7 +829,7 @@ class CommitStage(
               "Entry StepMode at %x\n",
               io.direct_read_ports.dpc
             )
-            debug_state_regs.set_step()
+            debug_state_regs.set_stepi()
           }
 
           resume_state := sResumeIdle
@@ -942,9 +946,12 @@ class CommitStage(
   // -------------- first inst retire end----------------
 
   when(rob_valid_seq.head && pop_ack.head && debug_state_regs.stepi_exec_flag) {
-    //  after single step, should re-enter debug mode
-    debug_state_regs.stepi_exec_flag := false.B
-    debug_state_regs.stepi_redebug_flag := true.B
+    debug_state_regs.exec_stepi()
+    SimLog(
+      desiredName,
+      "StepMode Execute %x,than re-enter debug mode\n",
+      rob_data_seq.head.pc
+    )
   }
 
   // ----------------------

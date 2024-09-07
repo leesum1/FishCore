@@ -55,37 +55,37 @@ void RemoteBitBang::send(char data) {
   }
 }
 
-bool RemoteBitBang::try_recv(char *data) {
-  if (client_fd == -1) {
-    return false;
-  }
-
-  ssize_t received = recv(client_fd, data, 1, MSG_DONTWAIT);
-  return received == 1;
-}
-
 // bool RemoteBitBang::try_recv(char *data) {
 //   if (client_fd == -1) {
 //     return false;
 //   }
-//   const auto next_cmd = get_next_command();
-//   if (next_cmd.has_value()) {
-//     *data = next_cmd.value();
-//     return true;
-//   }
 
-//   cmd_recv_buf_cur_size = recv(client_fd, &cmd_recv_buf, 4096, MSG_DONTWAIT);
-//   cmd_recv_buf_cur_pos = 0;
-
-//   // std::printf("Received %ld bytes\n", cmd_recv_buf_cur_size);
-
-//   const auto next_cmd2 = get_next_command();
-//   if (next_cmd2.has_value()) {
-//     *data = next_cmd2.value();
-//     return true;
-//   }
-//   return false;
+//   ssize_t received = recv(client_fd, data, 1, MSG_DONTWAIT);
+//   return received == 1;
 // }
+
+bool RemoteBitBang::try_recv(char *data) {
+  if (client_fd == -1) {
+    return false;
+  }
+  const auto next_cmd = get_next_command();
+  if (next_cmd.has_value()) {
+    *data = next_cmd.value();
+    return true;
+  }
+
+  cmd_recv_buf_cur_size = recv(client_fd, &cmd_recv_buf, 4096, MSG_DONTWAIT);
+  cmd_recv_buf_cur_pos = 0;
+
+  // std::printf("Received %ld bytes\n", cmd_recv_buf_cur_size);
+
+  const auto next_cmd2 = get_next_command();
+  if (next_cmd2.has_value()) {
+    *data = next_cmd2.value();
+    return true;
+  }
+  return false;
+}
 
 void RemoteBitBang::tick(unsigned char *jtag_tck, unsigned char *jtag_tms,
                          unsigned char *jtag_tdi,

@@ -1,6 +1,7 @@
 package leesum.dbg
 
 import chisel3._
+import chisel3.aop.Select.When
 import chisel3.util.{DecoupledIO, _}
 import leesum.Cache.{DCacheReq, DCacheResp}
 import leesum.Utils.SimLog
@@ -430,6 +431,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
   val abs_mem_addr = arg_read64(1)
   val abs_mem_wdata = arg_read64(0)
   val abs_mem_size_buf = RegInit(0.U(2.W))
+  val abs_mem_is_write = RegInit(false.B)
 
 //  dontTouch(perf_abs_state)
   val supported_cmdtype = VecInit(
@@ -552,7 +554,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
           SimLog(
             desiredName,
-            "write gpr: %x, data: %x\n",
+            "GPR Write addr:%d, wdata:%x\n",
             command_field.reg_field.get_gpr_regno,
             w_regdata
           )
@@ -564,9 +566,9 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
           SimLog(
             desiredName,
-            "read gpr: %x, data: %x\n",
+            "GPR Read addr:%d, rdata:%x\n",
             command_field.reg_field.get_gpr_regno,
-            perf_abs_result_buf
+            io.debug_core_interface.gpr_read_port.rs1_data
           )
         }
 
@@ -584,7 +586,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
           io.debug_core_interface.csr_write_port.write_data := w_regdata
           SimLog(
             desiredName,
-            "write csr: %x, data: %x, exception:%d\n",
+            "CSR Write addr:%x, wdata:%x, exception:%d\n",
             command_field.reg_field.get_csr_regno,
             w_regdata,
             io.debug_core_interface.csr_write_port.write_ex_resp
@@ -596,9 +598,9 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
           perf_abs_result_buf := io.debug_core_interface.csr_read_port.read_data
           SimLog(
             desiredName,
-            "read csr: %x, data: %x, exception:%d\n",
+            "CSR Read addr:%x, rdata:%x, exception:%d\n",
             command_field.reg_field.get_csr_regno,
-            perf_abs_result_buf,
+            io.debug_core_interface.csr_read_port.read_data,
             io.debug_core_interface.csr_read_port.read_ex_resp
           )
         }
@@ -626,8 +628,8 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
     is(sPerfABS_MEMReq) {
       val mem_field = command_field.mem_field
-      // address on arg641
-      // wdata on arg640
+      // address on arg64_1
+      // wdata on arg64_0
       val abs_mem_size = Mux1H(
         Seq(
           (mem_field.aamsize === DbgPKG.AAMSIZE_8.U) -> AXIDef.SIZE_1,
@@ -637,6 +639,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
         )
       )(1, 0)
       abs_mem_size_buf := abs_mem_size
+      abs_mem_is_write := mem_field.write
 
       io.debug_core_interface.dcache_req.valid := true.B
       io.debug_core_interface.dcache_req.bits.is_mmio := false.B
@@ -655,13 +658,16 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       // dcache req hs
       when(io.debug_core_interface.dcache_req.fire) {
 
-        SimLog(
-          desiredName,
-          "mem req: addr: %x, wdata: %x, size: %d\n",
-          abs_mem_addr,
-          abs_mem_wdata,
-          abs_mem_size
-        )
+        when(mem_field.write) {
+          SimLog(
+            desiredName,
+            "Mem Write addr:%x, wdata:%x, wstrb:%x size:%d\n",
+            io.debug_core_interface.dcache_req.bits.paddr,
+            io.debug_core_interface.dcache_req.bits.wdata,
+            io.debug_core_interface.dcache_req.bits.wstrb,
+            io.debug_core_interface.dcache_req.bits.size
+          )
+        }
 
         perf_abs_state := sPerfABS_MEMResp
       }
@@ -670,14 +676,26 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       io.debug_core_interface.dcache_resp.ready := true.B
       when(io.debug_core_interface.dcache_resp.fire) {
 
-        val shifted_rdata =
-          GetAxiRdata(
-            io.debug_core_interface.dcache_resp.bits.rdata,
+        when(!abs_mem_is_write) {
+          // 将读取到的数据写入到 data_arg 中
+          val shifted_rdata =
+            GetAxiRdata(
+              io.debug_core_interface.dcache_resp.bits.rdata,
+              abs_mem_addr,
+              abs_mem_size_buf,
+              false.B
+            )
+          arg_write64(0, shifted_rdata)
+
+          SimLog(
+            desiredName,
+            "Mem Read addr:%x, rdata:%x, size: %d\n",
             abs_mem_addr,
-            abs_mem_size_buf,
-            false.B
+            shifted_rdata,
+            abs_mem_size_buf
           )
-        arg_write64(0, shifted_rdata)
+        }
+
         set_abstractcs_busy_cmderr(DbgPKG.CMDERR_NONE.U(3.W), false.B)
         perf_abs_state := sPerfABS_IDLE
         // let dmi state machine continue
