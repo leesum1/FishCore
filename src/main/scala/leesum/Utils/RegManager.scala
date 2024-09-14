@@ -3,13 +3,17 @@ package leesum.Utils
 import chisel3._
 import chisel3.experimental.prefix
 import chisel3.util._
-import leesum.GenVerilogHelper
+import leesum.{GenVerilogHelper, Long2UInt32, Long2UInt64}
+
+import scala.math.BigInt.long2bigInt
 
 class RegManager {
   type ReadFunc = (UInt, UInt) => Valid[UInt]
   type WriteFunc = (UInt, UInt, UInt) => Valid[UInt]
 
   var max_reg_width = 0
+  var max_addr_width = 0
+  var max_addr: BigInt = 0
 
   val normal_read = (addr: UInt, reg: UInt) => {
     val read_result = Wire(Valid(UInt(reg.getWidth.W)))
@@ -40,30 +44,42 @@ class RegManager {
   }
 
   // 使用不可变的 Map 来存储 CSR 寄存器映射，确保代码的不可变性
-  private var csr_map = Map[Int, (UInt, ReadFunc, WriteFunc)]()
+  private var csr_map = Map[Long, (UInt, ReadFunc, WriteFunc)]()
 
-  def add_csr(
-      addr: Int,
+  def add_reg(
+      addr: Long,
       reg: UInt,
       read_func: ReadFunc,
       write_func: WriteFunc
   ) = {
 
-    require(addr >= 0 && addr < 4096, s"csr addr $addr should be in [0, 4096)")
     require(!csr_map.contains(addr), s"csr addr $addr already exists")
 
     max_reg_width = max_reg_width max reg.getWidth
+
+    val cur_addr_width = addr.bitLength
+
+    max_addr_width = max_addr_width max cur_addr_width
+    max_addr = max_addr max BigInt(addr.toHexString, 16)
+
+    require(
+      max_addr_width == max_addr.bitLength,
+      s"max_addr_width:$max_addr_width != max_addr.bitLength:${max_addr.bitLength}, max_addr:${max_addr
+          .toString(16)}"
+    )
+
     csr_map += (addr -> (reg, read_func, write_func))
   }
 
   /** This function is used to read csr register, if success, return a valid
-    * UInt, otherwise return a invalid UInt
+    * UInt, otherwise return an invalid UInt
     * @param raddr
     *   csr address
     * @return
     *   Valid(UInt): bits is the read result
     */
   def read(raddr: UInt, use_one_hot: Boolean = true): Valid[UInt] = {
+
     // 定义默认读取结果
     val defaultRead = Wire(Valid(UInt(max_reg_width.W)))
     defaultRead.valid := false.B
@@ -71,11 +87,11 @@ class RegManager {
 
     // 封装读取逻辑，避免重复代码
     def create_read_result(
-        addr: Int,
+        addr: Long,
         reg: UInt,
         read_func: (UInt, UInt) => Valid[UInt]
     ): Valid[UInt] = {
-      val readResult = read_func(addr.U, reg)
+      val readResult = read_func(Long2UInt64(addr)(max_addr_width - 1, 0), reg)
       val readResultPad = Wire(Valid(UInt(max_reg_width.W)))
       readResultPad.valid := readResult.valid
       readResultPad.bits := readResult.bits.pad(max_reg_width)
@@ -84,12 +100,19 @@ class RegManager {
 
     // 构建 CSR 读取映射
     val raddr_map = csr_map.map { case (addr, (reg, read_func, _)) =>
-      addr.U -> create_read_result(addr, reg, read_func)
+      Long2UInt64(addr)(max_addr_width - 1, 0) -> create_read_result(
+        addr,
+        reg,
+        read_func
+      )
     }.toSeq
 
     // 构建 one-hot 读取映射
     val raddr_map1H = csr_map.map { case (addr, (reg, read_func, _)) =>
-      (addr.U === raddr) -> create_read_result(addr, reg, read_func)
+      (Long2UInt64(addr)(
+        max_addr_width - 1,
+        0
+      ) === raddr) -> create_read_result(addr, reg, read_func)
     }.toSeq
 
     // 处理 one-hot 的逻辑
@@ -104,7 +127,7 @@ class RegManager {
   }
 
   /** This function is used to write csr register, if success, return a valid
-    * UInt, otherwise return a invalid UInt
+    * UInt, otherwise return an invalid UInt
     * @param waddr
     *   csr address
     * @param wdata
@@ -119,9 +142,13 @@ class RegManager {
 
     for ((addr, (reg, _, write_func)) <- csr_map) {
       prefix(s"waddr_${addr.toHexString}") {
-        when(waddr === addr.U) {
+        when(waddr === Long2UInt64(addr)(max_addr_width - 1, 0)) {
           val __write_result =
-            write_func(addr.U, reg, wdata(reg.getWidth - 1, 0))
+            write_func(
+              Long2UInt64(addr)(max_addr_width - 1, 0),
+              reg,
+              wdata(reg.getWidth - 1, 0)
+            )
           write_result_pad.valid := __write_result.valid
           write_result_pad.bits := __write_result.bits.pad(max_reg_width)
         }
@@ -129,6 +156,18 @@ class RegManager {
     }
 
     write_result_pad
+  }
+
+  def print_map(): Unit = {
+    println("REG MAP:")
+    for ((addr, (reg, _, _)) <- csr_map) {
+      println(s"addr: ${addr.toHexString}, reg: $reg")
+    }
+  }
+
+  def in_range(addr: UInt): Bool = {
+    val all_addr = VecInit(csr_map.keys.toSeq.map(Long2UInt32(_)))
+    all_addr.contains(addr)
   }
 }
 
@@ -155,10 +194,10 @@ object GenCSRMAP2VerilogTest extends App {
       val reg3 = RegInit(0.U(32.W))
       val reg4 = RegInit(0.U(64.W))
 
-      csr_map.add_csr(0, reg1, csr_map.normal_read, csr_map.normal_write)
-      csr_map.add_csr(1, reg2, csr_map.normal_read, csr_map.normal_write)
-      csr_map.add_csr(2, reg3, csr_map.normal_read, csr_map.normal_write)
-      csr_map.add_csr(3, reg4, csr_map.normal_read, csr_map.normal_write)
+      csr_map.add_reg(0, reg1, csr_map.normal_read, csr_map.normal_write)
+      csr_map.add_reg(1, reg2, csr_map.normal_read, csr_map.normal_write)
+      csr_map.add_reg(2, reg3, csr_map.normal_read, csr_map.normal_write)
+      csr_map.add_reg(3, reg4, csr_map.normal_read, csr_map.normal_write)
 
       when(io.read_en) {
         io.read_data := csr_map.read(io.read_addr).bits

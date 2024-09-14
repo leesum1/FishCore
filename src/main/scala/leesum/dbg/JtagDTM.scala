@@ -214,7 +214,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   )
 
   for ((addr, reg, read_func, write_func) <- csr_map) {
-    dtm_csrs.add_csr(addr, reg, read_func, write_func)
+    dtm_csrs.add_reg(addr, reg, read_func, write_func)
   }
 
   // -------------------------

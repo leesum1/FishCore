@@ -508,7 +508,7 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
       (CSRs.tselect, tselect, normal_read, empty_write)
     )
   m_map.foreach({ case (addr, reg, read_func, write_func) =>
-    csr_map.add_csr(addr, reg, read_func, write_func)
+    csr_map.add_reg(addr, reg, read_func, write_func)
   })
 
   // -----------------------

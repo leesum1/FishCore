@@ -185,7 +185,7 @@ class FishSoc(
   // SifiveUart module
   // sifive_uart32 <> 32to64 <> sifive_uart_axi_bridge <> axi_demux(3)
   // ---------------------------------------------------------------------
-  val sifive_uart32 = Module(new SifiveUart(SIFIVE_UART_BASE.toInt))
+  val sifive_uart32 = Module(new SifiveUart(SIFIVE_UART_BASE))
   sifive_uart32.io.uart_io.rx_data := io.uart_io.rx_data
   io.uart_io.tx_data := sifive_uart32.io.uart_io.tx_data
 

@@ -2,9 +2,9 @@ package leesum.devices
 
 import chisel3._
 import chisel3.util.{Cat, Valid}
-import leesum.Utils.HoldRegister
+import leesum.Utils.{HoldRegister, RegManager}
 import leesum.axi4.BasicMemoryIO
-import leesum.{EdgeDetect, GenVerilogHelper, RegMap}
+import leesum.{EdgeDetect, GenVerilogHelper}
 
 //const MSIP_BASE: u64 = 0x0;
 //const MSIP_PER_HART: u64 = 0x4;
@@ -36,7 +36,7 @@ class clint(harts_num: Int = 1, device_base: Int) extends Module {
     val soft_int = Output(Vec(harts_num, Bool()))
   })
 
-  val clint_regs = new RegMap
+  val clint_regs = new RegManager
 
   // unused high 63 bits
   val msip = RegInit(VecInit(Seq.fill(harts_num)(0.U(64.W))))

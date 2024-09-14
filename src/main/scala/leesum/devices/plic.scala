@@ -2,9 +2,9 @@ package leesum.devices
 
 import chisel3._
 import chisel3.util.{Cat, MixedVecInit, Valid, log2Ceil}
-import leesum.Utils.HoldRegister
+import leesum.Utils.{HoldRegister, RegManager}
 import leesum.axi4.BasicMemoryIO
-import leesum.{GenVerilogHelper, RegMap, ZeroExt}
+import leesum.{GenVerilogHelper, ZeroExt}
 
 ///* ref spike plic */
 //const _PLIC_MAX_CONTEXTS: usize = 15872;
@@ -285,7 +285,7 @@ class plic(
     write_result
   }
 
-  val plic_regs = new RegMap
+  val plic_regs = new RegManager
 
   for (i <- 0 until num_ints) {
     // each interrupt source has a priority register associated with it.

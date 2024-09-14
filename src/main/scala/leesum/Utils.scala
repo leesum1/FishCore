@@ -831,139 +831,139 @@ object ToAugmented {
   }
 }
 
-class RegMap {
-  type ReadFunc = (UInt, UInt) => Valid[UInt]
-  type WriteFunc = (UInt, UInt, UInt) => Valid[UInt]
-
-  val normal_read = (addr: UInt, reg: UInt) => {
-    val read_result = Wire(Valid(UInt(reg.getWidth.W)))
-    read_result.valid := true.B
-    read_result.bits := reg
-    read_result
-  }
-  val normal_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-    val write_result = Wire(Valid(UInt(reg.getWidth.W)))
-    write_result.valid := true.B
-    write_result.bits := wdata
-    reg := write_result.bits
-    write_result
-  }
-
-  val empty_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-    val write_result = Wire(Valid(UInt(reg.getWidth.W)))
-    write_result.valid := true.B
-    write_result.bits := 0.U
-    write_result
-  }
-
-  val csr_map = collection.mutable
-    .Map[
-      Int, // csr_addr
-      (UInt, ReadFunc, WriteFunc) // reg,read_func,write_func
-    ]()
-
-  def print_map(): Unit = {
-    csr_map
-      .map({ case (addr, (_, _, _)) =>
-        addr
-      })
-      .toSeq
-      .sorted
-      .foreach({ addr =>
-        println(f"0x$addr%08x")
-      })
-  }
-
-  def check_width(): Unit = {
-    val reg_width = csr_map.head._2._1.getWidth
-    csr_map.foreach({ case (_, (reg, _, _)) =>
-      require(
-        reg.getWidth == reg_width,
-        "all regs in csr_map must have the same width"
-      )
-    })
-  }
-
-  def in_range(addr: UInt): Bool = {
-    val all_addr = VecInit(csr_map.keys.toSeq.map(Long2UInt32(_)))
-    all_addr.contains(addr)
-  }
-
-  def add_reg(
-      addr: Int,
-      reg: UInt,
-      read_func: ReadFunc,
-      write_func: WriteFunc
-  ) = {
-    require(!csr_map.contains(addr), s"addr $addr already exists")
-    csr_map.addOne(addr, (reg, read_func, write_func))
-    check_width()
-  }
-
-  /** This function is used to read csr register, if success, return a valid
-    * UInt, otherwise return a invalid UInt
-    * @param raddr
-    *   csr address
-    * @return
-    *   Valid(UInt): bits is the read result
-    */
-  def read(raddr: UInt, enable_1h: Boolean = true): Valid[UInt] = {
-    val raddr_map = csr_map.map({ case (addr, (reg, read_func, _)) =>
-      val addr_u = Long2UInt32(addr)
-      val read_result = read_func(addr_u, reg)
-      (addr_u, read_result)
-    })
-
-    val reg_width = csr_map.head._2._1.getWidth
-
-    val default_read = Wire(Valid(UInt(reg_width.W)))
-    default_read.valid := false.B
-    default_read.bits := 0.U
-
-    val raddr_map_1h = csr_map
-      .map({ case (addr, (reg, read_func, _)) =>
-        val addr_u = Long2UInt32(addr)
-        val read_result = read_func(addr_u, reg)
-        (addr_u === raddr, read_result)
-      })
-      .toSeq
-    // at least one csr read result is valid
-    val oneH_valid = raddr_map_1h.map(_._1).reduce(_ || _)
-    val rdata_1h = Mux(oneH_valid, Mux1H(raddr_map_1h), default_read)
-
-    val rdata = MuxLookup(raddr, default_read)(
-      raddr_map.toSeq
-    )
-
-    if (enable_1h) {
-      rdata_1h
-    } else {
-      rdata
-    }
-  }
-
-  /** This function is used to write csr register, if success, return a valid
-    * UInt, otherwise return a invalid UInt
-    * @param waddr
-    *   csr address
-    * @param wdata
-    *   write data
-    * @return
-    *   Valid(UInt): bits is the write result
-    */
-  def write(waddr: UInt, wdata: UInt): Valid[UInt] = {
-    val write_result = Wire(Valid(UInt(wdata.getWidth.W)))
-    write_result.valid := false.B
-    write_result.bits := 0.U
-    csr_map.foreach({ case (addr, (reg, _, write_func)) =>
-      val addr_u = Long2UInt32(addr)
-      when(waddr === addr_u) {
-        write_result := write_func(addr_u, reg, wdata)
-      }
-    })
-    write_result
-  }
-}
+//class RegMap {
+//  type ReadFunc = (UInt, UInt) => Valid[UInt]
+//  type WriteFunc = (UInt, UInt, UInt) => Valid[UInt]
+//
+//  val normal_read = (addr: UInt, reg: UInt) => {
+//    val read_result = Wire(Valid(UInt(reg.getWidth.W)))
+//    read_result.valid := true.B
+//    read_result.bits := reg
+//    read_result
+//  }
+//  val normal_write = (addr: UInt, reg: UInt, wdata: UInt) => {
+//    val write_result = Wire(Valid(UInt(reg.getWidth.W)))
+//    write_result.valid := true.B
+//    write_result.bits := wdata
+//    reg := write_result.bits
+//    write_result
+//  }
+//
+//  val empty_write = (addr: UInt, reg: UInt, wdata: UInt) => {
+//    val write_result = Wire(Valid(UInt(reg.getWidth.W)))
+//    write_result.valid := true.B
+//    write_result.bits := 0.U
+//    write_result
+//  }
+//
+//  val csr_map = collection.mutable
+//    .Map[
+//      Int, // csr_addr
+//      (UInt, ReadFunc, WriteFunc) // reg,read_func,write_func
+//    ]()
+//
+//  def print_map(): Unit = {
+//    csr_map
+//      .map({ case (addr, (_, _, _)) =>
+//        addr
+//      })
+//      .toSeq
+//      .sorted
+//      .foreach({ addr =>
+//        println(f"0x$addr%08x")
+//      })
+//  }
+//
+//  def check_width(): Unit = {
+//    val reg_width = csr_map.head._2._1.getWidth
+//    csr_map.foreach({ case (_, (reg, _, _)) =>
+//      require(
+//        reg.getWidth == reg_width,
+//        "all regs in csr_map must have the same width"
+//      )
+//    })
+//  }
+//
+//  def in_range(addr: UInt): Bool = {
+//    val all_addr = VecInit(csr_map.keys.toSeq.map(Long2UInt32(_)))
+//    all_addr.contains(addr)
+//  }
+//
+//  def add_reg(
+//      addr: Int,
+//      reg: UInt,
+//      read_func: ReadFunc,
+//      write_func: WriteFunc
+//  ) = {
+//    require(!csr_map.contains(addr), s"addr $addr already exists")
+//    csr_map.addOne(addr, (reg, read_func, write_func))
+//    check_width()
+//  }
+//
+//  /** This function is used to read csr register, if success, return a valid
+//    * UInt, otherwise return a invalid UInt
+//    * @param raddr
+//    *   csr address
+//    * @return
+//    *   Valid(UInt): bits is the read result
+//    */
+//  def read(raddr: UInt, enable_1h: Boolean = true): Valid[UInt] = {
+//    val raddr_map = csr_map.map({ case (addr, (reg, read_func, _)) =>
+//      val addr_u = Long2UInt32(addr)
+//      val read_result = read_func(addr_u, reg)
+//      (addr_u, read_result)
+//    })
+//
+//    val reg_width = csr_map.head._2._1.getWidth
+//
+//    val default_read = Wire(Valid(UInt(reg_width.W)))
+//    default_read.valid := false.B
+//    default_read.bits := 0.U
+//
+//    val raddr_map_1h = csr_map
+//      .map({ case (addr, (reg, read_func, _)) =>
+//        val addr_u = Long2UInt32(addr)
+//        val read_result = read_func(addr_u, reg)
+//        (addr_u === raddr, read_result)
+//      })
+//      .toSeq
+//    // at least one csr read result is valid
+//    val oneH_valid = raddr_map_1h.map(_._1).reduce(_ || _)
+//    val rdata_1h = Mux(oneH_valid, Mux1H(raddr_map_1h), default_read)
+//
+//    val rdata = MuxLookup(raddr, default_read)(
+//      raddr_map.toSeq
+//    )
+//
+//    if (enable_1h) {
+//      rdata_1h
+//    } else {
+//      rdata
+//    }
+//  }
+//
+//  /** This function is used to write csr register, if success, return a valid
+//    * UInt, otherwise return a invalid UInt
+//    * @param waddr
+//    *   csr address
+//    * @param wdata
+//    *   write data
+//    * @return
+//    *   Valid(UInt): bits is the write result
+//    */
+//  def write(waddr: UInt, wdata: UInt): Valid[UInt] = {
+//    val write_result = Wire(Valid(UInt(wdata.getWidth.W)))
+//    write_result.valid := false.B
+//    write_result.bits := 0.U
+//    csr_map.foreach({ case (addr, (reg, _, write_func)) =>
+//      val addr_u = Long2UInt32(addr)
+//      when(waddr === addr_u) {
+//        write_result := write_func(addr_u, reg, wdata)
+//      }
+//    })
+//    write_result
+//  }
+//}
 
 object CatReverse {
 

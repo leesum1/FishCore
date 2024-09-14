@@ -257,7 +257,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
 
   // add progbuf to map
   for (i <- 0 until dm_config.progbuf_num) {
-    dm_regs.add_csr(
+    dm_regs.add_reg(
       DbgPKG.PROGBUF_BASE + i,
       progbuf(i),
       dm_regs.normal_read,
@@ -266,7 +266,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
   }
   // add abstract_data to map
   for (i <- 0 until dm_config.abstract_data_num) {
-    dm_regs.add_csr(
+    dm_regs.add_reg(
       DbgPKG.ABSTRACT_DATA_BASE + i,
       abstract_data(i),
       dm_regs.normal_read,
@@ -300,7 +300,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
     )
 
   for ((addr, reg, read_func, write_func) <- m_map) {
-    dm_regs.add_csr(addr, reg, read_func, write_func)
+    dm_regs.add_reg(addr, reg, read_func, write_func)
   }
 
   val sDMI_IDLE :: sDMI_PROC :: sDMI_SenResp :: sDMI_SideEff :: Nil = Enum(4)

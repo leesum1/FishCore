@@ -2,8 +2,9 @@ package leesum.devices
 
 import chisel3._
 import chisel3.util.{Cat, Valid}
+import leesum.Utils.RegManager
 import leesum.axi4.BasicMemoryIO
-import leesum.{GenVerilogHelper, RegMap}
+import leesum.GenVerilogHelper
 
 object SifiveUartConst {
   val txdata = 0x0
@@ -29,7 +30,7 @@ class UartIO extends Bundle {
 
 }
 
-class SifiveUart(base_addr: Int) extends Module {
+class SifiveUart(base_addr: Long) extends Module {
 
   val io = IO(new Bundle {
     val mem = new BasicMemoryIO(32, 32)
@@ -87,7 +88,7 @@ class SifiveUart(base_addr: Int) extends Module {
     read_result
   }
 
-  val sifive_uart_regs = new RegMap
+  val sifive_uart_regs = new RegManager
 
   val reg_map =
     Seq(
