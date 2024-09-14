@@ -1,15 +1,16 @@
 
 #include "AllTask.h"
 
+static std::shared_ptr<spdlog::logger> itrace_log = nullptr;
+
 void task_itrace(SimBase &sim_base, std::optional<Itrace> &itrace,
                  bool itrace_log_enable) {
 
-  auto itrace_log = spdlog::get("itrace");
-
   if (itrace_log_enable) {
+    itrace_log = spdlog::get("itrace");
     itrace.emplace();
     sim_base.add_after_clk_rise_task(
-        {[&sim_base, &itrace, itrace_log] {
+        {[&sim_base, &itrace] {
            const auto top = sim_base.top;
            if (top->io_difftest_valid) {
              const auto has_exception = top->io_difftest_bits_exception_valid;

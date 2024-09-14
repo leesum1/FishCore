@@ -1,4 +1,7 @@
 #include "AllTask.h"
+#include "spdlog/logger.h"
+#include <cstdio>
+#include <memory>
 
 constexpr auto MEM_BASE = 0x80000000L;
 constexpr auto MEM_SIZE = 0x8000000L;
@@ -10,18 +13,24 @@ constexpr auto VGACTL_ADDR = DEVICE_BASE + 0x0000100L;
 constexpr auto FB_ADDR = DEVICE_BASE + 0x1000000L;
 constexpr auto BOOT_PC = 0x80000000L;
 
+static std::shared_ptr<spdlog::logger> diff_trace = nullptr;
+static std::shared_ptr<spdlog::logger> console = nullptr;
+
 void task_difftest(SimBase &sim_base, std::optional<DiffTest> &diff_ref,
                    std::string image_name, bool difftest_en) {
 
-  auto diff_trace = spdlog::get("difftest");
-  auto console = spdlog::get("console");
-
   if (difftest_en) {
+    diff_trace = spdlog::get("diff_trace");
+    console = spdlog::get("console");
+
+
+    diff_trace->set_level(spdlog::level::info);
+    console->set_level(spdlog::level::info);
+
     diff_ref.emplace(BOOT_PC, MEM_SIZE, MEM_BASE);
     diff_ref->load_file(image_name.c_str());
-
     sim_base.add_after_clk_rise_task(
-        {[&sim_base, console, diff_trace, &diff_ref] {
+        {[&sim_base, &diff_ref] {
            const auto top = sim_base.top;
            // diff test
            if (top->io_difftest_valid) {

@@ -1,10 +1,13 @@
 #include "AllTask.h"
+#include <sys/stat.h>
+
+static std::shared_ptr<spdlog::logger> console = nullptr;
 
 void task_am_ebreak_check(SimBase &sim_base, bool am_en) {
-  auto console = spdlog::get("console");
+  console = spdlog::get("console");
   if (am_en) {
     sim_base.add_after_clk_rise_task(
-        {[&sim_base, console] {
+        {[&sim_base] {
            const auto top = sim_base.top;
            if (top->io_difftest_bits_exception_valid &&
                top->io_difftest_valid) {

@@ -15,8 +15,15 @@ build_release:
     xmake
 
 build_debug:
-    xmake f -m debug
+    xmake f --debugger=gdb -m debug
     xmake
+
+
+gdb args_string: build_debug
+    xmake run -d Vtop {{args_string}}
+
+run args_string: build_release
+    xmake run Vtop {{args_string}}
 
 
 perf_release: build_release

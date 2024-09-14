@@ -7,10 +7,9 @@ if is_mode("release") then
 end
 
 
-
 if is_mode("debug") then
 	set_symbols("debug")
-	set_optimize("none")
+	-- set_optimize("none")
 	-- set_policy("build.sanitizer.address", true)
 end
 
@@ -37,7 +36,7 @@ set_policy("build.warning", true)
 -- set_warnings("all", "extra")
 
 -- 设置 C++20 标准
-set_languages("cxx23")
+set_languages("cxx20")
 
 add_rules("plugin.compile_commands.autoupdate", { outputdir = "." })
 
@@ -45,7 +44,7 @@ add_rules("plugin.compile_commands.autoupdate", { outputdir = "." })
 
 -- 定义一个变量来控制是否启用 --trace 标志
 option("enable_trace")
-    set_default(true)  -- 默认启用 --trace
+    set_default(false)  -- 默认启用 --trace
     set_showmenu(true)
     set_description("Enable Verilator trace")
 option_end()

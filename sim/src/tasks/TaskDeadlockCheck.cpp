@@ -1,10 +1,13 @@
 #include "AllTask.h"
 
-void task_deadlock_check(SimBase &sim_base) {
+static std::shared_ptr<spdlog::logger> console = nullptr;
 
-  auto console = spdlog::get("console");
+
+
+void task_deadlock_check(SimBase &sim_base) {
+  console = spdlog::get("console");
   sim_base.add_after_clk_rise_task(
-      {[&sim_base, console] {
+      {[&sim_base] {
          if (sim_base.not_commit_num > 4096) {
            if (sim_base.top->io_is_halted != 0) {
              // not check on halt
