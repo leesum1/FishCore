@@ -227,7 +227,8 @@ object GenMaskZero {
 object GenMaskOne {
   def apply(width: Int, one_count: Int, start_left: Boolean = false): UInt = {
     require(one_count <= width)
-    if (one_count == 0) {
+
+    val result = if (one_count == 0) {
       Fill(width, 0.U(1.W))
     } else if (one_count == width) {
       Fill(width, 1.U(1.W))
@@ -240,6 +241,8 @@ object GenMaskOne {
         Cat(mask_zero, mask_one)
       }
     }
+    require(result.getWidth == width)
+    result
   }
 
   def apply(width: Int, one_count: UInt, start_left: Boolean): UInt = {

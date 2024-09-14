@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.aop.Select.When
 import chisel3.util.{DecoupledIO, _}
 import leesum.Cache.{DCacheReq, DCacheResp}
-import leesum.Utils.SimLog
+import leesum.Utils.{RegManager, SimLog}
 import leesum._
 import leesum.axi4.AXIDef
 
@@ -185,7 +185,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
     when(new_dmcontrol_field.hartreset) {
       // This optional field writes the reset bit for all the
       // currently selected harts. To perform a reset the
-      // debugger writes 1, and then writes 0 to deassert
+      // debugger writes 1, and then writes 0 to dessert
       // the reset signal.
       io.debug_core_interface.reset_req.valid := true.B
     }
@@ -253,53 +253,24 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
     write_result
   }
 
-  val dm_map = new CSRMap()
-  // -------------------------
-  // map normal read write func define
-  // -------------------------
-  val normal_read = (addr: UInt, reg: UInt) => {
-    val read_result = Wire(Valid(UInt(32.W)))
-    read_result.valid := true.B
-    read_result.bits := reg
-    read_result
-  }
-  val normal_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-    val write_result = Wire(Valid(UInt(32.W)))
-    write_result.valid := true.B
-    write_result.bits := wdata
-    reg := write_result.bits
-    write_result
-  }
+  val dm_regs = new RegManager()
 
-  val empty_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-    val write_result = Wire(Valid(UInt(32.W)))
-    write_result.valid := true.B
-    write_result.bits := 0.U
-    write_result
-  }
-
-  val empty_read = (addr: UInt, reg: UInt) => {
-    val read_result = Wire(Valid(UInt(32.W)))
-    read_result.valid := true.B
-    read_result.bits := 0.U
-    read_result
-  }
   // add progbuf to map
   for (i <- 0 until dm_config.progbuf_num) {
-    dm_map.add_csr(
+    dm_regs.add_csr(
       DbgPKG.PROGBUF_BASE + i,
       progbuf(i),
-      normal_read,
-      normal_write
+      dm_regs.normal_read,
+      dm_regs.normal_write
     )
   }
   // add abstract_data to map
   for (i <- 0 until dm_config.abstract_data_num) {
-    dm_map.add_csr(
+    dm_regs.add_csr(
       DbgPKG.ABSTRACT_DATA_BASE + i,
       abstract_data(i),
-      normal_read,
-      normal_write
+      dm_regs.normal_read,
+      dm_regs.normal_write
     )
   }
 
@@ -307,19 +278,29 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
   val m_map =
     Seq(
       (DbgPKG.DMCONTROL_ADDR, dmcontrol, dmcontrol_read, dmcontrol_write),
-      (DbgPKG.DMSTATUS_ADDR, dmstatus, dmstatus_read, empty_write),
-      (DbgPKG.HARTINFO_ADDR, hartinfo, normal_read, normal_write),
-      (DbgPKG.ABSTRACTCS_ADDR, abstractcs, normal_read, abstractcs_write),
-      (DbgPKG.COMMAND_ADDR, command, empty_read, command_write),
-      (DbgPKG.HALTSUM1_ADDR, 0.U, empty_read, empty_write),
-      (DbgPKG.HAWINDOWSEL_ADDR, 0.U, empty_read, empty_write),
-      (DbgPKG.HAWINDOW, 0.U, empty_read, empty_write),
-      (DbgPKG.ABSTRACTAUTO_ADDR, 0.U, empty_read, empty_write),
-      (DbgPKG.SBCS_ADDR, sbcs, empty_read, empty_write)
+      (DbgPKG.DMSTATUS_ADDR, dmstatus, dmstatus_read, dm_regs.empty_write),
+      (
+        DbgPKG.HARTINFO_ADDR,
+        hartinfo,
+        dm_regs.normal_read,
+        dm_regs.normal_write
+      ),
+      (
+        DbgPKG.ABSTRACTCS_ADDR,
+        abstractcs,
+        dm_regs.normal_read,
+        abstractcs_write
+      ),
+      (DbgPKG.COMMAND_ADDR, command, dm_regs.empty_read, command_write),
+      (DbgPKG.HALTSUM1_ADDR, 0.U, dm_regs.empty_read, dm_regs.empty_write),
+      (DbgPKG.HAWINDOWSEL_ADDR, 0.U, dm_regs.empty_read, dm_regs.empty_write),
+      (DbgPKG.HAWINDOW, 0.U, dm_regs.empty_read, dm_regs.empty_write),
+      (DbgPKG.ABSTRACTAUTO_ADDR, 0.U, dm_regs.empty_read, dm_regs.empty_write),
+      (DbgPKG.SBCS_ADDR, sbcs, dm_regs.empty_read, dm_regs.empty_write)
     )
 
   for ((addr, reg, read_func, write_func) <- m_map) {
-    dm_map.add_csr(addr, reg, read_func, write_func)
+    dm_regs.add_csr(addr, reg, read_func, write_func)
   }
 
   val sDMI_IDLE :: sDMI_PROC :: sDMI_SenResp :: sDMI_SideEff :: Nil = Enum(4)
@@ -342,7 +323,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
       switch(dmi_req_buf.op) {
         is(DbgPKG.DMI_OP_READ.U) {
           // 读操作，读操作可以立马返回, 不会有副作用
-          val read_result = dm_map.read(dmi_req_buf.addr, use_one_hot = true)
+          val read_result = dm_regs.read(dmi_req_buf.addr, use_one_hot = true)
           dmi_resp_buf.addr := dmi_req_buf.addr
           dmi_resp_buf.data := read_result.bits
           dmi_resp_buf.op := Mux(
@@ -360,7 +341,7 @@ class DebugModule(dm_config: DebugModuleConfig) extends Module {
             DbgPKG.COMMAND_ADDR.asUInt
           )
 
-          val write_result = dm_map.write(dmi_req_buf.addr, dmi_req_buf.data)
+          val write_result = dm_regs.write(dmi_req_buf.addr, dmi_req_buf.data)
           val on_write_side_effect =
             side_effect_dm_regs.contains(dmi_req_buf.addr)
 

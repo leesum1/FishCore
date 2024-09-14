@@ -16,6 +16,8 @@ constexpr auto BOOT_PC = 0x80000000L;
 static std::shared_ptr<spdlog::logger> diff_trace = nullptr;
 static std::shared_ptr<spdlog::logger> console = nullptr;
 
+
+// TODO: 有性能问题
 void task_difftest(SimBase &sim_base, std::optional<DiffTest> &diff_ref,
                    std::string image_name, bool difftest_en) {
 

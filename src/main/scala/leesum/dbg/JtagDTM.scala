@@ -1,8 +1,8 @@
 package leesum.dbg
 import chisel3._
 import chisel3.util.{DecoupledIO, _}
-import leesum.Utils.SimLog
-import leesum.{CSRBitField, CSRMap, GenVerilogHelper}
+import leesum.Utils.{RegManager, SimLog}
+import leesum.{CSRBitField, GenVerilogHelper}
 
 class JtagIO(as_master: Boolean) extends Bundle {
   val tck = if (as_master) Output(Bool()) else Input(Bool())
@@ -45,7 +45,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   io.dmi_reset_valid := false.B
   io.dmi_hard_reset_valid := false.B
 
-  val dtm_reg_max_width = 34 + dm_config.abits
+  val dtm_dmi_reg_width = 34 + dm_config.abits
 
   // JTAG state machine
   val jtag_state = RegInit(JtagState.TestLogicReset)
@@ -62,7 +62,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   io.jtag_ir := ir_reg
   // shift register
   val ir_shift_reg = Module(new JtagShiftReg(dm_config.ir_length))
-  val dr_shift_reg = Module(new JtagShiftReg(dtm_reg_max_width))
+  val dr_shift_reg = Module(new JtagShiftReg(dtm_dmi_reg_width))
 
   val clock_falling = WireInit((!clock.asUInt).asClock)
   dontTouch(clock_falling)
@@ -79,31 +79,31 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   dtm_dtmcs_init_value.set_field(DTMCSMask.version, 1) // 0.13 and 1.0
   dtm_dtmcs_init_value.set_field(DTMCSMask.idle, 5)
 
-  val dtm_idcode = RegInit("xdeadbeef".U(dtm_reg_max_width.W))
+  val dtm_idcode = RegInit("xdeadbeef".U(32.W))
 
   println(
     "dtm_dtmcs_init_value.getRawValue: " + dtm_dtmcs_init_value.get_raw
   )
   val dtm_dtmcs = withReset(jtag_tap_reset) {
     RegInit(
-      dtm_dtmcs_init_value.get_raw.U(dtm_reg_max_width.W)
+      dtm_dtmcs_init_value.get_raw.U(32.W)
     )
   }
 
   dontTouch(dtm_dtmcs)
 
-  val dtm_dmi = withReset(jtag_tap_reset) { RegInit(0.U(dtm_reg_max_width.W)) }
+  val dtm_dmi = withReset(jtag_tap_reset) { RegInit(0.U(dtm_dmi_reg_width.W)) }
   val dtm_bypass0 = withReset(jtag_tap_reset) {
-    RegInit(0.U(dtm_reg_max_width.W))
+    RegInit(0.U(1.W))
   }
   val dtm_bypass1 = withReset(jtag_tap_reset) {
-    RegInit(0.U(dtm_reg_max_width.W))
+    RegInit(0.U(1.W))
   }
   val dmt_custom = withReset(jtag_tap_reset) {
-    RegInit(0.U(dtm_reg_max_width.W))
+    RegInit(0.U(32.W))
   }
 
-  val dtm_csrs = new CSRMap()
+  val dtm_csrs = new RegManager()
   val dtm_dmi_filed = new DTMDMIFiled(dtm_dmi)
   // -------------------------
   // Flags
@@ -133,7 +133,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
       dmi_sticky_error := false.B
       SimLog(desiredName, "dtmcs set hard reset\n")
     }
-    val write_result = Wire(Valid(UInt(dtm_reg_max_width.W)))
+    val write_result = Wire(Valid(UInt(reg.getWidth.W)))
     write_result.valid := true.B
     write_result.bits := wdata
     write_result
@@ -142,7 +142,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   val dtm_dtmcs_read_func = (addr: UInt, reg: UInt) => {
     val new_dtm_dtmcs_filed = new DTMDTMCSFiled(reg(31, 0))
 
-    val read_result = Wire(Valid(UInt(dtm_reg_max_width.W)))
+    val read_result = Wire(Valid(UInt(reg.getWidth.W)))
     read_result.valid := true.B
     read_result.bits := new_dtm_dtmcs_filed.get_read_data(
       Mux(in_dmi_error, DbgPKG.DMI_OP_STATUS_BUSY.U(2.W), dtm_dmi_filed.op)
@@ -151,7 +151,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   }
 
   val dmi_write_func = (addr: UInt, reg: UInt, wdata: UInt) => {
-    val write_result = Wire(Valid(UInt(dtm_reg_max_width.W)))
+    val write_result = Wire(Valid(UInt(reg.getWidth.W)))
     write_result.valid := true.B
     write_result.bits := wdata
 
@@ -166,39 +166,11 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
   }
 
   val dmi_read_func = (addr: UInt, reg: UInt) => {
-    val read_result = Wire(Valid(UInt(dtm_reg_max_width.W)))
+    val read_result = Wire(Valid(UInt(reg.getWidth.W)))
     read_result.valid := true.B
     read_result.bits := dtm_dmi_filed.get_read_data(
       Mux(in_dmi_error, DbgPKG.DMI_OP_STATUS_BUSY.U(2.W), dtm_dmi_filed.op)
     )
-    read_result
-  }
-
-  val normal_read = (addr: UInt, reg: UInt) => {
-    val read_result = Wire(Valid(UInt(dtm_reg_max_width.W)))
-    read_result.valid := true.B
-    read_result.bits := reg
-    read_result
-  }
-  val normal_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-    val write_result = Wire(Valid(UInt(dtm_reg_max_width.W)))
-    write_result.valid := true.B
-    write_result.bits := wdata
-    reg := write_result.bits
-    write_result
-  }
-
-  val empty_write = (addr: UInt, reg: UInt, wdata: UInt) => {
-    val write_result = Wire(Valid(UInt(dtm_reg_max_width.W)))
-    write_result.valid := true.B
-    write_result.bits := 0.U
-    write_result
-  }
-
-  val empty_read = (addr: UInt, reg: UInt) => {
-    val read_result = Wire(Valid(UInt(dtm_reg_max_width.W)))
-    read_result.valid := true.B
-    read_result.bits := 0.U
     read_result
   }
 
@@ -218,26 +190,26 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
     (
       DbgPKG.JtagDTM_IDCODE,
       dtm_idcode,
-      normal_read,
-      empty_write
+      dtm_csrs.normal_read,
+      dtm_csrs.empty_write
     ),
     (
       DbgPKG.JtagDTM_BYPASS0,
       dtm_bypass0,
-      empty_read,
-      empty_write,
+      dtm_csrs.empty_read,
+      dtm_csrs.empty_write,
     ),
     (
       DbgPKG.JtagDTM_BYPASS1,
       dtm_bypass1,
-      empty_read,
-      empty_write,
+      dtm_csrs.empty_read,
+      dtm_csrs.empty_write,
     ),
     (
       DbgPKG.JtagDTM_CUSTOM,
       dmt_custom,
-      normal_read,
-      normal_write
+      dtm_csrs.normal_read,
+      dtm_csrs.normal_write
     )
   )
 
@@ -303,7 +275,7 @@ class JtagDTM(dm_config: DebugModuleConfig) extends Module {
     ) {
       Seq(
         DbgPKG.JtagDTM_DTMCS.U -> 32.U,
-        DbgPKG.JtagDTM_DMI.U -> dtm_reg_max_width.U,
+        DbgPKG.JtagDTM_DMI.U -> dtm_dmi_reg_width.U,
         DbgPKG.JtagDTM_IDCODE.U -> 32.U,
         DbgPKG.JtagDTM_CUSTOM.U -> 32.U,
         DbgPKG.JtagDTM_BYPASS0.U -> 1.U,

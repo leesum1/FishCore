@@ -1,89 +1,9 @@
 package leesum
 import chisel3._
+import chisel3.experimental.prefix
 import chisel3.util.{Cat, Mux1H, MuxLookup, Valid}
-
-class CSRMap {
-  type ReadFunc = (UInt, UInt) => Valid[UInt]
-  type WriteFunc = (UInt, UInt, UInt) => Valid[UInt]
-
-  val csr_map = collection.mutable
-    .Map[
-      Int, // csr_addr
-      (UInt, ReadFunc, WriteFunc) // reg,read_func,write_func
-    ]()
-
-  def add_csr(
-      addr: Int,
-      reg: UInt,
-      read_func: ReadFunc,
-      write_func: WriteFunc
-  ) = {
-
-    require(addr >= 0 && addr < 4096, s"csr addr $addr should be in [0, 4096)")
-    require(!csr_map.contains(addr), s"csr addr $addr already exists")
-
-//    if (csr_map.isEmpty) {
-    csr_map.addOne(addr, (reg, read_func, write_func))
-//    }
-
-  }
-
-  /** This function is used to read csr register, if success, return a valid
-    * UInt, otherwise return a invalid UInt
-    * @param raddr
-    *   csr address
-    * @return
-    *   Valid(UInt): bits is the read result
-    */
-  def read(raddr: UInt, use_one_hot: Boolean = true): Valid[UInt] = {
-
-    val default_witdth = csr_map.head._2._1.getWidth
-    val default_read = Wire(Valid(UInt(default_witdth.W)))
-    default_read.valid := false.B
-    default_read.bits := 0.U
-
-    val raddr_map = csr_map
-      .map({ case (addr, (reg, read_func, _)) =>
-        val read_result = read_func(addr.U, reg)
-        (addr.U, read_result)
-      })
-      .toSeq
-
-    val raddr_map_1h = csr_map
-      .map({ case (addr, (reg, read_func, _)) =>
-        val read_result = read_func(addr.U, reg)
-        (addr.U === raddr, read_result)
-      })
-      .toSeq
-    // at least one csr read result is valid
-    val oneH_valid = raddr_map_1h.map(_._1).reduce(_ || _)
-    val rdata_1h = Mux(oneH_valid, Mux1H(raddr_map_1h), default_read)
-
-    val rdata = MuxLookup(raddr, default_read)(raddr_map)
-    if (use_one_hot) rdata_1h else rdata
-  }
-
-  /** This function is used to write csr register, if success, return a valid
-    * UInt, otherwise return a invalid UInt
-    * @param waddr
-    *   csr address
-    * @param wdata
-    *   write data
-    * @return
-    *   Valid(UInt): bits is the write result
-    */
-  def write(waddr: UInt, wdata: UInt): Valid[UInt] = {
-    val write_result = Wire(Valid(UInt(64.W)))
-    write_result.valid := false.B
-    write_result.bits := 0.U
-    csr_map.foreach({ case (addr, (reg, _, write_func)) =>
-      when(waddr === addr.U) {
-        write_result := write_func(addr.U, reg, wdata)
-      }
-    })
-    write_result
-  }
-}
+import leesum.MIsaMask.D
+import leesum.Utils.RegManager
 
 class CSRReadPort extends Bundle {
   val addr = Output(UInt(12.W))
@@ -221,7 +141,7 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
   val umode_enable = true
   val float_enable = false
 
-  val csr_map = new CSRMap()
+  val csr_map = new RegManager()
 
   // -----------------------
   // mstatus init value
@@ -498,7 +418,11 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
 
   val cycle = RegInit(0.U(64.W))
   val instret = RegInit(0.U(64.W))
+  val mtime = RegInit(0.U(64.W))
+
+  mtime := io.mtime
   cycle := cycle + 1.U
+
   when(io.direct_write_ports.instret_inc.valid) {
     instret := instret + io.direct_write_ports.instret_inc.bits
   }
@@ -508,7 +432,10 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
 
   // not support debug mode,just to pass breakpoint test
   // Skip tselect if hard-wired. RISC-V Debug Specification
-  val tselect = RegInit(GenMaskOne(64, 64))
+  val tselect = Reg(UInt(64.W))
+  when(reset.asBool) {
+    tselect := GenMaskOne(64, 64)
+  }
 
   // -------------------------
   // read write func define
@@ -575,7 +502,7 @@ class CSRRegs(read_port_num: Int = 1, write_port_num: Int = 1) extends Module {
       (CSRs.scounteren, scounteren, normal_read, normal_write),
       (CSRs.cycle, cycle, normal_read, empty_write),
       (CSRs.mcycle, cycle, normal_read, empty_write),
-      (CSRs.time, RegNext(io.mtime), normal_read, empty_write),
+      (CSRs.time, mtime, normal_read, empty_write),
       (CSRs.instret, instret, normal_read, empty_write),
       (CSRs.minstret, instret, normal_read, empty_write),
       (CSRs.tselect, tselect, normal_read, empty_write)
