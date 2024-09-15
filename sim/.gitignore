@@ -17,6 +17,7 @@ flamegraph.svg
 *.fst
 *.vcd
 *.old
+demo_example/
 # MacOS Cache
 .DS_Store
 

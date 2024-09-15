@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Vtop.h"
+#include <atomic>
 #include <string>
 #if VM_TRACE_FST == 1
 
@@ -18,6 +19,8 @@ public:
     std::string name;
     uint64_t period_cycle;
     uint64_t counter = 0;
+
+
   };
 
   enum SimState_t { sim_run, sim_stop, sim_abort, sim_finish };
@@ -30,6 +33,9 @@ private:
 #endif
   std::vector<SimTask_t> after_clk_rise_tasks;
   std::vector<SimTask_t> before_clk_rise_tasks;
+  std::vector<SimTask_t> after_clk_rise_tasks_mutithread;
+  std::vector<SimTask_t> before_clk_rise_tasks_mutithread;
+
   SimState_t sim_state = sim_stop;
 
 public:

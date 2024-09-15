@@ -1,10 +1,16 @@
 #include "include/SimBase.h"
 #include "CSREncode.h"
+#include "Utils.h"
 #include "Vtop.h"
 #include "spdlog/spdlog.h"
 #include <memory>
-// #include <execution>
-#include "Utils.h"
+#include <optional>
+
+#include "async_simple/coro/Lazy.h"
+#include "async_simple/coro/SyncAwait.h"
+#include "async_simple/executors/SimpleExecutor.h"
+using namespace async_simple;
+using namespace async_simple::coro;
 
 #if VM_TRACE_FST == 1
 
@@ -212,6 +218,28 @@ void SimBase::print_tasks() const {
 }
 
 void SimBase::step() {
+  static std::optional<executors::SimpleExecutor> executor = std::nullopt;
+
+  if (!executor.has_value()) {
+    executor.emplace(4);
+  }
+
+  auto async_wrapper = [](SimTask_t &task) -> Lazy<void> {
+    task.counter += 1;
+    if (task.counter >= task.period_cycle) {
+      task.counter = 0;
+      task.task_func();
+    }
+    co_return;
+  };
+
+  auto execute_tasks_co = [&](std::vector<SimTask_t> &tasks) -> Lazy<void> {
+    for (auto &task : tasks) {
+      co_await async_wrapper(task);
+    }
+    co_return;
+  };
+
   auto execute_tasks = [&](auto &tasks) {
     for (auto &task : tasks) {
       task.counter += 1;
@@ -234,11 +262,12 @@ void SimBase::step() {
     }
 
     // execute after step tasks
-    // execute_tasks_co(after_clk_rise_tasks);
+
+    // syncAwait(execute_tasks_co(after_clk_rise_tasks), &executor.value());
     execute_tasks(after_clk_rise_tasks);
   } else {
     // execute before step tasks
-    // execute_tasks_co(before_clk_rise_tasks);
+    // syncAwait(execute_tasks_co(before_clk_rise_tasks), &executor.value());
     execute_tasks(before_clk_rise_tasks);
   }
 
