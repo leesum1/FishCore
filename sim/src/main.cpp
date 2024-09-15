@@ -121,22 +121,21 @@ int main(int argc, char **argv) {
   app.add_flag("-d,--difftest", difftest_en, "enable difftest with rv64emu")
       ->default_val(false);
   // log options
-  app.add_flag("--difftest_log", difftest_log_en, "enable log")
-      ->default_val(false);
+  app.add_flag("--diff-log", difftest_log_en, "enable log")->default_val(false);
   app.add_flag("--itrace", itrace_log_en, "enable instruction trace")
       ->default_val(false);
-  app.add_flag("--perf_trace", perf_trace_log_en, "enable perf trace")
+  app.add_flag("--perf-trace", perf_trace_log_en, "enable perf trace")
       ->default_val(false);
   // device options
   app.add_flag("--vga", vga_en, "enable am vga")->default_val(false);
 
   // remote bitbang options
   app.add_flag("--rbb", rbb_en, "enable remote bitbang")->default_val(false);
-  app.add_option("--rbb_port", rbb_port, "remote bitbang port")
+  app.add_option("--rbb-port", rbb_port, "remote bitbang port")
       ->default_val(23456);
 
   // tohost check
-  app.add_flag("--to_host_check", to_host_check_en, "enable to_host check")
+  app.add_flag("--tohost-check", to_host_check_en, "enable to_host check")
       ->default_val(false);
 
   CLI11_PARSE(app, argc, argv)
@@ -159,9 +158,6 @@ int main(int argc, char **argv) {
   diff_trace->set_level(spdlog::level::info);
   perf_trace->set_level(spdlog::level::info);
   itrace_log->set_level(spdlog::level::info);
-  itrace_log->set_pattern("%v");
-  perf_trace->set_pattern("%v");
-  diff_trace->set_pattern("%v");
   if (!difftest_log_en) {
     diff_trace->set_level(spdlog::level::off);
   }
@@ -171,6 +167,10 @@ int main(int argc, char **argv) {
   if (!perf_trace_log_en) {
     perf_trace->set_level(spdlog::level::off);
   }
+
+  itrace_log->set_pattern("%v");
+  perf_trace->set_pattern("%v");
+  diff_trace->set_pattern("%v");
 
   // -----------------------
   // simulator

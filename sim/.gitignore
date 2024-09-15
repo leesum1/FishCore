@@ -16,6 +16,7 @@ flamegraph.svg
 .vscode-ctags
 *.fst
 *.vcd
+*.old
 # MacOS Cache
 .DS_Store
 

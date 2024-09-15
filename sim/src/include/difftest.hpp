@@ -5,6 +5,8 @@
 #include "spdlog/spdlog.h"
 #include <cstdarg>
 #include <cstdint>
+#include <cstdio>
+#include <format>
 #include <ranges>
 #include <vector>
 
@@ -164,18 +166,23 @@ inline DiffTest::~DiffTest() { destroy_rv64emu(rv64emu_ref); }
 inline bool DiffTest::check_gprs(const read_gpr_fuc &dut_gpr,
                                  const read_gpr_fuc &ref_gpr) const {
   auto log_registers = [&](const std::string &name, const read_gpr_fuc &gpr) {
+    std::string log_message;
     for (const int idx : std::views::iota(0, 8)) {
-      diff_trace->info("{} reg: x{:02d}: 0x{:016x} x{:02d}: 0x{:016x} x{:02d}: "
-                       "0x{:016x} x{:02d}: 0x{:016x}",
-                       name, idx * 4, gpr(idx * 4), idx * 4 + 1,
-                       gpr(idx * 4 + 1), idx * 4 + 2, gpr(idx * 4 + 2),
-                       idx * 4 + 3, gpr(idx * 4 + 3));
+      log_message += std::format(
+          "{} reg: x{:02d}: 0x{:016x} x{:02d}: 0x{:016x} x{:02d}: "
+          "0x{:016x} x{:02d}: 0x{:016x}",
+          name, idx * 4, gpr(idx * 4), idx * 4 + 1, gpr(idx * 4 + 1),
+          idx * 4 + 2, gpr(idx * 4 + 2), idx * 4 + 3, gpr(idx * 4 + 3));
     }
+    diff_trace->info(log_message);
   };
 
-  log_registers("ref", ref_gpr);
-  diff_trace->info("");
-  log_registers("dut", dut_gpr);
+  // if logger is not set skip
+  if (diff_trace->level() != spdlog::level::off) {
+    log_registers("ref", ref_gpr);
+    diff_trace->info("");
+    log_registers("dut", dut_gpr);
+  }
 
   auto compare_and_log = [&](int idx, uint64_t ref_val, uint64_t dut_val) {
     if (ref_val != dut_val) {

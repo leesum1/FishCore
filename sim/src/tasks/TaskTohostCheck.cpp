@@ -5,9 +5,9 @@ static std::shared_ptr<spdlog::logger> console = nullptr;
 void task_tohost_check(SimBase &sim_base, SimDevices::SynReadMemoryDev &sim_mem,
                        bool to_host_check_enabled) {
 
-  console = spdlog::get("console");
-
   if (to_host_check_enabled) {
+    console = spdlog::get("console");
+
     // for riscof and riscv-tests, use to_host to communicate with simulation
     // environment
     sim_base.add_after_clk_rise_task({[&sim_mem, &sim_base] {

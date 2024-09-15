@@ -26,9 +26,6 @@ void task_difftest(SimBase &sim_base, std::optional<DiffTest> &diff_ref,
     console = spdlog::get("console");
 
 
-    diff_trace->set_level(spdlog::level::info);
-    console->set_level(spdlog::level::info);
-
     diff_ref.emplace(BOOT_PC, MEM_SIZE, MEM_BASE);
     diff_ref->load_file(image_name.c_str());
     sim_base.add_after_clk_rise_task(
