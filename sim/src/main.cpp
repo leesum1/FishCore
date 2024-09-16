@@ -105,14 +105,14 @@ int main(int argc, char **argv) {
 
   long max_cycles = 50000;
   int rbb_port = 23456;
-  std::optional<std::string> dump_signature_file;
+  std::optional<std::string> dump_signature_file = std::nullopt;
 
   CLI::App app{"Simulator for RISC-V"};
   app.add_option("-f,--file", image_name, "bin/elf file load to the ram")
       ->required();
   app.add_option("-s,--signature", dump_signature_file,
-                 "dump signature file(for riscof)")
-      ->default_val(std::nullopt);
+                 "dump signature file(for riscof)");
+
   app.add_option("--clk", max_cycles, "max cycles")->default_val(50000);
   app.add_flag("--am", am_en, "enable am")->default_val(false);
   app.add_flag("-w,--wave", wave_en, "enable wave trace")->default_val(false);
@@ -306,7 +306,15 @@ int main(int argc, char **argv) {
   bool success = !am_en || sim_base.get_reg(10) == 0;
 
   // zero means success
-  bool return_code = !(success && sim_base.get_state() != SimBase::sim_abort);
+  bool return_code = !(success && sim_base.exit_normal());
+
+
+  if (return_code) {
+    console->critical("Simulator exit with error");
+  } else {
+    console->info("Simulator exit with success");
+  }
+
 
   // close the file
   // fclose(err_file);

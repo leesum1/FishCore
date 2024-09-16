@@ -4,6 +4,8 @@
 
 #include "include/SramMemoryDev.h"
 #include "include/Utils.h"
+#include "spdlog/logger.h"
+#include "spdlog/spdlog.h"
 #include <bit>
 #include <cstdint>
 #include <format>
@@ -11,12 +13,16 @@
 #include <iostream>
 #include <optional>
 
+static std::shared_ptr<spdlog::logger> console = nullptr;
+
 namespace SimDevices {
 SynReadMemoryDev::SynReadMemoryDev(uint64_t base_addr, uint32_t mem_size) {
   this->mem_addr = base_addr;
   this->mem_size = mem_size;
   mem = std::vector<uint8_t>(mem_size);
   MY_ASSERT(mem.size() == mem_size, "memory size not match");
+
+  console = spdlog::get("console");
 }
 
 uint64_t SynReadMemoryDev::read(uint64_t addr) {
@@ -85,7 +91,7 @@ bool SynReadMemoryDev::load_elf(const char *file_name) {
 
   // Load ELF data
   if (!reader.load(file_name)) {
-    std::cout << "Can't find or process ELF file " << file_name << std::endl;
+    console->info("Can't find or process ELF file {}", file_name);
     return false;
   }
 
@@ -96,7 +102,7 @@ bool SynReadMemoryDev::load_elf(const char *file_name) {
   load_elf_to_mem(reader);
   collect_elf_symbols(reader);
 
-  std::cout << "Loading elf file " << file_name << std::endl;
+  console->info("Loading elf file {}", file_name);
 
   //        // print symbols
   //        for (const auto &item: elf_symbol_map) {
@@ -155,11 +161,11 @@ void SynReadMemoryDev::load_file(const char *file_name) {
   if (!load_elf(file_name)) {
     std::ifstream file(file_name, std::ios::binary);
     if (!file.is_open()) {
-      std::cout << "Error: could not open file " << file_name << std::endl;
+      console->critical("Error: could not open file {}", file_name);
       exit(1);
     }
 
-    std::cout << "Loading file " << file_name << std::endl;
+    console->info("Loading file {}", file_name);
 
     file.read(reinterpret_cast<char *>(mem.data()), mem.size());
     file.close();
@@ -172,10 +178,14 @@ void SynReadMemoryDev::dump_signature(std::string_view signature_file_name) {
 
   if (sig_start != this->elf_symbol_map.end() &&
       sig_end != this->elf_symbol_map.end()) {
+
+    console->info(
+        "Start dump signature to {},sig_start: 0x{:x}, sig_end: 0x{:x}",
+        signature_file_name, sig_start->second, sig_end->second);
+
     std::ofstream signature_file(signature_file_name.data(), std::ios::binary);
     if (!signature_file.is_open()) {
-      std::cout << "Error: could not open file " << signature_file_name
-                << std::endl;
+      console->error("Error: could not open file {}", signature_file_name);
       return;
     }
 
@@ -187,10 +197,6 @@ void SynReadMemoryDev::dump_signature(std::string_view signature_file_name) {
     }
 
     signature_file.close();
-
-    std::cout << std::format(
-        "dump signature to {},sig_start: 0x{:x}, sig_end: 0x{:x}\n",
-        signature_file_name, sig_start->second, sig_end->second);
   }
 }
 

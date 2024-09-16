@@ -40,5 +40,8 @@ flamegraph:
 rbb: build_release
     {{ release_bin }} --file {{ load_fie }}  --clk 5000000000  --rbb
 
+riscv-tests:
+    python3 scripts/run_riscv_tests.py
+
 clean_all:
     rm -rf build

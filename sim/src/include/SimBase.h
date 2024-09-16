@@ -49,6 +49,8 @@ public:
 
   [[nodiscard]] SimState_t get_state() const;
 
+  bool exit_normal() const;
+
   uint64_t get_pc() const;
 
   uint64_t get_reg(int idx);

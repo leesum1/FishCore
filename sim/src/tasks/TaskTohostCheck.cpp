@@ -47,6 +47,7 @@ struct FesvrCmd {
   void character_device_write() const {
     if (cmd == 1 && is_character_device()) {
       std::cout << static_cast<char>(tohost);
+      std::cout.flush();
     }
   }
   std::optional<bool> syscall_device() const {
@@ -64,7 +65,6 @@ void task_tohost_check(SimBase &sim_base, SimDevices::SynReadMemoryDev &sim_mem,
   static auto tohost_callback_func = [&sim_mem,
                                       &sim_base](uint64_t tohost_data) {
     sim_mem.check_to_host([&](const uint64_t to_host_data) {
-      // sim_base.set_state(SimBase::sim_stop);
 
       static FesvrCmd fesvr_cmd(to_host_data);
       fesvr_cmd.update(to_host_data);
@@ -78,11 +78,11 @@ void task_tohost_check(SimBase &sim_base, SimDevices::SynReadMemoryDev &sim_mem,
 
       if (auto pass = fesvr_cmd.syscall_device(); pass.has_value()) {
         if (pass.value()) {
-          sim_base.set_state(SimBase::sim_stop);
+          sim_base.set_state(SimBase::sim_finish);
           console->info("PASS");
         } else {
           sim_base.set_state(SimBase::sim_abort);
-          console->info("FAIL WITH EXIT CODE:{}", fesvr_cmd.exit_code());
+          console->critical("FAIL WITH EXIT CODE:{}", fesvr_cmd.exit_code());
         }
       }
       fesvr_cmd.character_device_write();

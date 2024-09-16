@@ -20,8 +20,6 @@ using namespace async_simple::coro;
 
 #endif
 
-static std::optional<executors::SimpleExecutor> executor = std::nullopt;
-
 SimBase::SimBase() { top = std::make_shared<Vtop>(); }
 
 void SimBase::dump_wave() const {
@@ -81,14 +79,11 @@ void SimBase::reset() {
   }
   top->reset = 0;
   console->info("Reset finished, start simulating");
-  console->info("--------------------------Start simulating------------------------");
+  console->info(
+      "--------------------------Start simulating------------------------");
 }
 
 void SimBase::prepare() {
-
-  if (!executor.has_value()) {
-    executor.emplace(8);
-  }
 
   if (wave_trace_flag) {
     SimTask_t wave_task = {.task_func = [&] { dump_wave(); },
@@ -107,6 +102,9 @@ void SimBase::prepare() {
 void SimBase::set_state(const SimState_t state) { sim_state = state; }
 
 SimBase::SimState_t SimBase::get_state() const { return sim_state; }
+bool SimBase::exit_normal() const {
+  return sim_state == sim_finish;
+}
 
 uint64_t SimBase::get_pc() const { return top->io_difftest_bits_last_pc; }
 
@@ -285,7 +283,7 @@ void SimBase::step() {
 
     // execute after step tasks
     if (enable_corotinue_task) {
-      syncAwait(execute_tasks_co(after_clk_rise_tasks), &executor.value());
+      syncAwait(execute_tasks_co(after_clk_rise_tasks));
     } else {
       execute_tasks_sync(after_clk_rise_tasks);
     }
@@ -293,7 +291,7 @@ void SimBase::step() {
   } else {
     // execute before step tasks
     if (enable_corotinue_task) {
-      syncAwait(execute_tasks_co(before_clk_rise_tasks), &executor.value());
+      syncAwait(execute_tasks_co(before_clk_rise_tasks));
     } else {
       execute_tasks_sync(before_clk_rise_tasks);
     }
