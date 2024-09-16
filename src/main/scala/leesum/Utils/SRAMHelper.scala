@@ -140,9 +140,9 @@ class SyncDataModuleTemplate[T <: Data](
     else 0.U
   }
 
-  // if use bypassEnable to control bypass of each port,
+  // if you use bypassEnable to control bypass of each port,
   // then we should have a separate bit for each read port
-  perReadPortBypassEnable.map(en_vec => require(en_vec.length == numRead))
+  perReadPortBypassEnable.foreach(en_vec => require(en_vec.length == numRead))
 
   val dataBanks = Seq.tabulate(numBanks)(i => {
     val bankEntries =

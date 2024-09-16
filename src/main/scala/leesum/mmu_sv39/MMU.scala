@@ -46,6 +46,9 @@ class MMU(
     // tlb flush
     val tlb_flush = Input(Valid(new SfenceVMABundle))
 
+    // debug
+    val tohost_addr = Input(Valid(UInt(64.W)))
+
     // perf monitor
     val perf_itlb = Output(new PerfMonitorCounter)
     val perf_dtlb = Output(new PerfMonitorCounter)
@@ -110,7 +113,10 @@ class MMU(
       }
       .reduceOption(_ || _)
       .getOrElse(false.B)
-    is_mmio
+
+    val is_tohost = io.tohost_addr.valid && io.tohost_addr.bits === paddr
+
+    is_mmio || is_tohost
   }
 
   def gen_access_misaligned_exception(

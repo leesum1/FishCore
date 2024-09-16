@@ -36,19 +36,8 @@ class FishCore(
     val sext_int = Input(Bool())
 
     // debug
-//    val debug_state_regs = Output(new DbgSlaveState())
-//    val debug_halt_req = Input(ValidIO(Bool()))
-//    val debug_resume_req = Input(ValidIO(Bool()))
-//
-//    val debug_gpr_read_port = Flipped(new RegFileReadPort)
-//    val debug_gpr_write_port = new GPRsWritePort
-//    val debug_csr_read_port = Flipped(new CSRReadPort)
-//    val debug_csr_write_port = Flipped(new CSRWritePort)
-//
-//    val debug_dcache_req = Flipped(Decoupled(new DCacheReq))
-//    val debug_dcache_resp = Decoupled(new DCacheResp)
-
     val debug_core_interface = Flipped(new DebugModuleCoreInterface)
+    val tohost_addr = Input(Valid(UInt(64.W))) // from  env  elf loader
   })
 
   // monitor
@@ -59,6 +48,8 @@ class FishCore(
   // pipeline stage
   val ifu = Module(new IFUTop(boot_pc, rvc_en))
   val mmu = Module(new MMU(addr_map))
+
+  mmu.io.tohost_addr := io.tohost_addr
 
   val decode_stage = Seq.tabulate(2)(i => Module(new InstDecoder))
 

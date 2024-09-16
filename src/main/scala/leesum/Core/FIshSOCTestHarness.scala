@@ -1,7 +1,7 @@
 package leesum.Core
 
 import chisel3._
-import chisel3.util.{Valid, log2Ceil}
+import chisel3.util.{Valid, ValidIO, log2Ceil}
 import leesum.axi4._
 import leesum.dbg.{DebugModuleConfig, DebugTop, JtagIO}
 import leesum.devices.{SifiveUart, UartIO, clint, plic}
@@ -25,6 +25,7 @@ class FishSoc(
     // debug
     val jtag_io = new JtagIO(as_master = false)
     val is_halted = Output(Bool())
+    val tohost_addr = Input(ValidIO(UInt(64.W)))
   })
 
   val boot_pc = 0x80000000L
@@ -79,18 +80,19 @@ class FishSoc(
     )
     addr_decoder.io.addr.valid := en
     addr_decoder.io.addr.bits := addr
-
-    when(addr_decoder.io.sel_error) {
-      printf("addr_decoder sel error: %x\n", addr)
-      assert(false.B)
-    }
-
+    assert(
+      addr_decoder.io.sel_error === false.B,
+      "addr_decoder sel error: %x\n",
+      addr
+    )
     addr_decoder.io.sel_idx
   }
 
   val core = Module(
     new FishCore(muldiv_en, rvc_en, monitor_en, boot_pc, addr_map)
   )
+
+  core.io.tohost_addr := io.tohost_addr
 
   val dm_config = new DebugModuleConfig
   val debug_top = Module(
