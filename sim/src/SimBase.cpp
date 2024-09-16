@@ -1,8 +1,10 @@
 #include "include/SimBase.h"
 #include "CSREncode.h"
+#include "TaskStruct.h"
 #include "Utils.h"
 #include "Vtop.h"
 #include "spdlog/spdlog.h"
+#include <cstdio>
 #include <memory>
 #include <optional>
 
@@ -17,6 +19,8 @@ using namespace async_simple::coro;
 #include "verilated_fst_c.h"
 
 #endif
+
+static std::optional<executors::SimpleExecutor> executor = std::nullopt;
 
 SimBase::SimBase() { top = std::make_shared<Vtop>(); }
 
@@ -43,6 +47,8 @@ void SimBase::enable_wave_trace(const std::string &file_name,
 #endif
 }
 
+void SimBase::enable_corotinue() { enable_corotinue_task = true; }
+
 SimBase::~SimBase() {
 #if VM_TRACE_FST == 1
   if (wave_trace_flag) {
@@ -60,12 +66,42 @@ void SimBase::reset() {
   sim_state = sim_run;
   top->reset = 1;
 
+  auto console = spdlog::get("console");
+
+  for (auto &once_task : once_time_tasks) {
+    once_task.run_sync();
+    console->info("Run once task Before reest : {}", once_task.name);
+  }
+  once_time_tasks.clear();
+
   for (int i = 0; i < 10; i++) {
     top->clock ^= 1;
     top->eval();
     dump_wave();
   }
   top->reset = 0;
+  console->info("Reset finished, start simulating");
+  console->info("--------------------------Start simulating------------------------");
+}
+
+void SimBase::prepare() {
+
+  if (!executor.has_value()) {
+    executor.emplace(8);
+  }
+
+  if (wave_trace_flag) {
+    SimTask_t wave_task = {.task_func = [&] { dump_wave(); },
+                           .name = "dump_wave",
+                           .period_cycle = 0,
+                           .type = SimTaskType::period};
+    wave_task.name = "dump_wave_after_clk_rise";
+    add_after_clk_rise_task(wave_task);
+    wave_task.name = "before_clk_rise";
+    add_before_clk_rise_task(wave_task);
+  };
+  print_tasks();
+  reset();
 }
 
 void SimBase::set_state(const SimState_t state) { sim_state = state; }
@@ -203,6 +239,10 @@ void SimBase::add_before_clk_rise_task(const SimTask_t &task) {
   before_clk_rise_tasks.emplace_back(task);
 }
 
+void SimBase::add_once_time_task(const SimTask_t &task) {
+  once_time_tasks.emplace_back(task);
+}
+
 void SimBase::print_tasks() const {
   auto console = spdlog::get("console");
 
@@ -218,35 +258,17 @@ void SimBase::print_tasks() const {
 }
 
 void SimBase::step() {
-  static std::optional<executors::SimpleExecutor> executor = std::nullopt;
 
-  if (!executor.has_value()) {
-    executor.emplace(4);
-  }
-
-  auto async_wrapper = [](SimTask_t &task) -> Lazy<void> {
-    task.counter += 1;
-    if (task.counter >= task.period_cycle) {
-      task.counter = 0;
-      task.task_func();
+  static auto execute_tasks_co =
+      [&](std::vector<SimTask_t> &tasks) -> Lazy<void> {
+    for (auto &task : tasks) {
+      co_await task.run_co();
     }
     co_return;
   };
-
-  auto execute_tasks_co = [&](std::vector<SimTask_t> &tasks) -> Lazy<void> {
+  static auto execute_tasks_sync = [&](auto &tasks) {
     for (auto &task : tasks) {
-      co_await async_wrapper(task);
-    }
-    co_return;
-  };
-
-  auto execute_tasks = [&](auto &tasks) {
-    for (auto &task : tasks) {
-      task.counter += 1;
-      if (task.counter >= task.period_cycle) {
-        task.counter = 0;
-        task.task_func();
-      }
+      task.run_sync();
     }
   };
 
@@ -262,14 +284,18 @@ void SimBase::step() {
     }
 
     // execute after step tasks
+    if (enable_corotinue_task) {
+      syncAwait(execute_tasks_co(after_clk_rise_tasks), &executor.value());
+    } else {
+      execute_tasks_sync(after_clk_rise_tasks);
+    }
 
-    // syncAwait(execute_tasks_co(after_clk_rise_tasks), &executor.value());
-    execute_tasks(after_clk_rise_tasks);
   } else {
     // execute before step tasks
-    // syncAwait(execute_tasks_co(before_clk_rise_tasks), &executor.value());
-    execute_tasks(before_clk_rise_tasks);
+    if (enable_corotinue_task) {
+      syncAwait(execute_tasks_co(before_clk_rise_tasks), &executor.value());
+    } else {
+      execute_tasks_sync(before_clk_rise_tasks);
+    }
   }
-
-  dump_wave();
 }

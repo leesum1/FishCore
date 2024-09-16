@@ -4,6 +4,10 @@ load_fie := "ready_to_run/rv64ui-v-beq"
 
 
 
+help:
+    just -l
+
+
 menuconfig:
     xmake f --menu
 

@@ -28,7 +28,9 @@ void task_perfmonitor(SimBase &sim_base, PerfMonitor &perf_monitor,
 
   if (perf_trace_log_en) {
     sim_base.add_after_clk_rise_task(
-        {[&] { perf_monitor.print_perf_counter(false); }, "perf_monitor",
-         8192});
+        {.task_func = [&] { perf_monitor.print_perf_counter(false); },
+         .name = "perf_monitor",
+         .period_cycle = 8192,
+         .type = SimTaskType::period});
   }
 }

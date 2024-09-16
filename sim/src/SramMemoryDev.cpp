@@ -5,9 +5,11 @@
 #include "include/SramMemoryDev.h"
 #include "include/Utils.h"
 #include <bit>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <iostream>
+#include <optional>
 
 namespace SimDevices {
 SynReadMemoryDev::SynReadMemoryDev(uint64_t base_addr, uint32_t mem_size) {
@@ -101,6 +103,11 @@ bool SynReadMemoryDev::load_elf(const char *file_name) {
   //            std::cout << std::format("symbol {} value: 0x{:x}\n",
   //            item.first, item.second);
   //        }
+  auto to_host_find = elf_symbol_map.find("tohost");
+
+  if (to_host_find != elf_symbol_map.end()) {
+    to_host_addr = to_host_find->second;
+  }
 
   return true;
 }
@@ -188,14 +195,19 @@ void SynReadMemoryDev::dump_signature(std::string_view signature_file_name) {
 }
 
 void SynReadMemoryDev::check_to_host(
-    const std::function<void(void)> &exit_callback) {
-  auto to_host_addr = elf_symbol_map.find("tohost");
-  if (to_host_addr != this->elf_symbol_map.end()) {
-    if (auto to_host_value = read(to_host_addr->second); to_host_value != 0) {
-      std::cout << std::format("tohost value: 0x{:x}\n", to_host_value);
-      exit_callback();
-    }
+    const std::function<void(uint64_t)> &tohost_callback) {
+
+  if (!to_host_addr.has_value()) {
+    return;
   }
+
+  if (uint64_t to_host_value = read(to_host_addr.value()); to_host_value != 0) {
+    tohost_callback(to_host_value);
+  }
+}
+
+std::optional<uint64_t> SynReadMemoryDev::get_to_host_addr() {
+  return to_host_addr;
 }
 
 bool SynReadMemoryDev::in_range(uint64_t addr) {

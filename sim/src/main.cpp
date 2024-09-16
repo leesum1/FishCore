@@ -13,7 +13,6 @@
 #include "spdlog/async.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
-#include "verilated.h"
 #include <PerfMonitor.h>
 #include <cassert>
 #include <csignal>
@@ -102,6 +101,7 @@ int main(int argc, char **argv) {
   bool vga_en = false;
   bool rbb_en = false;
   bool to_host_check_en = false;
+  bool corotinue_en = false;
 
   long max_cycles = 50000;
   int rbb_port = 23456;
@@ -136,6 +136,8 @@ int main(int argc, char **argv) {
 
   // tohost check
   app.add_flag("--tohost-check", to_host_check_en, "enable to_host check")
+      ->default_val(false);
+  app.add_flag("-c,--corotinue", corotinue_en, "enable corotinue task")
       ->default_val(false);
 
   CLI11_PARSE(app, argc, argv)
@@ -268,170 +270,19 @@ int main(int argc, char **argv) {
   // Simulator Start Excuting
   // --------------------------
 
-  // sim_base.add_after_clk_rise_task({
-  //     [&] {
-  //       const auto top = sim_base.top;
-  //       const uint64_t clk_num = sim_base.cycle_num;
-
-  //       static uint64_t halted_clk = 0;
-  //       static bool is_halted = false;
-  //       static uint32_t cur_halt_count = 1;
-
-  //       // 发出一个周期的 halt 请求
-  //       if (clk_num == 10000 * cur_halt_count) {
-  //         top->io_debug_halt_req_valid = 1;
-  //         top->io_debug_halt_req_bits = 1;
-  //       }
-  //       if (clk_num == 10000 * cur_halt_count + 1) {
-  //         top->io_debug_halt_req_valid = 0;
-  //         top->io_debug_halt_req_bits = 0;
-  //       }
-
-  //       if (top->io_debug_state_regs_is_halted && !is_halted) {
-  //         perf_trace->info("halted at pc: 0x{:016x}\n", sim_base.get_pc());
-  //         halted_clk = clk_num;
-  //         is_halted = true;
-  //       }
-
-  //       if (is_halted) {
-
-  //         // 发出一个周期的 resume 请求
-  //         if (clk_num == halted_clk + 200) {
-  //           top->io_debug_resume_req_valid = 1;
-  //           top->io_debug_resume_req_bits = 1;
-  //         }
-  //         if (clk_num == halted_clk + 201) {
-  //           top->io_debug_resume_req_valid = 0;
-  //           top->io_debug_resume_req_bits = 0;
-  //         }
-
-  //         // 等待处理器恢复
-  //         if (top->io_debug_state_regs_is_halted == 0) {
-  //           perf_trace->info("resume at pc: 0x{:016x} clock:{}\n",
-  //                            sim_base.get_pc(), clk_num);
-  //           is_halted = false;
-  //           cur_halt_count++;
-  //         }
-  //       }
-  //     },
-  //     "debug path test",
-  //     0,
-  // });
-
-  // sim_base.add_after_clk_rise_task({
-  //     [&] {
-  //       const auto top = sim_base.top;
-  //       const uint64_t clk_num = sim_base.cycle_num;
-
-  //       static uint64_t halted_clk = 0;
-  //       static bool is_halted = false;
-  //       static uint32_t cur_halt_count = 1;
-
-  //       // 发出一个周期的 halt 请求
-  //       if (clk_num == 10000 * cur_halt_count) {
-  //         top->io_debug_halt_req_valid = 1;
-  //         top->io_debug_halt_req_bits = 1;
-  //       }
-  //       if (clk_num == 10000 * cur_halt_count + 1) {
-  //         top->io_debug_halt_req_valid = 0;
-  //         top->io_debug_halt_req_bits = 0;
-  //       }
-
-  //       if (top->io_debug_state_regs_is_halted && !is_halted) {
-  //         perf_trace->info("halted at pc: 0x{:016x}\n", sim_base.get_pc());
-  //         halted_clk = clk_num;
-  //         is_halted = true;
-  //       }
-
-  //       if (is_halted) {
-
-  //         // 发出一个周期的 resume 请求
-  //         if (clk_num == halted_clk + 200) {
-  //           top->io_debug_resume_req_valid = 1;
-  //           top->io_debug_resume_req_bits = 1;
-  //         }
-  //         if (clk_num == halted_clk + 201) {
-  //           top->io_debug_resume_req_valid = 0;
-  //           top->io_debug_resume_req_bits = 0;
-  //         }
-
-  //         // 等待处理器恢复
-  //         if (top->io_debug_state_regs_is_halted == 0) {
-  //           perf_trace->info("resume at pc: 0x{:016x} clock:{}\n",
-  //                            sim_base.get_pc(), clk_num);
-  //           is_halted = false;
-  //           cur_halt_count++;
-  //         }
-  //       }
-  //     },
-  //     "debug test",
-  //     0,
-  // });
-
-  //   sim_base.add_after_clk_rise_task({
-  //     [&] {
-  //       const auto top = sim_base.top;
-  //       const uint64_t clk_num = sim_base.cycle_num;
-
-  //       static uint64_t halted_clk = 0;
-  //       static bool is_halted = false;
-  //       static uint32_t cur_halt_count = 1;
-
-  //       static bool halt_flags[2] = {false, false};
-  //       // 发出一个周期的 halt 请求
-  //       if (clk_num == 200 && halt_flags[0] == false) {
-  //         halt_flags[0] = true;
-  //         top->io_debug_halt_req_valid = 1;
-  //         top->io_debug_halt_req_bits = 1;
-  //       }
-  //       if (clk_num == 201 && halt_flags[1] == false) {
-  //         halt_flags[1] = true;
-  //         top->io_debug_halt_req_valid = 0;
-  //         top->io_debug_halt_req_bits = 0;
-  //       }
-
-  //       if (top->io_debug_state_regs_is_halted && !is_halted) {
-  //         perf_trace->info("halted at pc: 0x{:016x}\n", sim_base.get_pc());
-  //         halted_clk = clk_num;
-  //         is_halted = true;
-  //       }
-
-  //       if (is_halted) {
-  //         // 发出一个周期的 resume 请求, bits 设为 1 表示单步执行
-  //         if (clk_num == halted_clk + 200) {
-  //           top->io_debug_resume_req_valid = 1;
-  //           top->io_debug_resume_req_bits = 1;
-  //         }
-  //         if (clk_num == halted_clk + 201) {
-  //           top->io_debug_resume_req_valid = 0;
-  //         }
-
-  //         // 等待处理器恢复
-  //         if (top->io_debug_state_regs_is_halted == 0) {
-  //           perf_trace->info("resume at pc: 0x{:016x} clock:{}\n",
-  //                         sim_base.get_pc(), clk_num);
-  //           is_halted = false;
-  //           cur_halt_count++;
-  //         }
-  //       }
-  //     },
-  //     "stepi test",
-  //     0,
-  // });
-
   if (wave_en) {
     const auto wave_name = "wave.fst";
     sim_base.enable_wave_trace(wave_name, wave_stime);
     console->info("Wave init finished, File:{}", wave_name);
   }
+  if (corotinue_en) {
+    sim_base.enable_corotinue();
+  }
   sim_mem.load_file(image_name.c_str());
-  sim_base.reset();
-
-  sim_base.print_tasks();
-
-  console->info("Simulator start");
 
   auto start_time = std::chrono::utc_clock::now();
+
+  sim_base.prepare();
   // simulator loop
   while (!sim_base.finished() && !is_exit && sim_base.cycle_num < max_cycles) {
     sim_base.step();
