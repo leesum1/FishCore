@@ -203,6 +203,8 @@ void SynReadMemoryDev::check_to_host(
 
   if (uint64_t to_host_value = read(to_host_addr.value()); to_host_value != 0) {
     tohost_callback(to_host_value);
+    // clear after read
+    write(to_host_addr.value(), 0, 0xff);
   }
 }
 
