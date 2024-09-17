@@ -16,11 +16,6 @@ Run a script in the devbox environment:
 ```sh
 devbox run <script>
 ```
-## Scripts
-Scripts are custom commands that can be run using this project's environment. This project has the following scripts:
-
-* [test](#devbox-run-test)
-
 ## Environment
 
 ```sh
@@ -33,15 +28,15 @@ on `devbox shell` and on `devbox run`.
 ```sh
 /home/leesum/workhome/chisel-fish/.devbox/virtenv/python/bin/venvShellHook.sh
 echo 'Welcome to devbox!' > /dev/null
+export LC_ALL=C
 unset -v CC CXX LD AR AS NM STRIP OBJCOPY OBJDUMP SIZE
-. $VENV_DIR/bin/activate
 ```
 
 ## Packages
 
-* [circt@1.62.0](https://www.nixhub.io/packages/circt)
-* path:my-flakes/riscv-toolchain-flakes#riscv-gcc
-* path:my-flakes/sbt-overlay-flakes#sbt
+* github:leesum1/my-flakes#sbt
+* github:leesum1/my-flakes#riscv64-none-gcc
+* github:leesum1/my-flakes#riscv64-none-gdb
 * [python@3.10](https://www.nixhub.io/packages/python)
 * [xmake@latest](https://www.nixhub.io/packages/xmake)
 * [verilator@latest](https://www.nixhub.io/packages/verilator)
@@ -54,15 +49,16 @@ unset -v CC CXX LD AR AS NM STRIP OBJCOPY OBJDUMP SIZE
 * [xz@latest](https://www.nixhub.io/packages/xz)
 * [SDL2.dev](https://www.nixhub.io/packages/SDL2.dev)
 * [cmake@latest](https://www.nixhub.io/packages/cmake)
-
-## Script Details
-
-### devbox run test
-```sh
-echo "Error: no test specified" && exit 1
-```
-&ensp;
-
+* [zlib@latest](https://www.nixhub.io/packages/zlib)
+* [zlib.dev](https://www.nixhub.io/packages/zlib.dev)
+* [just@latest](https://www.nixhub.io/packages/just)
+* [binutils@latest](https://www.nixhub.io/packages/binutils)
+* [graalvm17-ce@latest](https://www.nixhub.io/packages/graalvm17-ce)
+* [gcc@latest](https://www.nixhub.io/packages/gcc)
+* [circt@1.72.0](https://www.nixhub.io/packages/circt)
+* [openocd@latest](https://www.nixhub.io/packages/openocd)
+* [spike@latest](https://www.nixhub.io/packages/spike)
+* [direnv@latest](https://www.nixhub.io/packages/direnv)
 
 
 <!-- gen-readme end -->

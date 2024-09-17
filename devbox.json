@@ -1,8 +1,8 @@
 {
   "packages": [
-    "path:my-flakes/riscv-toolchain-flakes#riscv-gdb",
-    "path:my-flakes/riscv-toolchain-flakes#riscv-gcc",
-    "path:my-flakes/sbt-overlay-flakes#sbt",
+    "github:leesum1/my-flakes#sbt",
+    "github:leesum1/my-flakes#riscv64-none-gcc",
+    "github:leesum1/my-flakes#riscv64-none-gdb",
     "python@3.10",
     "xmake@latest",
     "verilator@latest",
@@ -24,19 +24,17 @@
     "circt@1.72.0",
     "openocd@latest",
     "spike@latest",
-    "direnv@latest",
+    "direnv@latest"
   ],
   "shell": {
     "init_hook": [
       "echo 'Welcome to devbox!' > /dev/null",
       "export LC_ALL=C",
-      "unset -v CC CXX LD AR AS NM STRIP OBJCOPY OBJDUMP SIZE",
+      "unset -v CC CXX LD AR AS NM STRIP OBJCOPY OBJDUMP SIZE"
       // ". $VENV_DIR/bin/activate"
     ],
     "scripts": {
-      "test": [
-        "echo \"Error: no test specified\" && exit 1",
-      ],
+
     },
   },
 }
