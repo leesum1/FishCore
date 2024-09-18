@@ -1,8 +1,8 @@
 {
   "packages": [
-    "github:leesum1/my-flakes#sbt",
-    "github:leesum1/my-flakes#riscv64-none-gcc",
-    "github:leesum1/my-flakes#riscv64-none-gdb",
+    "path:my-flakes/sbt-overlay-flakes#sbt",
+    "path:my-flakes/riscv-toolchain-flakes#riscv64-none-gcc",
+    "path:my-flakes/riscv-toolchain-flakes#riscv64-none-gdb",
     "python@3.10",
     "xmake@latest",
     "verilator@latest",
