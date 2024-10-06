@@ -415,7 +415,7 @@ class CommitStage(
 
       SimLog(
         desiredName,
-        "S Mode Exception at %x, cause:%d, tval:%x\n",
+        "S Mode Exception at [%x], cause[%d], tval[%x]\n",
         entry.pc,
         exception_cause.asUInt,
         entry.exception.tval
@@ -444,7 +444,7 @@ class CommitStage(
 
       SimLog(
         desiredName,
-        "M Mode Exception at %x, cause:%d, tval:%x\n",
+        "M Mode Exception at pc[%x], cause[%d], tval[%x]\n",
         entry.pc,
         exception_cause.asUInt,
         entry.exception.tval
@@ -530,7 +530,6 @@ class CommitStage(
 
   }
 
-  // TODO: implement not correct!!!!!!!!!
   def retire_csr(
       entry: ScoreBoardEntry,
       gpr_commit_port: GPRsWritePort,
@@ -543,9 +542,9 @@ class CommitStage(
     val csr_addr = entry.inst(31, 20)
 
     val side_effect_csrs = Seq(
-      CSRs.satp.asUInt,
-      CSRs.mstatus.asUInt,
-      CSRs.sstatus.asUInt
+      CSRs.satp.asUInt
+//      CSRs.mstatus.asUInt,
+//      CSRs.sstatus.asUInt
     )
 
     val counter_csrs = Seq(
@@ -743,7 +742,11 @@ class CommitStage(
       has_interrupt === false.B,
       "csr side effect and interrupt should not happen at the same time"
     )
-    SimLog(desiredName, "csr side effect flush at %x\n", rob_data_seq.head.pc)
+    SimLog(
+      desiredName,
+      "csr side effect flush at PC[%x]\n",
+      rob_data_seq.head.pc
+    )
 
     // if csr side effect is true, we should flush the pipeline
     // and rerun the current inst
@@ -815,7 +818,7 @@ class CommitStage(
 
           SimLog(
             desiredName,
-            "Will exit debug mode at PC:%x ,back to priv:%d, clear mprv:%d\n",
+            "Will exit debug mode at PC[%x] ,back to priv[%d], clear mprv[%d]\n",
             io.direct_read_ports.dpc,
             dcsr_field.prv,
             new_priv < Privilegelevel.M.U
@@ -826,7 +829,7 @@ class CommitStage(
           when(dcsr_field.step) {
             SimLog(
               desiredName,
-              "Entry StepMode at %x\n",
+              "Entry StepMode at PC[%x]\n",
               io.direct_read_ports.dpc
             )
             debug_state_regs.set_stepi()
@@ -949,7 +952,7 @@ class CommitStage(
     debug_state_regs.exec_stepi()
     SimLog(
       desiredName,
-      "StepMode Execute %x,than re-enter debug mode\n",
+      "StepMode Execute PC[%x],than re-enter debug mode\n",
       rob_data_seq.head.pc
     )
   }
@@ -1036,7 +1039,7 @@ class CommitStage(
 
       SimLog(
         desiredName,
-        "M mode interrupt Cause: %x at PC:%x, to PC:%x\n",
+        "M mode interrupt at pc[%x],cause[%x] to pc[%x]\n",
         new_pc,
         cause.asUInt,
         interrupt_redirect_pc
@@ -1071,7 +1074,7 @@ class CommitStage(
       )
       SimLog(
         desiredName,
-        "M mode interrupt Cause: %x at PC:%x, to PC:%x\n",
+        "S mode interrupt at pc[%x],cause[%x] to pc[%x]\n",
         new_pc,
         cause.asUInt,
         interrupt_redirect_pc
@@ -1159,7 +1162,6 @@ class CommitStage(
           "interrupt and exception should not happen at the same time"
         )
       }
-
     }
   }
 

@@ -1,10 +1,10 @@
 package leesum.Core
 
 import chisel3._
-import chisel3.util.{Valid, ValidIO, log2Ceil}
+import chisel3.util.{DecoupledIO, Valid, ValidIO, log2Ceil}
 import leesum.axi4._
 import leesum.dbg.{DebugModuleConfig, DebugTop, JtagIO}
-import leesum.devices.{SifiveUart, UartIO, clint, plic}
+import leesum.devices.{SifiveUart, clint, plic}
 import leesum.moniter.{DifftestPort, PerfPort}
 import leesum.{GenVerilogHelper, MSBDivFreq}
 
@@ -20,7 +20,8 @@ class FishSoc(
     val mem_port = Flipped(new BasicMemoryIO(32, 64))
 
     // uart port
-    val uart_io = (new UartIO).as_master()
+    val uart_tx_deq = DecoupledIO(UInt(8.W))
+    val uart_rx_enq = Flipped(DecoupledIO(UInt(8.W)))
 
     // debug
     val jtag_io = new JtagIO(as_master = false)
@@ -158,15 +159,16 @@ class FishSoc(
   core.io.mtime := clint.io.mtime
   core.io.time_int := clint.io.time_int.head
   core.io.soft_int := clint.io.soft_int.head
-  core.io.mext_int := false.B
-  core.io.sext_int := false.B
 
   // plic32 <> 32to64 <> plic_axi_bridge <> axi_demux(2)
   val harts_map = Seq(true) // true: smode enable,
   val plic32 = Module(
     new plic(harts_map, PLIC_BASE.toInt, 15)
   ) // sifive uart irq: 10
-  plic32.io.irq_pendings.foreach(_ := false.B) // TODO: sifive uart irq
+  plic32.io.irq_pendings.foreach(_ := false.B)
+
+  core.io.mext_int := plic32.io.harts_ext_irq(0)(0)
+  core.io.sext_int := plic32.io.harts_ext_irq(0)(1)
 
   val plic32to64 = Module(
     new MemoryIO64to32(
@@ -188,8 +190,10 @@ class FishSoc(
   // sifive_uart32 <> 32to64 <> sifive_uart_axi_bridge <> axi_demux(3)
   // ---------------------------------------------------------------------
   val sifive_uart32 = Module(new SifiveUart(SIFIVE_UART_BASE))
-  sifive_uart32.io.uart_io.rx_data := io.uart_io.rx_data
-  io.uart_io.tx_data := sifive_uart32.io.uart_io.tx_data
+  sifive_uart32.io.tx_deq <> io.uart_tx_deq
+  io.uart_rx_enq <> sifive_uart32.io.rx_enq
+
+  plic32.io.irq_pendings(10) := sifive_uart32.io.irq_out
 
   val sifive_uart32to64 = Module(
     new MemoryIO64to32(

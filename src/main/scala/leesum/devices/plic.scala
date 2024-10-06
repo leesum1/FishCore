@@ -2,7 +2,7 @@ package leesum.devices
 
 import chisel3._
 import chisel3.util.{Cat, MixedVecInit, Valid, log2Ceil}
-import leesum.Utils.{HoldRegister, RegManager}
+import leesum.Utils.{HoldRegister, RegManager, SimLog}
 import leesum.axi4.BasicMemoryIO
 import leesum.{GenVerilogHelper, ZeroExt}
 
@@ -173,6 +173,9 @@ class plic(
   val io = IO(new Bundle {
     val mem = new BasicMemoryIO(32, 32)
     val irq_pendings = Input(Vec(num_ints, Bool()))
+
+    // idx 0 mmode ext , idx 1 smode extsss
+    val harts_ext_irq = Output(Vec(harts_map.size, UInt(2.W)))
   })
 
   val context_width = log2Ceil(harts_map.size * 2 + 1)
@@ -191,7 +194,7 @@ class plic(
   // 2. pending will not be set by source if it is already claimed
   val pending_bits = RegInit(VecInit(Seq.fill(io.irq_pendings.length)(false.B)))
 
-  for (i <- 1 until num_ints) {
+  for (i <- 0 until io.irq_pendings.length) {
     when(!claimed_bits(i)) {
       pending_bits(i) := io.irq_pendings(i)
     }
@@ -225,6 +228,26 @@ class plic(
     VecInit(Seq.fill(harts_map.size * 2)(0.U.asTypeOf(new PlicContext)))
   )
 
+  // context 中优先级最高的中断
+  val context_ext_int_id_seq = RegInit(
+    VecInit(Seq.fill(harts_map.size * 2)(0.U(32.W)))
+  )
+  for (i <- 0 until harts_map.size * 2) {
+    context_ext_int_id_seq(i) := MaxPriorityIrqIdx(
+      priority_regs,
+      pending_bits,
+      enable_regs(i),
+      context_regs(i)
+    )
+  }
+
+  for (i <- harts_map.indices) {
+    io.harts_ext_irq(i) := Cat(
+      context_ext_int_id_seq(i * 2 + 1) =/= 0.U, // smode
+      context_ext_int_id_seq(i * 2) =/= 0.U // m mode
+    )
+  }
+
   // first enable bit is always 0
   val first_enable_read = (addr: UInt, reg: UInt) => {
     val read_result = Wire(Valid(UInt(32.W)))
@@ -245,27 +268,41 @@ class plic(
   // --------------------------
   val claim_read = (addr: UInt, reg: UInt) => {
     val read_result = Wire(Valid(UInt(32.W)))
-    val selected_context = addr(12 + context_width - 1, 12)
+    val selected_context = addr(12 + context_width - 1, 12).litValue.toInt
 
     read_result.valid := true.B
-    read_result.bits := MaxPriorityIrqIdx(
-      priority_regs,
-      pending_bits,
-      enable_regs(selected_context),
-      context_regs(selected_context)
+    read_result.bits := context_ext_int_id_seq(selected_context)
+
+    SimLog(
+      desiredName,
+      "claim_read: addr[%x] data[%x]\n",
+      selected_context.U,
+      read_result.bits
     )
 
     when(read_result.bits =/= 0.U) {
-      assert(
+      when(
         claimed_bits(
           read_result.bits(log2Ceil(io.irq_pendings.length) - 1, 0)
-        ) === false.B,
-        "claim error"
-      )
+        ) === true.B
+      ) {
+        SimLog(
+          desiredName,
+          "repeat claim addr[%x] data[%x]\n",
+          selected_context.U,
+          read_result.bits
+        )
+      }
+
       // set claimed bit
       claimed_bits(
         read_result.bits(log2Ceil(io.irq_pendings.length) - 1, 0)
       ) := true.B
+
+      // clear pending bit
+      pending_bits(
+        read_result.bits(log2Ceil(io.irq_pendings.length) - 1, 0)
+      ) := false.B
     }
     read_result
   }
@@ -278,6 +315,13 @@ class plic(
     val write_result = Wire(Valid(UInt(reg.getWidth.W)))
     write_result.valid := true.B
     write_result.bits := wdata
+
+    SimLog(
+      desiredName,
+      "complete_write: addr[%x] wdata[%x]\n",
+      addr,
+      wdata
+    )
 
     assert(wdata < num_ints.U, "complete error")
     claimed_bits(wdata(log2Ceil(io.irq_pendings.length) - 1, 0)) := false.B
@@ -373,17 +417,15 @@ class plic(
   // --------------------------
   // read
   // --------------------------
+  val rdata = RegInit(0.U(32.W))
   when(io.mem.i_rd) {
     when(!plic_regs.in_range(io.mem.i_raddr)) {
       printf("plic read out of range: %x\n", io.mem.i_raddr)
       assert(false.B)
     }
+    rdata := plic_regs.read(io.mem.i_raddr).bits
   }
-  io.mem.o_rdata := HoldRegister(
-    io.mem.i_rd,
-    RegNext(plic_regs.read(io.mem.i_raddr).bits),
-    1
-  )
+  io.mem.o_rdata := rdata;
   // --------------------------
   // write
   // --------------------------
@@ -401,6 +443,15 @@ class plic(
   assert(io.irq_pendings(0) === false.B, "plic irq0 should be false")
   assert(claimed_bits(0) === false.B, "claimed_bit0 should be false")
   assert(pending_bits(0) === false.B, "pending_bit0 should be false")
+
+  for (i <- 0 until num_ints) {
+    when(claimed_bits(i)) {
+      assert(
+        pending_bits(i) === false.B,
+        "pending_bits should be false when claimed"
+      )
+    }
+  }
 
   enable_regs.foreach(x => {
     assert(x.enable(0)(0) === false.B, "enable_bit0 should be false")
