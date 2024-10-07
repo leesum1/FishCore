@@ -1,7 +1,17 @@
 package leesum.ICache
 
 import chisel3._
-import chisel3.util.{Cat, Counter, Decoupled, Enum, PopCount, Queue, is, log2Ceil, switch}
+import chisel3.util.{
+  Cat,
+  Counter,
+  Decoupled,
+  Enum,
+  PopCount,
+  Queue,
+  is,
+  log2Ceil,
+  switch
+}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, CVC4EngineAnnotation, Formal, stable}
 import leesum.Cache._
@@ -463,19 +473,18 @@ class DCacheTopIn(formal: Boolean = false) extends Module {
   // --------------------------
   // formal
   // --------------------------
-
-  when(io.fencei_ack) {
-    assert(io.fencei)
-  }
-
-  when(io.mem_master.r.fire) {
-    assume(io.mem_master.r.bits.id === 0.U)
-    assume(io.mem_master.r.bits.resp === AXIDef.RESP_OKAY)
-//    assume(io.mem_master.r.bits.last === true.B)
-    assume(io.mem_master.r.bits.user === 0.U)
-  }
-
   if (formal) {
+
+    when(io.fencei_ack) {
+      assert(io.fencei)
+    }
+
+    when(io.mem_master.r.fire) {
+      assume(io.mem_master.r.bits.id === 0.U)
+      assume(io.mem_master.r.bits.resp === AXIDef.RESP_OKAY)
+//    assume(io.mem_master.r.bits.last === true.B)
+      assume(io.mem_master.r.bits.user === 0.U)
+    }
 
     when(FormalUtils.StreamShouldStable(io.mem_master.ar)) {
       assert(io.mem_master.ar.valid)

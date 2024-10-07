@@ -146,9 +146,10 @@ class DCacheNWay(way_nums: Int) extends Module {
     tag_reads
       .map { case (valid, tag) =>
         // use paddr to select the hit way
-        valid && (tag === RegNext(req_filed.tag)) && DCacheReqType.need_lookup(
-          RegNext(io.req_type)
-        ) && RegNext(io.req_valid)
+        valid && (tag === RegNext(req_filed.tag, 0.U)) && DCacheReqType
+          .need_lookup(
+            RegNext(io.req_type, DCacheReqType.read)
+          ) && RegNext(io.req_valid, false.B)
       }
   )
   // which way is hit
@@ -162,10 +163,10 @@ class DCacheNWay(way_nums: Int) extends Module {
   io.lookup_hit_way.bits := tag_hit_way
   io.lookup_hit_data := cache_hit_data
 
-  io.read_data.valid := VecInit(tag_reads.map(_._1))(RegNext(io.req_way))
-  io.read_data.tag := VecInit(tag_reads.map(_._2))(RegNext(io.req_way))
-  io.read_data.data := VecInit(data_reads)(RegNext(io.req_way))
-  io.read_data.dirty := VecInit(dirty_reads)(RegNext(io.req_way))
+  io.read_data.valid := VecInit(tag_reads.map(_._1))(RegNext(io.req_way, 0.U))
+  io.read_data.tag := VecInit(tag_reads.map(_._2))(RegNext(io.req_way, 0.U))
+  io.read_data.data := VecInit(data_reads)(RegNext(io.req_way, 0.U))
+  io.read_data.dirty := VecInit(dirty_reads)(RegNext(io.req_way, 0.U))
 
   // --------------------
   // assert

@@ -257,28 +257,29 @@ class ICacheTop(formal: Boolean = false) extends Module {
   // --------------------------
   // formal
   // --------------------------
-  when(io.flush) {
-    assume(io.resp.ready === false.B)
-    assume(io.mmu_req.ready === false.B)
-
-    assert(!io.resp.fire)
-    assert(!io.req.fire)
-    assert(!io.mmu_resp.fire)
-    assert(!io.mmu_req.fire)
-  }
-
-  when(io.mmu_resp.fire) {
-    assume(io.mmu_resp.bits.req_type === TLBReqType.Fetch)
-  }
-
-  when(io.mem_master.r.fire) {
-    assume(io.mem_master.r.bits.id === 0.U)
-    assume(io.mem_master.r.bits.resp === AXIDef.RESP_OKAY)
-//    assume(io.mem_master.r.bits.last === true.B)
-    assume(io.mem_master.r.bits.user === 0.U)
-  }
-
   if (formal) {
+
+    when(io.flush) {
+      assume(io.resp.ready === false.B)
+      assume(io.mmu_req.ready === false.B)
+
+      assert(!io.resp.fire)
+      assert(!io.req.fire)
+      assert(!io.mmu_resp.fire)
+      assert(!io.mmu_req.fire)
+    }
+
+    when(io.mmu_resp.fire) {
+      assume(io.mmu_resp.bits.req_type === TLBReqType.Fetch)
+    }
+
+    when(io.mem_master.r.fire) {
+      assume(io.mem_master.r.bits.id === 0.U)
+      assume(io.mem_master.r.bits.resp === AXIDef.RESP_OKAY)
+//    assume(io.mem_master.r.bits.last === true.B)
+      assume(io.mem_master.r.bits.user === 0.U)
+    }
+
     val f_flush = io.flush | past(io.flush)
 
     when(FormalUtils.StreamShouldStable(io.req) && !f_flush) {

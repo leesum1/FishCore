@@ -30,7 +30,7 @@ class ICacheTag(tag_length: Int) extends Module {
   io.rdata := HoldRegister(read_op, tag.readwritePorts(0).readData, 1)
   io.tag_valid := HoldRegister(read_op, RegNext(valid_reg(io.addr)), 1)
 
-  when(io.wen) {
+  when(io.wen && io.en) { // BUG fixed
     valid_reg(io.addr) := true.B
   }
 
