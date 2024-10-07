@@ -31,11 +31,19 @@ object HoldRegister {
       data_in: T,
       data_latency: Int
   ): T = {
-    apply_no_latency(ShiftRegister(trigger, data_latency), data_in)
+    apply_no_latency(
+      ShiftRegister(
+        trigger, // in
+        data_latency, // n
+        false.B, // resetData
+        true.B // en
+      ),
+      data_in
+    )
   }
 
   private def apply_no_latency[T <: Data](trigger: Bool, data_in: T): T = {
-    val data_hold = RegEnable(data_in, trigger)
+    val data_hold = RegEnable(data_in, 0.U.asTypeOf(data_in), trigger)
     Mux(trigger, data_in, data_hold)
   }
 }
