@@ -5,6 +5,7 @@ import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal, stable}
 import leesum.Cache.{LoadDcacheReq, LoadDcacheResp}
 import org.scalatest.flatspec.AnyFlatSpec
+import chisel3.util.PriorityEncoder
 
 /** This Module is a generic arbiter for request and response signals.The lowest
   * index input has the highest priority. if no flush signal, the arbiter will
@@ -19,6 +20,7 @@ class ReqRespArbiter[T <: Data, U <: Data](
     numInputs: Int,
     reqType: T,
     respType: U,
+    use_round_robin: Boolean = true,
     formal: Boolean = false
 ) extends Module {
 
@@ -51,22 +53,29 @@ class ReqRespArbiter[T <: Data, U <: Data](
   // -------------------
   // priority
   // -------------------
-//  val sel_idx = VecInit(io.req_vec.map(_.valid))
-//    .indexWhere(_ === true.B)
+  def priority_idx(): UInt = {
+    val valids = io.req_vec.map(_.valid)
+    val idx = PriorityEncoder(valids)
+    idx
+  }
 
   // -------------------
   // round robin
   // -------------------
-  val cur_max_priority = RegInit(0.U(log2Ceil(numInputs).W))
-  val next_max_priority =
-    Mux(cur_max_priority === (numInputs - 1).U, 0.U, cur_max_priority + 1.U)
+  // val cur_max_priority = RegInit(0.U(log2Ceil(numInputs).W))
+  // val next_max_priority =
+  //   Mux(cur_max_priority === (numInputs - 1).U, 0.U, cur_max_priority + 1.U)
 
-  val new_idx = BarrelShifter
-    .rightRotate(VecInit(io.req_vec.map(_.valid)), sel_buf)
-    .indexWhere(_ === true.B)
-  val idx_map =
-    BarrelShifter.rightRotate(VecInit(Seq.tabulate(numInputs)(_.U)), sel_buf)
-  val sel_idx = idx_map(new_idx)
+  def round_robin_idx(): UInt = {
+    val new_idx = BarrelShifter
+      .rightRotate(VecInit(io.req_vec.map(_.valid)), sel_buf)
+      .indexWhere(_ === true.B)
+    val idx_map =
+      BarrelShifter.rightRotate(VecInit(Seq.tabulate(numInputs)(_.U)), sel_buf)
+    idx_map(new_idx)
+  }
+
+  val sel_idx = if (use_round_robin) round_robin_idx() else priority_idx()
 
   val lock_valid = RegInit(false.B)
   when(io.req_arb.valid && !io.req_arb.ready) {
@@ -99,7 +108,7 @@ class ReqRespArbiter[T <: Data, U <: Data](
       }
 
       when(io.req_arb.fire) {
-        cur_max_priority := next_max_priority
+        // cur_max_priority := next_max_priority
         state := sWaitResp
       }.otherwise {
         state := sIdle
@@ -164,8 +173,14 @@ class ReqRespArbFormal
     with Formal {
   "ReqRespArb" should "pass with assumption" in {
     verify(
-      new ReqRespArbiter(4, UInt(32.W), UInt(32.W), formal = true),
-      Seq(BoundedCheck(10))
+      new ReqRespArbiter(
+        4,
+        UInt(32.W),
+        UInt(32.W),
+        use_round_robin = true,
+        formal = true
+      ),
+      Seq(BoundedCheck(12))
     )
   }
 }

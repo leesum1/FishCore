@@ -1,12 +1,13 @@
 package leesum.axi4
 import chisel3._
-import chisel3.util.{Enum, is, log2Ceil, switch}
+import chisel3.util.{Enum, PriorityEncoder, is, log2Ceil, switch}
 import chiseltest.ChiselScalatestTester
 import chiseltest.formal.{BoundedCheck, Formal, stable}
 import leesum.{BarrelShifter, FormalUtils, GenVerilogHelper, ReqRespArbiter}
 import org.scalatest.flatspec.AnyFlatSpec
 
-class AxiReadArbiter(numInputs: Int = 2) extends Module {
+class AxiReadArbiter(numInputs: Int = 2, use_round_robin: Boolean = true)
+    extends Module {
 
   val io = IO(new Bundle {
     val in = Vec(numInputs, new AXISlaveIO(32, 64))
@@ -40,18 +41,29 @@ class AxiReadArbiter(numInputs: Int = 2) extends Module {
   // -------------------
   // priority
   // -------------------
-  //  val sel_idx = VecInit(io.req_vec.map(_.valid))
-  //    .indexWhere(_ === true.B)
+  def priority_idx(): UInt = {
+    val valids = io.in.map(_.ar.valid)
+    val idx = PriorityEncoder(valids)
+    idx
+  }
 
   // -------------------
   // round robin
   // -------------------
-  val new_idx = BarrelShifter
-    .rightRotate(VecInit(io.in.map(_.ar.valid)), sel_buf)
-    .indexWhere(_ === true.B)
-  val idx_map =
-    BarrelShifter.rightRotate(VecInit(Seq.tabulate(numInputs)(_.U)), sel_buf)
-  val sel_idx = idx_map(new_idx)
+  // val cur_max_priority = RegInit(0.U(log2Ceil(numInputs).W))
+  // val next_max_priority =
+  //   Mux(cur_max_priority === (numInputs - 1).U, 0.U, cur_max_priority + 1.U)
+
+  def round_robin_idx(): UInt = {
+    val new_idx = BarrelShifter
+      .rightRotate(VecInit(io.in.map(_.ar.valid)), sel_buf)
+      .indexWhere(_ === true.B)
+    val idx_map =
+      BarrelShifter.rightRotate(VecInit(Seq.tabulate(numInputs)(_.U)), sel_buf)
+    idx_map(new_idx)
+  }
+
+  val sel_idx = if (use_round_robin) round_robin_idx() else priority_idx()
 
   val lock_valid = RegInit(false.B)
   when(io.out.r.valid && !io.out.r.ready) {
@@ -66,6 +78,8 @@ class AxiReadArbiter(numInputs: Int = 2) extends Module {
       assert(io.in(sel_idx).ar.valid, "in_req(idx) must be valid")
 
       val idx = Mux(lock_valid, sel_buf, sel_idx)
+
+      dontTouch(idx)
 
       io.out.ar <> io.in(idx).ar
 
@@ -95,6 +109,10 @@ class AxiReadArbiter(numInputs: Int = 2) extends Module {
       }
     }
   }
+}
+
+object genAxiReadArbiter extends App {
+  GenVerilogHelper(new AxiReadArbiter(2))
 }
 
 class AxiWriteArbiter extends Module {
