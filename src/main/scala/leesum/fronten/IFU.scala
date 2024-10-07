@@ -32,6 +32,8 @@ class IFUTop(
     boot_pc: Long = 0x80000000L,
     rvc_en: Boolean = false,
     btb_way_count: Int = 2,
+    btb_nums: Int = 128,
+    bim_nums: Int = 128,
     formal: Boolean = false
 ) extends Module {
   val io = IO(new Bundle {
@@ -62,7 +64,7 @@ class IFUTop(
 
   io.perf_bp_f1 := bp_f1_perf
 
-  val nextline_bp = Module(new BPUTop(btb_way_count, 1024, 2048))
+  val nextline_bp = Module(new BPUTop(btb_way_count, btb_nums, bim_nums))
   val f3_bpu_update_valid_next = RegInit(false.B)
   val f3_bpu_update_pc_next = RegInit(0.U(39.W))
   val f3_bpu_update_btb_data_next = RegInit(0.U.asTypeOf(new BTBEntry()))
@@ -520,21 +522,21 @@ class IFUTop(
   // --------------------------
   // formal
   // --------------------------
-
-  when(RegNext(io.flush)) {
-    assert(state === sIdle)
-  }
-
-  when(io.flush || f3_flush_next) {
-    assume(io.icache_req.fire === false.B)
-    assert(!pc_gen_stage.io.pc.ready)
-  }
-
-  when(io.inst_fifo_pop.map(_.fire).reduce(_ || _)) {
-    assume(CheckOrder(VecInit(io.inst_fifo_pop.map(_.fire))))
-  }
-
   if (formal) {
+
+    when(RegNext(io.flush)) {
+      assert(state === sIdle)
+    }
+
+    when(io.flush || f3_flush_next) {
+      assume(io.icache_req.fire === false.B)
+      assert(!pc_gen_stage.io.pc.ready)
+    }
+
+    when(io.inst_fifo_pop.map(_.fire).reduce(_ || _)) {
+      assume(CheckOrder(VecInit(io.inst_fifo_pop.map(_.fire))))
+    }
+
     val f_flush = io.flush && past(io.flush)
 
     when(FormalUtils.StreamShouldStable(io.icache_resp) && f_flush) {

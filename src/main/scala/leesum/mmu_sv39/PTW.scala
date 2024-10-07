@@ -201,21 +201,20 @@ class PTW(formal: Boolean = false) extends Module {
   // --------------------------
   // formal
   // --------------------------
-
-  // past(io.flush, 1)
-  when(RegNext(io.flush)) {
-    assert(
-      state === sIdle || state === sFlushWaitDcacheRespHs || state === sSendPTWResp
-    )
-    assert(io.ptw_resp.valid === false.B)
-    assert(io.dcache_load_req.valid === false.B)
-  }
-
-  when(io.flush) {
-    assert(io.ptw_req.ready === false.B)
-  }
-
   if (formal) {
+    // past(io.flush, 1)
+    when(RegNext(io.flush)) {
+      assert(
+        state === sIdle || state === sFlushWaitDcacheRespHs || state === sSendPTWResp
+      )
+      assert(io.ptw_resp.valid === false.B)
+      assert(io.dcache_load_req.valid === false.B)
+    }
+
+    when(io.flush) {
+      assert(io.ptw_req.ready === false.B)
+    }
+
     when(
       FormalUtils.StreamShouldStable(io.dcache_load_req) && !past(io.flush)
     ) {

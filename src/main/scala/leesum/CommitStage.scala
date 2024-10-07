@@ -455,7 +455,7 @@ class CommitStage(
     // assert
     // ------------------
 
-    assume(
+    assert(
       entry.complete,
       "exception must be complete"
     )

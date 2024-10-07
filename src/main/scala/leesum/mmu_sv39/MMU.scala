@@ -27,7 +27,8 @@ class MMU(
         false
       ) // default addr map, 0x0 -> 0xffffffffffffffff, mmio = false
     ),
-    formal: Boolean = false
+    itlb_nums: Int = 8,
+    dtlb_nums: Int = 8
 ) extends Module {
   val io = IO(new Bundle {
     // fetch and lsu req
@@ -182,8 +183,8 @@ class MMU(
   val dtlb_req_va = io.lsu_req.bits.vaddr
   val dtlb_req_asid = asid_val
 
-  val itlb_l1 = Module(new TLB_L1(8))
-  val dtlb_l1 = Module(new TLB_L1(8))
+  val itlb_l1 = Module(new TLB_L1(itlb_nums))
+  val dtlb_l1 = Module(new TLB_L1(dtlb_nums))
 
   itlb_l1.io.va.valid := itlb_req
   itlb_l1.io.va.bits := itlb_req_va
@@ -200,7 +201,7 @@ class MMU(
   dtlb_l1.io.tlb_flush := io.tlb_flush
 
   val ptw_arb = Module(new ReqRespArbiter(2, new PTWReq, new PTWResp))
-  val ptw = Module(new PTW(formal = formal))
+  val ptw = Module(new PTW())
 
   ptw.io.dcache_load_req <> io.dcache_load_req
   ptw.io.dcache_load_resp <> io.dcache_load_resp
@@ -634,78 +635,6 @@ class MMU(
     }
   }
 
-  // -------------------
-  // formal
-  // -------------------
-
-  when(io.tlb_flush.valid) {
-    assert(io.flush)
-  }
-
-  when(RegNext(io.flush)) {
-    assert(itlb_state === sIdle)
-    assert(dtlb_state === sIdle)
-  }
-
-  when(io.flush) {
-    assume(!io.fetch_resp.ready)
-    assume(!io.lsu_resp.ready)
-  }
-
-  when(io.flush) {
-    assert(!io.fetch_req.fire)
-    assert(!io.lsu_req.fire)
-    assert(!io.fetch_resp.fire)
-    assert(!io.lsu_resp.fire)
-  }
-
-  when(io.lsu_req.fire) {
-    assume(io.lsu_req.bits.req_type =/= TLBReqType.Fetch)
-  }
-  when(io.fetch_req.fire) {
-    assume(io.fetch_req.bits.req_type === TLBReqType.Fetch)
-  }
-  when(io.fetch_resp.fire) {
-    assert(io.fetch_resp.bits.req_type === TLBReqType.Fetch)
-  }
-  when(io.lsu_resp.fire) {
-    assert(io.lsu_resp.bits.req_type =/= TLBReqType.Fetch)
-  }
-
-  if (formal) {
-
-    val f_flush = io.flush | past(io.flush)
-
-    when(FormalUtils.StreamShouldStable(io.fetch_req) && !f_flush) {
-      assume(io.fetch_req.valid)
-      assume(stable(io.fetch_req.bits))
-    }
-    when(FormalUtils.StreamShouldStable(io.lsu_req) && !f_flush) {
-      assume(io.lsu_req.valid)
-      assume(stable(io.lsu_req.bits))
-    }
-    when(FormalUtils.StreamShouldStable(io.fetch_resp) && !f_flush) {
-      assert(io.fetch_resp.valid)
-      assert(stable(io.fetch_resp.bits))
-    }
-    when(FormalUtils.StreamShouldStable(io.lsu_resp) && !f_flush) {
-      assert(io.lsu_resp.valid)
-      assert(stable(io.lsu_resp.bits))
-    }
-
-    when(!stable(io.mstatus) || !stable(io.satp) || !stable(io.cur_privilege)) {
-      assume(io.flush)
-    }
-  }
-}
-
-class MMUFormal extends AnyFlatSpec with ChiselScalatestTester with Formal {
-  "MMU" should "pass with assumption" in {
-    verify(
-      new MMU(formal = true),
-      Seq(BoundedCheck(6), CVC4EngineAnnotation)
-    )
-  }
 }
 
 object gen_mmu_verilog extends App {

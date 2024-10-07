@@ -343,7 +343,7 @@ class AGU() extends Module {
   // --------------------------
 
   when(io.in.fire) {
-    assume(
+    assert(
       PopCount(
         Seq(io.in.bits.is_store, io.in.bits.is_load, io.in.bits.is_atomic)
       ) <= 1.U,
@@ -351,11 +351,11 @@ class AGU() extends Module {
     )
 
     when(io.in.bits.is_atomic) {
-      assume(
+      assert(
         io.in.bits.atomic_op =/= AtomicOP.None,
         "AGUReq error, atomic_op should not be None"
       )
-      assume(io.in.bits.op_b === 0.U, "AGUReq error, op_b should be 0")
+      assert(io.in.bits.op_b === 0.U, "AGUReq error, op_b should be 0")
     }
   }
 

@@ -11,7 +11,8 @@ import leesum.lsu.LSUTop
 import leesum.mmu_sv39.MMU
 import leesum.moniter.{DifftestPort, MonitorTop, PerfPort}
 
-class FishCore(
+// create FishCore config
+case class FishCoreConfig(
     muldiv_en: Boolean = true,
     rvc_en: Boolean = false,
     monitor_en: Boolean = true,
@@ -22,7 +23,17 @@ class FishCore(
         0xffffffffffffffffL,
         false
       ) // default addr map, 0x0 -> 0xffffffffffffffff, mmio = false
-    )
+    ),
+    reorder_buffer_size: Int = 8,
+    itlb_size: Int = 8,
+    dtlb_size: Int = 8,
+    btb_ways: Int = 2,
+    btb_nums: Int = 128,
+    bim_nums: Int = 128
+)
+
+class FishCore(
+    config: FishCoreConfig
 ) extends Module {
 
   val io = IO(new Bundle {
@@ -46,8 +57,16 @@ class FishCore(
   io.perf_monitor <> monitor.io.perf
 
   // pipeline stage
-  val ifu = Module(new IFUTop(boot_pc, rvc_en))
-  val mmu = Module(new MMU(addr_map))
+  val ifu = Module(
+    new IFUTop(
+      config.boot_pc,
+      config.rvc_en,
+      btb_way_count = config.btb_ways,
+      btb_nums = config.btb_nums,
+      bim_nums = config.bim_nums
+    )
+  )
+  val mmu = Module(new MMU(config.addr_map, config.itlb_size, config.dtlb_size))
 
   mmu.io.tohost_addr := io.tohost_addr
 
@@ -56,15 +75,15 @@ class FishCore(
   val rob = Module(new ReOrderBuffer(16, 2, 2))
   val issue_stage_rob = Module(new IssueStageNew(2, 2))
 
-  val commit_stage = Module(new CommitStage(2, 2, monitor_en))
-  val reg_file = Module(new GPRs(3, 3, monitor_en))
+  val commit_stage = Module(new CommitStage(2, 2, config.monitor_en))
+  val reg_file = Module(new GPRs(3, 3, config.monitor_en))
   val csr_regs = Module(new CSRRegs(2, 2))
 
   // fu
   val alu_seq = Seq.fill(2)(Module(new FuAlu))
   val lsu = Module(new LSUTop())
-  val bru = Module(new FuBranch(rvc_en))
-  val mul_div = Module(new FuMulDiv(muldiv_en))
+  val bru = Module(new FuBranch(config.rvc_en))
+  val mul_div = Module(new FuMulDiv(config.muldiv_en))
   val csr = Module(new FuCSR)
 
   val dcache_arb = Module(
@@ -305,5 +324,5 @@ class FishCore(
 }
 
 object gen_FishCore_verilog extends App {
-  GenVerilogHelper(new FishCore)
+  GenVerilogHelper(new FishCore(FishCoreConfig()))
 }

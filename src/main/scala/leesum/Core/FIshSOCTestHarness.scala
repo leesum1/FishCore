@@ -8,26 +8,7 @@ import leesum.devices.{SifiveUart, clint, plic}
 import leesum.moniter.{DifftestPort, PerfPort}
 import leesum.{GenVerilogHelper, MSBDivFreq}
 
-class FishSoc(
-    // TODO: add config struct
-    muldiv_en: Boolean = true,
-    rvc_en: Boolean = false
-) extends Module {
-
-  val io = IO(new Bundle {
-    val difftest = Output(Valid(new DifftestPort(2)))
-    val perf_monitor = Output(new PerfPort)
-    val mem_port = Flipped(new BasicMemoryIO(32, 64))
-
-    // uart port
-    val uart_tx_deq = DecoupledIO(UInt(8.W))
-    val uart_rx_enq = Flipped(DecoupledIO(UInt(8.W)))
-
-    // debug
-    val jtag_io = new JtagIO(as_master = false)
-    val is_halted = Output(Bool())
-    val tohost_addr = Input(ValidIO(UInt(64.W)))
-  })
+object MiniFishSocConfig {
 
   val boot_pc = 0x80000000L
   val mem_addr = 0x80000000L
@@ -46,38 +27,70 @@ class FishSoc(
   val PLIC_BASE = 0x0c00_0000L
   val SIFIVE_UART_BASE = 0xc000_0000L
 
-  val addr_map = Seq(
-    (mem_addr, mem_addr + mem_size, false),
-    (SERIAL_PORT, SERIAL_PORT + 0x8, true),
-    (RTC_ADDR, RTC_ADDR + 0x8, true),
-    (KBD_ADDR, KBD_ADDR + 0x8, true),
-    (VGACTRL_ADDR, VGACTRL_ADDR + 0x8, true),
-    (FB_ADDR, FB_ADDR + 300 * 400 * 4, true),
-    (CLINT_BASE, CLINT_BASE + 0x1_0000, true),
-    (PLIC_BASE, PLIC_BASE + 0x0400_0000, true),
-    (SIFIVE_UART_BASE, SIFIVE_UART_BASE + 0x1000, true)
+  // 0 -> simulated device
+  // 1 -> clint
+  // 2 -> plic
+  // 3 -> sifive_uart
+  val addr_decode_map = Seq(
+    // simulated device id set to 0
+    (mem_addr, mem_addr + mem_size, 0),
+    (SERIAL_PORT, SERIAL_PORT + 0x8, 0),
+    (RTC_ADDR, RTC_ADDR + 0x8, 0),
+    (KBD_ADDR, KBD_ADDR + 0x8, 0),
+    (VGACTRL_ADDR, VGACTRL_ADDR + 0x8, 0),
+    (FB_ADDR, FB_ADDR + 300 * 400 * 4, 0),
+    // real device
+    (CLINT_BASE, CLINT_BASE + 0x1_0000, 1),
+    (PLIC_BASE, PLIC_BASE + 0x0400_0000, 2),
+    (SIFIVE_UART_BASE, SIFIVE_UART_BASE + 0x1000, 3)
   )
 
+  val config = new FishCoreConfig(
+    muldiv_en = true,
+    rvc_en = true,
+    monitor_en = true, // TODO: make it configurable
+    boot_pc = 0x80000000L,
+    addr_map = Seq(
+      (mem_addr, mem_addr + mem_size, false),
+      (SERIAL_PORT, SERIAL_PORT + 0x8, true),
+      (RTC_ADDR, RTC_ADDR + 0x8, true),
+      (KBD_ADDR, KBD_ADDR + 0x8, true),
+      (VGACTRL_ADDR, VGACTRL_ADDR + 0x8, true),
+      (FB_ADDR, FB_ADDR + 300 * 400 * 4, true),
+      (CLINT_BASE, CLINT_BASE + 0x1_0000, true),
+      (PLIC_BASE, PLIC_BASE + 0x0400_0000, true),
+      (SIFIVE_UART_BASE, SIFIVE_UART_BASE + 0x1000, true)
+    ),
+    reorder_buffer_size = 8,
+    itlb_size = 8,
+    dtlb_size = 8,
+    btb_ways = 2,
+    btb_nums = 64,
+    bim_nums = 64
+  )
+}
+
+class FishSoc() extends Module {
+
+  val io = IO(new Bundle {
+    val difftest = Output(Valid(new DifftestPort(2)))
+    val perf_monitor = Output(new PerfPort)
+    val mem_port = Flipped(new BasicMemoryIO(32, 64))
+
+    // uart port
+    val uart_tx_deq = DecoupledIO(UInt(8.W))
+    val uart_rx_enq = Flipped(DecoupledIO(UInt(8.W)))
+
+    // debug
+    val jtag_io = new JtagIO(as_master = false)
+    val is_halted = Output(Bool())
+    val tohost_addr = Input(ValidIO(UInt(64.W)))
+  })
+
   def demux_sel_idx(addr: UInt, en: Bool): UInt = {
-    // 0 -> simulated device
-    // 1 -> clint
-    // 2 -> plic
-    // 3 -> sifive_uart
-    val addr_decode_map = Seq(
-      // simulated device id set to 0
-      (mem_addr, mem_addr + mem_size, 0),
-      (SERIAL_PORT, SERIAL_PORT + 0x8, 0),
-      (RTC_ADDR, RTC_ADDR + 0x8, 0),
-      (KBD_ADDR, KBD_ADDR + 0x8, 0),
-      (VGACTRL_ADDR, VGACTRL_ADDR + 0x8, 0),
-      (FB_ADDR, FB_ADDR + 300 * 400 * 4, 0),
-      // real device
-      (CLINT_BASE, CLINT_BASE + 0x1_0000, 1),
-      (PLIC_BASE, PLIC_BASE + 0x0400_0000, 2),
-      (SIFIVE_UART_BASE, SIFIVE_UART_BASE + 0x1000, 3)
-    )
+
     val addr_decoder = Module(
-      new AddrDecoder(addr_decode_map)
+      new AddrDecoder(MiniFishSocConfig.addr_decode_map)
     )
     addr_decoder.io.addr.valid := en
     addr_decoder.io.addr.bits := addr
@@ -90,7 +103,7 @@ class FishSoc(
   }
 
   val core = Module(
-    new FishCore(muldiv_en, rvc_en, monitor_en, boot_pc, addr_map)
+    new FishCore(MiniFishSocConfig.config)
   )
 
   core.io.tohost_addr := io.tohost_addr
@@ -163,7 +176,7 @@ class FishSoc(
   // plic32 <> 32to64 <> plic_axi_bridge <> axi_demux(2)
   val harts_map = Seq(true) // true: smode enable,
   val plic32 = Module(
-    new plic(harts_map, PLIC_BASE.toInt, 15)
+    new plic(harts_map, MiniFishSocConfig.PLIC_BASE.toInt, 15)
   ) // sifive uart irq: 10
   plic32.io.irq_pendings.foreach(_ := false.B)
 
@@ -189,7 +202,7 @@ class FishSoc(
   // SifiveUart module
   // sifive_uart32 <> 32to64 <> sifive_uart_axi_bridge <> axi_demux(3)
   // ---------------------------------------------------------------------
-  val sifive_uart32 = Module(new SifiveUart(SIFIVE_UART_BASE))
+  val sifive_uart32 = Module(new SifiveUart(MiniFishSocConfig.SIFIVE_UART_BASE))
   sifive_uart32.io.tx_deq <> io.uart_tx_deq
   io.uart_rx_enq <> sifive_uart32.io.rx_enq
 
@@ -215,10 +228,7 @@ class FishSoc(
 object gen_FishSoc extends App {
   val projectDir = System.getProperty("user.dir")
   GenVerilogHelper(
-    new FishSoc(
-      muldiv_en = true,
-      rvc_en = true
-    ),
+    new FishSoc(),
     s"$projectDir/sim/vsrc/ysyx_v2.sv"
   )
 }
@@ -228,10 +238,7 @@ object gen_FishSoc extends App {
 object gen_CoreTestSTA extends App {
   val projectDir = System.getProperty("user.dir")
   GenVerilogHelper(
-    new FishSoc(
-      muldiv_en = false,
-      rvc_en = true
-    ),
+    new FishSoc(),
     "/home/leesum/vivado_project/ysyx_v2/ysyx_v2.srcs/sources_1/imports/ysyx_v2/ysyx_v2.sv"
   )
 }

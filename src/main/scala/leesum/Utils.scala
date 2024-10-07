@@ -35,7 +35,7 @@ object GenVerilogHelper {
       firtoolOpts = Array(
         "--disable-all-randomization",
         "--strip-debug-info",
-        // "--lowering-options=disallowLocalVariables,disallowPackedArrays",
+        "--lowering-options=disallowLocalVariables,disallowPackedArrays,noAlwaysComb,verifLabels",
 //        "--split-verilog",
 //        "--lowering-options=disallowLocalVariables",
         "--lower-memories",

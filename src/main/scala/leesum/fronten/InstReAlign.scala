@@ -216,11 +216,14 @@ class InstReAlign(rvc_en: Boolean = false) extends Module {
   // -----------------------------
 
   when(io.input.fire) {
-    assume(io.input.bits.pc(0) === false.B)
+    assert(io.input.bits.pc(0) === false.B, "pc must be aligned to 2")
   }
 
   when(io.output.fire) {
-    assert(CheckOrder(VecInit(io.output.bits.map(_.valid))))
+    assert(
+      CheckOrder(VecInit(io.output.bits.map(_.valid))),
+      "valid must be ordered"
+    )
   }
 
 }

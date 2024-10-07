@@ -121,7 +121,7 @@ class MultiPortFIFOBase[T <: Data](
       "read only support with_valid and not use_mem"
     )
 
-    assume(addr < size.U, "ptr must less than size")
+    assert(addr < size.U, "ptr must less than size")
     val data = ram(addr)
     val valid = ram_valid(addr)
     val res = Wire(new Valid(gen))
@@ -474,7 +474,7 @@ class DummyMultiPortFIFO[T <: Data](
   assert(f_push_valid_order)
   assert(f_push_ready_order)
   assert(f_pop_valid_order)
-  assume(f_pop_ready_order)
+  assert(f_pop_ready_order)
   assert(f_push_fire_order)
   assert(f_pop_fire_order)
 }
