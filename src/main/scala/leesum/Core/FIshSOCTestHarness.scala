@@ -87,6 +87,10 @@ class FishSoc() extends Module {
     val tohost_addr = Input(ValidIO(UInt(64.W)))
   })
 
+  val axi_demux = Module(
+    new AXIDeMux(5, 32, 64)
+  )
+
   def demux_sel_idx(addr: UInt, en: Bool): UInt = {
 
     val addr_decoder = Module(
@@ -94,12 +98,9 @@ class FishSoc() extends Module {
     )
     addr_decoder.io.addr.valid := en
     addr_decoder.io.addr.bits := addr
-    assert(
-      addr_decoder.io.sel_error === false.B,
-      "addr_decoder sel error: %x\n",
-      addr
-    )
-    addr_decoder.io.sel_idx
+
+    // if addr_decoder.io.sel_error is true, then return dummy device (port 4)
+    Mux(addr_decoder.io.sel_error, 4.U, addr_decoder.io.sel_idx)
   }
 
   val core = Module(
@@ -120,10 +121,6 @@ class FishSoc() extends Module {
   debug_top.io.debug_core_interface <> core.io.debug_core_interface
 
   io.is_halted := core.io.debug_core_interface.state_regs.is_halted
-
-  val axi_demux = Module(
-    new AXIDeMux(4, 32, 64)
-  )
 
   // core <> axi_demux
   core.io.axi_master <> axi_demux.io.in
@@ -222,6 +219,19 @@ class FishSoc() extends Module {
   )
   sifive_uart_axi_bridge.io.mem_port <> sifive_uart32to64.io.before
   sifive_uart_axi_bridge.io.axi_slave <> axi_demux.io.out(3)
+
+  // dummy_mem <>  dummy_axi_bridge <> axi_demux(last)
+  val dummy_axi_bridge = Module(
+    new AXI4SlaveBridge(
+      32,
+      64
+    )
+  )
+
+  val dummy_mem = Module(new DummyMemory(32, 64))
+
+  dummy_mem.io <> dummy_axi_bridge.io.mem_port
+  dummy_axi_bridge.io.axi_slave <> axi_demux.io.out.last
 
 }
 

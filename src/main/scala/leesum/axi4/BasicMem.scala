@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util.experimental.loadMemoryFromFileInline
 import chisel3.util.{Cat, RegEnable, log2Ceil}
 import leesum.Cache.DcacheConst
-import leesum.Utils.HoldRegister
+import leesum.Utils.{HoldRegister, SimLog}
 import leesum.{CheckAligned, GenVerilogHelper, writeByteArrayToStringsToFile}
 
 import java.nio.file.{Files, Paths}
@@ -285,6 +285,29 @@ class BasicMemory(
     )
     io <> memVec.io
   }
+}
+
+class DummyMemory(
+    ADDR_WIDTH: Int,
+    DATA_WIDTH: Int
+) extends Module {
+  val io = IO(new BasicMemoryIO(ADDR_WIDTH, DATA_WIDTH))
+
+  // Log when read
+  when(io.i_rd) {
+    SimLog(desiredName, "Read addr[%x] data[%x]\n", io.i_raddr, io.o_rdata)
+  }
+
+  when(io.i_we) {
+    SimLog(
+      desiredName,
+      "Write addr[%x] data[%x] wstrb[%x]\n",
+      io.i_waddr,
+      io.i_wdata,
+      io.i_wstrb
+    )
+  }
+  io.o_rdata := 0.U
 }
 
 object gen_basic_mem_verilog extends App {
