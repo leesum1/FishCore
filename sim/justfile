@@ -1,6 +1,6 @@
 release_bin := "build/linux/x86_64/release/Vtop"
 debug_bin := "build/linux/x86_64/debug/Vtop"
-load_fie := "ready_to_run/rv64ui-v-beq"
+load_fie := "ready_to_run/rv64ui-p-beq"
 
 
 

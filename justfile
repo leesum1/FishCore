@@ -1,6 +1,6 @@
 FISH_CORE_HOME := `pwd`
 
-Linux_payload := FISH_CORE_HOME / "sim/ready_to_run/fw_payload.elf"
+Linux_payload := FISH_CORE_HOME / "sim/ready_to_run/linux-8m-hello-hvc.elf"
 sim_dir := FISH_CORE_HOME / "sim"
 
 clean_dir := "\
