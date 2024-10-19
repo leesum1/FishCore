@@ -1,3 +1,0 @@
-[submodule "my-flakes"]
-	path = my-flakes
-	url = https://github.com/leesum1/my-flakes.git
