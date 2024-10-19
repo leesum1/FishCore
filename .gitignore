@@ -344,6 +344,7 @@ gen_verilog
 Dockerfile
 !.devcontainer/
 !.devcontainer/*
+.vscode-ctags
 
 *.anno.json
 /src/main/resources/BasicMemorySyncReadMemInit_0.txt

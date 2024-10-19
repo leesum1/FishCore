@@ -1,7 +1,7 @@
 package leesum.Utils
 
 import chisel3._
-import chisel3.util.Decoupled
+import chisel3.util.{Decoupled, Queue}
 import leesum.GenVerilogHelper
 
 class CDC2PhaseSrc[T <: Data](gen: T) extends Module {
@@ -66,40 +66,71 @@ class CDC2PhaseDst[T <: Data](gen: T) extends Module {
   io.async_in.ready := ack_dst_q
 }
 
-class CDCHandShakeReqResp[T <: Data, U <: Data](req_type: T, resp_type: U)
-    extends Module {
+class CDCHandShake[T <: Data](data_type: T) extends RawModule {
   val io = IO(new Bundle {
+    val clk_src = Input(Clock())
+    val rst_src = Input(Bool()) // async reset on high
+    val clk_dst = Input(Clock())
+    val rst_dst = Input(Bool()) // async reset on high
 
-    val clkB = Input(Clock())
-    val rstB = Input(Bool())
-
-    val req_clkA = Flipped(Decoupled(req_type))
-    val resp_clkA = Decoupled(resp_type)
-
-    val req_clkB = Decoupled(req_type)
-    val resp_clkB = Flipped(Decoupled(resp_type))
+    val src_hs = Flipped(Decoupled(data_type))
+    val dst_hs = Decoupled(data_type)
   })
 
-  val Adomain_req_master = Module(new CDC2PhaseSrc(req_type))
-  val Adomain_resp_slave = Module(new CDC2PhaseDst(resp_type))
-
-  val Bdomain_req_slave = withClockAndReset(io.clkB, io.rstB) {
-    Module(new CDC2PhaseDst(req_type))
+  val src_domain = withClockAndReset(io.clk_src, io.rst_src.asAsyncReset) {
+    Module(new CDC2PhaseSrc(data_type))
   }
-  val Bdomain_resp_master = withClockAndReset(io.clkB, io.rstB) {
-    Module(new CDC2PhaseSrc(resp_type))
+  val dst_domain = withClockAndReset(io.clk_dst, io.rst_dst.asAsyncReset) {
+    Module(new CDC2PhaseDst(data_type))
   }
 
-  Adomain_req_master.io.sync_in <> io.req_clkA
+  // io.req_clkA <> Adomain_req_master <> Bdomain_req_slave <> io.req_clkB
+  io.src_hs <> src_domain.io.sync_in
+  src_domain.io.async_out <> dst_domain.io.async_in
+  dst_domain.io.sync_out <> io.dst_hs
+}
 
-  Adomain_req_master.io.async_out <> Bdomain_req_slave.io.async_in
-  Bdomain_req_slave.io.sync_out <> io.req_clkB
+class CDCHandShakeReqResp[T <: Data, U <: Data](req_type: T, resp_type: U)
+    extends RawModule {
+  val io = IO(new Bundle {
 
-  Bdomain_resp_master.io.sync_in <> io.resp_clkB
-  Bdomain_resp_master.io.async_out <> Adomain_resp_slave.io.async_in
-  Adomain_resp_slave.io.sync_out <> io.resp_clkA
+    val clk_src = Input(Clock())
+    val rst_src = Input(Bool()) // async reset on high
+    val clk_dst = Input(Clock())
+    val rst_dst = Input(Bool()) // async reset on high
+
+    val req_src = Flipped(Decoupled(req_type))
+    val resp_src = Decoupled(resp_type)
+
+    val req_dst = Decoupled(req_type)
+    val resp_dst = Flipped(Decoupled(resp_type))
+  })
+
+  val req_cdc_hs = Module(new CDCHandShake(req_type))
+
+  req_cdc_hs.io.clk_src := io.clk_src
+  req_cdc_hs.io.rst_src := io.rst_src
+  req_cdc_hs.io.clk_dst := io.clk_dst
+  req_cdc_hs.io.rst_dst := io.rst_dst
+
+  io.req_src <> req_cdc_hs.io.src_hs
+  req_cdc_hs.io.dst_hs <> io.req_dst
+
+  val resp_cdc_hs = Module(new CDCHandShake(resp_type))
+  resp_cdc_hs.io.clk_src := io.clk_dst
+  resp_cdc_hs.io.rst_src := io.rst_dst
+  resp_cdc_hs.io.clk_dst := io.clk_src
+  resp_cdc_hs.io.rst_dst := io.rst_src
+
+  io.resp_dst <> resp_cdc_hs.io.src_hs
+  resp_cdc_hs.io.dst_hs <> io.resp_src
+
 }
 
 object CDCHandShakeReqRespGenVerilog extends App {
-  GenVerilogHelper(new CDCHandShakeReqResp(UInt(8.W), UInt(8.W)))
+  GenVerilogHelper(new CDCHandShakeReqResp(UInt(32.W), UInt(32.W)))
+}
+
+object CDCHandShakepGenVerilog extends App {
+  GenVerilogHelper(new CDCHandShake(UInt(32.W)))
 }

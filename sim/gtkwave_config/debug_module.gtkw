@@ -1,25 +1,25 @@
 [*]
 [*] GTKWave Analyzer v3.3.120 (w)1999-2024 BSI
-[*] Fri Sep  6 09:10:17 2024
+[*] Thu Oct 17 08:13:21 2024
 [*]
 [dumpfile] "/home/leesum/workhome/chisel-fish/sim/build/linux/x86_64/release/wave.fst"
-[dumpfile_mtime] "Fri Sep  6 09:09:32 2024"
-[dumpfile_size] 50399768
+[dumpfile_mtime] "Wed Oct 16 16:30:35 2024"
+[dumpfile_size] 69059567
 [savefile] "/home/leesum/workhome/chisel-fish/sim/gtkwave_config/debug_module.gtkw"
-[timestart] 15023000
+[timestart] 312385
 [size] 2194 1127
 [pos] -1 -1
-*-20.700001 193319 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-9.600000 314210 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.FishSoc.
 [treeopen] TOP.FishSoc.core.
 [treeopen] TOP.FishSoc.core.commit_stage.
 [treeopen] TOP.FishSoc.debug_top.jtag2dm_cdc_hs.
 [treeopen] TOP.FishSoc.debug_top.jtag_dtm.
-[sst_width] 858
-[signals_width] 458
+[sst_width] 374
+[signals_width] 505
 [sst_expanded] 1
-[sst_vpaned_height] 607
+[sst_vpaned_height] 771
 @800200
 -clock
 @80000024
@@ -39,7 +39,7 @@ TOP.FishSoc.debug_top.jtag_dtm.ir_reg[4:0]
 TOP.FishSoc.debug_top.jtag_dtm.jtag_state[3:0]
 ^3 /home/leesum/workhome/chisel-fish/sim/gtkwave_config/dmi_stage.gtkw
 TOP.FishSoc.debug_top.jtag_dtm.dmi_state[1:0]
-@800200
+@c00200
 -dr_shift
 @28
 TOP.FishSoc.debug_top.jtag_dtm.dr_shift_reg.io_update_valid
@@ -50,12 +50,13 @@ TOP.FishSoc.debug_top.jtag_dtm.dr_shift_reg.io_update_data[39:0]
 TOP.FishSoc.debug_top.jtag_dtm.dr_shift_reg.io_shift_valid
 @22
 TOP.FishSoc.debug_top.jtag_dtm.dr_shift_reg.io_shift_reg_out[39:0]
-@1000200
+@1401200
 -dr_shift
 @c00200
 -ir_shift
 @28
 TOP.FishSoc.debug_top.jtag_dtm.ir_shift_reg.io_update_valid
+@24
 TOP.FishSoc.debug_top.jtag_dtm.ir_shift_reg.io_update_data_len[2:0]
 @22
 TOP.FishSoc.debug_top.jtag_dtm.ir_shift_reg.io_update_data[4:0]
@@ -84,8 +85,9 @@ TOP.FishSoc.debug_top.jtag_dtm.io_dmi_req_valid
 TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_bits_addr[5:0]
 @22
 TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_bits_data[31:0]
-@28
+@24
 TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_bits_op[1:0]
+@28
 TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_ready
 TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_valid
 @1000200
@@ -94,7 +96,6 @@ TOP.FishSoc.debug_top.jtag_dtm.io_dmi_resp_valid
 -jtag_dtm
 @22
 TOP.FishSoc.debug_top.jtag_dtm.dtm_dmi[39:0]
-TOP.FishSoc.debug_top.jtag_dtm.dtm_dtmcs[39:0]
 @28
 TOP.FishSoc.debug_top.jtag_dtm.dmi_busy
 TOP.FishSoc.debug_top.jtag_dtm.in_dmi_error
@@ -222,18 +223,5 @@ TOP.FishSoc.debug_top.debug_module.dmcontrol[31:0]
 @1401200
 -dmi_resp
 -dm
-@28
-TOP.FishSoc.debug_top.jtag2dm_cdc_hs.io_resp_clkB_valid
-TOP.FishSoc.debug_top.jtag2dm_cdc_hs.io_resp_clkB_ready
-TOP.FishSoc.debug_top.jtag2dm_cdc_hs.io_resp_clkA_valid
-TOP.FishSoc.debug_top.jtag2dm_cdc_hs.io_resp_clkA_ready
-TOP.FishSoc.io_jtag_io_tck
-TOP.FishSoc.core.io_debug_core_interface_halt_req_valid
-TOP.FishSoc.core.io_debug_core_interface_state_regs_is_halted
-TOP.FishSoc.core.io_debug_core_interface_resume_req_valid
-TOP.FishSoc.core.io_debug_core_interface_state_regs_resumeack_signal
-@22
-TOP.FishSoc.io_difftest_bits_commited_num[7:0]
-TOP.FishSoc.io_difftest_bits_inst_info_0_pc[63:0]
 [pattern_trace] 1
 [pattern_trace] 0

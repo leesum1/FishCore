@@ -26,6 +26,10 @@ object JtagState extends ChiselEnum {
     this.Value === UpdateDr
   }
 
+  def is_test_logic_reset(): Bool = {
+    this.Value === TestLogicReset
+  }
+
   def get_next_state(cur: JtagState.Type, tms_i: Bool): JtagState.Type = {
     val next_state = Wire(JtagState())
     next_state := cur

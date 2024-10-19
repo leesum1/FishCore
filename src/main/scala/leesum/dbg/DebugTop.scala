@@ -46,24 +46,39 @@ class DebugTop(dm_config: DebugModuleConfig) extends Module {
   // 1. A(src) domain: JTAG DTM, JTAG clk
   // 2. B(dst) domain: DM, system clk
   // -------------------------------------------------
-  val jtag2dm_cdc_hs = withClockAndReset(jtag_clk, jtag_rst) {
-    Module(
-      new CDCHandShakeReqResp(
-        new DMIReq(dm_config.abits),
-        new DMIResp(dm_config.abits)
-      )
+//  val jtag2dm_cdc_hs = withClockAndReset(
+//    jtag_clk,
+//    jtag_rst || jtag_dtm.io.jtag_state === JtagState.TestLogicReset
+//  ) {
+//    Module(
+//      new CDCHandShakeReqResp(
+//        new DMIReq(dm_config.abits),
+//        new DMIResp(dm_config.abits)
+//      )
+//    )
+//  }
+
+  val jtag2dm_cdc_hs = Module(
+    new CDCHandShakeReqResp(
+      new DMIReq(dm_config.abits),
+      new DMIResp(dm_config.abits)
     )
-  }
-  jtag2dm_cdc_hs.io.clkB := clock
-  jtag2dm_cdc_hs.io.rstB := reset.asBool
+  )
+
+  jtag2dm_cdc_hs.io.clk_src := jtag_clk
+  // reset when JTAG TLR or JTAG-TRST
+  jtag2dm_cdc_hs.io.rst_src := jtag_rst || jtag_dtm.io.jtag_state === JtagState.TestLogicReset
+
+  jtag2dm_cdc_hs.io.clk_dst := clock
+  jtag2dm_cdc_hs.io.rst_dst := reset.asBool
 
   // A domain: JTAG DTM
-  jtag_dtm.io.dmi_req <> jtag2dm_cdc_hs.io.req_clkA
-  jtag_dtm.io.dmi_resp <> jtag2dm_cdc_hs.io.resp_clkA
+  jtag_dtm.io.dmi_req <> jtag2dm_cdc_hs.io.req_src
+  jtag_dtm.io.dmi_resp <> jtag2dm_cdc_hs.io.resp_src
 
   // B domain: DM
-  jtag2dm_cdc_hs.io.req_clkB <> debug_module.io.dmi_req
-  jtag2dm_cdc_hs.io.resp_clkB <> debug_module.io.dmi_resp
+  debug_module.io.dmi_req <> jtag2dm_cdc_hs.io.req_dst
+  debug_module.io.dmi_resp <> jtag2dm_cdc_hs.io.resp_dst
 }
 
 object GenDebugTopVerilog extends App {
