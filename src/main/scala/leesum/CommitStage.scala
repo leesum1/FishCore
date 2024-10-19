@@ -639,7 +639,7 @@ class CommitStage(
   val dcsr_field = new DCSRFiled(io.direct_read_ports.dcsr)
   val is_haltreq = debug_state_regs.haltreq_signal
   // 只有单步执行的指令执行完毕后，才能重新进入 debug 模式
-  val is_stepreq = debug_state_regs.is_stepi_req()
+  val is_stepreq = debug_state_regs.stepi_enter_debug_mode()
 
   val is_ebreakreq =
     rob_data_seq.head.fu_op === FuOP.Ebreak && rob_valid_seq.head && Seq(

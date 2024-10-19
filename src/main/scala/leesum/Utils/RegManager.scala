@@ -38,7 +38,7 @@ class RegManager {
 
   val empty_read = (addr: UInt, reg: UInt) => {
     val read_result = Wire(Valid(UInt(reg.getWidth.W)))
-    read_result.valid := false.B
+    read_result.valid := true.B
     read_result.bits := DontCare
     read_result
   }

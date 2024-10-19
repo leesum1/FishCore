@@ -43,8 +43,8 @@ class DbgSlaveState extends Bundle {
     stepi_redebug_flag := true.B
   }
 
-  def is_stepi_req(): Bool = {
-    stepi_exec_flag && !stepi_redebug_flag
+  def stepi_enter_debug_mode(): Bool = {
+    !stepi_exec_flag && stepi_redebug_flag
   }
 
   def set_haltreq(new_value: Bool): Unit = {
